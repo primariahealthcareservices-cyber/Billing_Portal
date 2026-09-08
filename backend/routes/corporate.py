@@ -35,7 +35,6 @@ def _apply_date_filters(query):
 
 
 def _to_float_or_none(value):
-    """Convert to float if non‑empty, else None."""
     if value is None or value == "":
         return None
     try:
@@ -74,7 +73,6 @@ def create_entry():
         data = request.get_json(silent=True) or {}
         print("📥 Received payload:", data)
 
-        # Bulk salary submission
         if "entries" in data and isinstance(data["entries"], list):
             salary_entries = data["entries"]
             if not salary_entries:
@@ -124,7 +122,6 @@ def create_entry():
         salary_amount = _to_float_or_none(data.get("salary_amount"))
         allowance_amount = _to_float_or_none(data.get("allowance_amount"))
 
-        # Validation
         if entry_type not in ENTRY_TYPES:
             errors.append("entry_type must be Income or Expenses.")
 
@@ -156,7 +153,6 @@ def create_entry():
             print("❌ Validation errors:", errors)
             return jsonify({"message": "Validation failed.", "errors": errors}), 400
 
-        # Create entry
         entry = FinanceEntry(
             department=DEPARTMENT,
             entry_type=entry_type,
@@ -271,7 +267,7 @@ def update_entry(entry_id):
         return jsonify({"message": "Entry not found."}), 404
 
     data = request.get_json(silent=True) or {}
-    errors = []
+    print(f"📝 Updating entry {entry_id} with data:", data)
 
     if "entry_type" in data and data["entry_type"] in ENTRY_TYPES:
         entry.entry_type = data["entry_type"]
@@ -296,12 +292,10 @@ def update_entry(entry_id):
         parsed = _parse_date(data["entry_date"])
         if parsed:
             entry.entry_date = parsed
-
     if "exec_department" in data:
         if data["exec_department"] not in EXEC_DEPARTMENTS:
-            errors.append(f"exec_department must be one of: {', '.join(EXEC_DEPARTMENTS)}.")
-        else:
-            entry.exec_department = data["exec_department"]
+            return jsonify({"message": f"exec_department must be one of: {', '.join(EXEC_DEPARTMENTS)}."}), 400
+        entry.exec_department = data["exec_department"]
     if "employee_name" in data:
         entry.employee_name = (data["employee_name"] or "").strip() or None
     if "salary_amount" in data:
@@ -309,10 +303,8 @@ def update_entry(entry_id):
     if "allowance_amount" in data:
         entry.allowance_amount = _to_float_or_none(data["allowance_amount"])
 
-    if errors:
-        return jsonify({"message": "Validation failed.", "errors": errors}), 400
-
     db.session.commit()
+    print(f"✅ Entry {entry_id} updated.")
     return jsonify({"message": "Entry updated.", "entry": entry.to_dict()}), 200
 
 

@@ -290,7 +290,6 @@ const MEDTECH_CATEGORY_FIELDS = {
     labelName: "Employee/Person Name",
     showPurpose: true,
   },
-  // "Supplies and Equipments" removed – we will not include it
   "Guest Concierge": {
     showEmployeeName: true,
     showVehicleType: false,
@@ -373,7 +372,10 @@ export default function FinanceEntryForm({
   const isMedTech = department === "MedTech";
   const isPCM = department === "PCM";
   const salaryCategoryName = options?.is_salary_category || "Payroll Salaries";
-  const ledgerCategoryName = "Ledger"; // hardcoded for MedTech
+  const ledgerCategoryName = "Ledger";
+
+  // ✅ Categories that require item-level details (for MedTech)
+  const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments"];
 
   const createEmptyForm = () => ({
     entry_type: "Income",
@@ -418,6 +420,9 @@ export default function FinanceEntryForm({
 
   const isSalaryCategory = !isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && form.category === salaryCategoryName;
   const isLedger = isMedTech && form.category === ledgerCategoryName;
+
+  // True only when we're editing an existing salary/payroll entry (one DB row == one employee row)
+  const isEditingSalaryEntry = isSalaryCategory && !!(editingEntry && editingEntry.id !== undefined && editingEntry.id !== null);
 
   const itFieldConfig = isIT ? IT_CATEGORY_FIELDS[form.category] : null;
   const showITFields = isIT && itFieldConfig && form.category !== salaryCategoryName;
@@ -596,7 +601,7 @@ export default function FinanceEntryForm({
     const newType = event.target.value;
     let firstCategory = options?.categories?.[newType]?.[0] || "";
     if (newType === "Ledger") {
-      firstCategory = "Ledger";  // force category to Ledger
+      firstCategory = "Ledger";
     }
     setForm((prev) => ({ ...prev, entry_type: newType, category: firstCategory }));
     setOtherCategory("");
@@ -728,7 +733,7 @@ export default function FinanceEntryForm({
       setSaving(true);
       try {
        const payload = {
-  entry_type: "Ledger",     // ✅ correct
+  entry_type: "Ledger",
   category: "Ledger",
   customer_name: ledgerCustomer.trim(),
   entry_date: form.entry_date,
@@ -939,18 +944,36 @@ export default function FinanceEntryForm({
       return;
     }
 
+    // ---- Category‑dependent item validation ----
     let cleanItems = [];
-    if (options.show_items && !usingCategoryFields) {
-      cleanItems = items
-        .map((item) => {
-          const qty = Number(item.quantity);
-          const price = Number(item.unit_price);
-          return { item_name: item.item_name.trim(), quantity: qty, unit_price: price };
-        })
-        .filter((item) => item.item_name);
-      if (cleanItems.length === 0) {
-        toast.error("Add at least one item.");
-        return;
+    let requireItems = false;
+
+    if (options.show_items) {
+      if (department === "MedTech") {
+        requireItems = MEDTECH_ITEM_CATEGORIES.includes(form.category);
+      } else {
+        requireItems = true;
+      }
+
+      if (requireItems) {
+        cleanItems = items
+          .map((item) => {
+            const qty = Number(item.quantity);
+            const price = Number(item.unit_price);
+            return { item_name: item.item_name.trim(), quantity: qty, unit_price: price };
+          })
+          .filter((item) => item.item_name);
+        if (cleanItems.length === 0) {
+          toast.error("Add at least one item (name, quantity, unit price).");
+          return;
+        }
+      } else {
+        const amount = Number(form.amount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+          toast.error("Please enter a valid amount.");
+          return;
+        }
+        cleanItems = [];
       }
     } else {
       const amount = Number(form.amount);
@@ -960,16 +983,38 @@ export default function FinanceEntryForm({
       }
     }
 
-    submitSingleEntry();
+    submitSingleEntry(cleanItems);
   };
 
-  const submitSingleEntry = async () => {
+  // ---- Corrected submitSingleEntry ----
+  const submitSingleEntry = async (cleanItems) => {
     setSaving(true);
     try {
       let body;
       let config = {};
 
-      if (options.show_invoice) {
+      // Recalculate itemsTotal if we have items
+      let itemsTotal = 0;
+      if (options.show_items && cleanItems && cleanItems.length > 0) {
+        itemsTotal = cleanItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+      }
+
+      // ✅ Critical: check if editingEntry exists and has an id
+      const isEditing = editingEntry && editingEntry.id !== undefined && editingEntry.id !== null;
+      console.log("🔍 Editing mode:", isEditing, "Entry ID:", editingEntry?.id);
+
+      // Determine if items are required for this category (for MedTech)
+      let requireItems = false;
+      if (options.show_items) {
+        if (department === "MedTech") {
+          requireItems = MEDTECH_ITEM_CATEGORIES.includes(form.category);
+        } else {
+          requireItems = true;
+        }
+      }
+
+      if (options.show_invoice && !isEditing) {
+        // For NEW entries with invoice: use FormData
         const formData = new FormData();
         Object.keys(form).forEach(key => {
           if (form[key] !== null && form[key] !== undefined) {
@@ -1004,8 +1049,8 @@ export default function FinanceEntryForm({
           formData.append("purpose", form.purpose || "");
           formData.append("vehicle_type", form.vehicle_type || "");
         }
-        if (options.show_items && !usingCategoryFields) {
-          formData.append("items", JSON.stringify(cleanItems));
+        if (options.show_items) {
+          formData.append("items", JSON.stringify(cleanItems || []));
           formData.append("amount", itemsTotal);
         } else {
           formData.append("amount", parseFloat(form.amount) || 0);
@@ -1017,6 +1062,7 @@ export default function FinanceEntryForm({
         body = formData;
         config = { headers: { 'Content-Type': 'multipart/form-data' } };
       } else {
+        // For EDIT entries (always send JSON) and for new entries without invoice
         body = { ...form };
         body.amount = parseFloat(form.amount) || 0;
         if (isOthersCategory) body.other_category = otherCategory.trim();
@@ -1057,56 +1103,106 @@ export default function FinanceEntryForm({
         if (!options.show_gst_number) delete body.gst_number;
         if (!options.show_gst_tax) delete body.gst_tax_percent;
         if (!options.show_tax_invoice_number) delete body.tax_invoice_number;
-        if (options.show_items && !usingCategoryFields) {
-          body.items = cleanItems;
+        // Only send items if required
+        if (options.show_items && requireItems) {
+          body.items = cleanItems || [];
           body.amount = itemsTotal;
         } else {
-          body.amount = form.amount;
+          // For categories that don't require items, delete the items field entirely
           delete body.items;
+          body.amount = parseFloat(form.amount) || 0;
         }
-        if (removeInvoice && editingEntry) {
+        if (removeInvoice && isEditing) {
           body.remove_invoice = "true";
         }
       }
 
+      console.log("📤 Submitting entry:", body);
+
       const url = `/${apiBase}/entries`;
-      if (editingEntry) {
+      if (isEditing) {
+        console.log(`📤 Updating entry ${editingEntry.id}`);
         await api.put(`${url}/${editingEntry.id}`, body, config);
         toast.success("Entry updated successfully.");
       } else {
+        console.log("📤 Creating new entry");
         await api.post(url, body, config);
         toast.success("Entry added successfully.");
       }
       if (typeof onSaved === "function") await onSaved();
       onClose();
     } catch (error) {
-      console.error("Finance entry error:", error);
-      const errors = error.response?.data?.errors;
-      const message = Array.isArray(errors)
-        ? errors.join(" ")
-        : error.response?.data?.message || "Something went wrong while saving the entry.";
-      toast.error(message);
+      console.error("❌ Finance entry error:", error);
+      const responseData = error.response?.data;
+      console.error("❌ Response data:", responseData);
+      
+      let errorMessage = "Something went wrong while saving the entry.";
+      if (responseData) {
+        if (responseData.errors && Array.isArray(responseData.errors)) {
+          errorMessage = responseData.errors.join(" ");
+        } else if (responseData.message) {
+          errorMessage = responseData.message;
+        } else {
+          try {
+            errorMessage = JSON.stringify(responseData);
+          } catch {
+            errorMessage = "An unknown error occurred.";
+          }
+        }
+      }
+      toast.error(errorMessage);
     } finally {
       setSaving(false);
     }
   };
 
+  // ---- FIXED submitSalaryEntries ----
+  // Previously this always POSTed to the bulk "entries" list endpoint, even
+  // when editing an existing salary/payroll record. That created a brand new
+  // row on every edit instead of updating the row in place. Now, when we are
+  // editing an existing entry, we PUT to that entry's own id (same as every
+  // other entry type does), and only POST the bulk-create payload for
+  // genuinely new entries.
   const submitSalaryEntries = async () => {
     setSaving(true);
     try {
-      const payload = {
-        entries: employees.map(emp => ({
+      const isEditing = editingEntry && editingEntry.id !== undefined && editingEntry.id !== null;
+      const url = `/${apiBase}/entries`;
+
+      if (isEditing) {
+        // A single existing salary record maps to exactly one employee row.
+        const emp = employees[0] || emptyEmployee();
+        const salaryAmount = parseFloat(emp.salary_amount) || 0;
+        const allowanceAmount = parseFloat(emp.allowance_amount) || 0;
+        const body = {
+          entry_type: "Expenses",
+          category: salaryCategoryName,
           exec_department: emp.exec_department,
           employee_name: emp.employee_name.trim(),
-          salary_amount: parseFloat(emp.salary_amount) || 0,
-          allowance_amount: parseFloat(emp.allowance_amount) || 0,
+          salary_amount: salaryAmount,
+          allowance_amount: allowanceAmount,
+          amount: salaryAmount + allowanceAmount,
           remarks: emp.remarks || "",
           entry_date: form.entry_date,
-        }))
-      };
-      const url = `/${apiBase}/entries`;
-      await api.post(url, payload);
-      toast.success(`Added ${payload.entries.length} salary entries.`);
+        };
+        console.log(`📤 Updating salary entry ${editingEntry.id}`, body);
+        await api.put(`${url}/${editingEntry.id}`, body);
+        toast.success("Entry updated successfully.");
+      } else {
+        const payload = {
+          entries: employees.map(emp => ({
+            exec_department: emp.exec_department,
+            employee_name: emp.employee_name.trim(),
+            salary_amount: parseFloat(emp.salary_amount) || 0,
+            allowance_amount: parseFloat(emp.allowance_amount) || 0,
+            remarks: emp.remarks || "",
+            entry_date: form.entry_date,
+          }))
+        };
+        console.log("📤 Creating salary entries", payload);
+        await api.post(url, payload);
+        toast.success(`Added ${payload.entries.length} salary entries.`);
+      }
       if (typeof onSaved === "function") await onSaved();
       onClose();
     } catch (error) {
@@ -1121,7 +1217,7 @@ export default function FinanceEntryForm({
     }
   };
 
-  // --- Render functions for different category types (unchanged except we skip Ledger) ---
+  // --- Render Standard Fields (without amount/date) ---
   const renderStandardFields = () => {
     return (
       <>
@@ -1191,59 +1287,6 @@ export default function FinanceEntryForm({
           </div>
         )}
 
-        {options.show_items && (
-          <div className="form-group">
-            <label className="form-label">Items</label>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {items.map((item) => (
-                <div key={item._key} style={{ display: "grid", gridTemplateColumns: "1fr 90px 120px 32px", gap: 8, alignItems: "center" }}>
-                  <input value={item.item_name} onChange={(e) => handleItemChange(item._key, "item_name", e.target.value)} placeholder="Item name" className="form-control" />
-                  <input type="number" min="0" step="0.01" value={item.quantity} onChange={(e) => handleItemChange(item._key, "quantity", e.target.value)} placeholder="Qty" className="form-control" />
-                  <input type="number" min="0" step="0.01" value={item.unit_price} onChange={(e) => handleItemChange(item._key, "unit_price", e.target.value)} placeholder="Unit price" className="form-control" />
-                  <button type="button" className="btn-icon btn-icon--danger" onClick={() => handleRemoveItem(item._key)} title="Remove item" disabled={items.length === 1}>
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button type="button" onClick={handleAddItem} className="btn btn-secondary" style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <Plus size={15} /> Add New Item
-            </button>
-            <div style={{ marginTop: 12, textAlign: "right" }}>
-              {options.show_gst_tax ? (
-                <>
-                  <div style={{ fontSize: 13, color: "var(--color-ink-500)" }}>Subtotal: {formatCurrency(baseAmount)}</div>
-                  <div style={{ fontSize: 13, color: "var(--color-ink-500)" }}>GST Tax ({gstTaxPercentValue || 0}%): {formatCurrency(gstTaxAmount)}</div>
-                  <div style={{ fontWeight: 700, marginTop: 4 }}>Total Amount: {formatCurrency(grandTotal)}</div>
-                </>
-              ) : (
-                <div style={{ fontWeight: 600 }}>Total Amount: {formatCurrency(itemsTotal)}</div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {!options.show_items && (
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Amount (₹)</label>
-              <input type="number" step="0.01" min="0" name="amount" value={form.amount} onChange={handleChange} placeholder="0.00" className="form-control" />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Date</label>
-              <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange} className="form-control" />
-            </div>
-          </div>
-        )}
-
-        {!options.show_items && options.show_gst_tax && (
-          <p className="text-muted" style={{ textAlign: "right", fontSize: 13, marginTop: -8 }}>
-            GST Tax ({gstTaxPercentValue || 0}%): {formatCurrency(gstTaxAmount)}
-            {" · "}
-            <strong style={{ color: "var(--color-ink-800)" }}>Total: {formatCurrency(grandTotal)}</strong>
-          </p>
-        )}
-
         {options.show_invoice && (
           <div className="form-group">
             <label className="form-label">Invoice</label>
@@ -1271,7 +1314,7 @@ export default function FinanceEntryForm({
     );
   };
 
-  // Render for Office Admin (unchanged)
+  // Render for Office Admin (no amount/date)
   const renderOfficeAdminFields = () => {
     if (!showOfficeFields) return null;
     const config = officeFieldConfig;
@@ -1301,31 +1344,6 @@ export default function FinanceEntryForm({
             />
           </div>
         )}
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">Amount (₹)</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              name="amount"
-              value={form.amount}
-              onChange={handleChange}
-              placeholder="0.00"
-              className="form-control"
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Date</label>
-            <input
-              type="date"
-              name="entry_date"
-              value={form.entry_date}
-              onChange={handleChange}
-              className="form-control"
-            />
-          </div>
-        </div>
         {config.showPurpose && (
           <div className="form-group">
             <label className="form-label">Purpose / Remarks</label>
@@ -1356,7 +1374,7 @@ export default function FinanceEntryForm({
     );
   };
 
-  // Render for IT (unchanged)
+  // Render for IT (no amount/date)
   const renderITFields = () => {
     if (!showITFields) return null;
     const config = itFieldConfig;
@@ -1386,31 +1404,6 @@ export default function FinanceEntryForm({
             />
           </div>
         )}
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">Amount (₹)</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              name="amount"
-              value={form.amount}
-              onChange={handleChange}
-              placeholder="0.00"
-              className="form-control"
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Date</label>
-            <input
-              type="date"
-              name="entry_date"
-              value={form.entry_date}
-              onChange={handleChange}
-              className="form-control"
-            />
-          </div>
-        </div>
         {config.showPurpose && (
           <div className="form-group">
             <label className="form-label">Purpose</label>
@@ -1439,7 +1432,7 @@ export default function FinanceEntryForm({
     );
   };
 
-  // Render for IT Sales (unchanged)
+  // Render for IT Sales (no amount/date)
   const renderITSalesFields = () => {
     if (!showITSalesFields) return null;
     const config = itSalesFieldConfig;
@@ -1510,31 +1503,6 @@ export default function FinanceEntryForm({
           )}
         </div>
 
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">Amount (₹)</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              name="amount"
-              value={form.amount}
-              onChange={handleChange}
-              placeholder="0.00"
-              className="form-control"
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Date</label>
-            <input
-              type="date"
-              name="entry_date"
-              value={form.entry_date}
-              onChange={handleChange}
-              className="form-control"
-            />
-          </div>
-        </div>
         {config.showPurpose && (
           <div className="form-group">
             <label className="form-label">Purpose</label>
@@ -1563,7 +1531,7 @@ export default function FinanceEntryForm({
     );
   };
 
-  // Render for MedTech non-Ledger (unchanged)
+  // Render for MedTech non-Ledger (no amount/date)
   const renderMedTechFields = () => {
     if (!showMedTechFields) return null;
     const config = medTechFieldConfig;
@@ -1593,31 +1561,6 @@ export default function FinanceEntryForm({
             />
           </div>
         )}
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">Amount (₹)</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              name="amount"
-              value={form.amount}
-              onChange={handleChange}
-              placeholder="0.00"
-              className="form-control"
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Date</label>
-            <input
-              type="date"
-              name="entry_date"
-              value={form.entry_date}
-              onChange={handleChange}
-              className="form-control"
-            />
-          </div>
-        </div>
         {config.showPurpose && (
           <div className="form-group">
             <label className="form-label">Purpose</label>
@@ -1646,7 +1589,7 @@ export default function FinanceEntryForm({
     );
   };
 
-  // Render for PCM (unchanged)
+  // Render for PCM (no amount/date)
   const renderPCMFields = () => {
     if (!showPCMFields) return null;
     const config = pcmFieldConfig;
@@ -1676,31 +1619,6 @@ export default function FinanceEntryForm({
             />
           </div>
         )}
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">Amount (₹)</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              name="amount"
-              value={form.amount}
-              onChange={handleChange}
-              placeholder="0.00"
-              className="form-control"
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Date</label>
-            <input
-              type="date"
-              name="entry_date"
-              value={form.entry_date}
-              onChange={handleChange}
-              className="form-control"
-            />
-          </div>
-        </div>
         {config.showPurpose && (
           <div className="form-group">
             <label className="form-label">Purpose</label>
@@ -1740,11 +1658,8 @@ export default function FinanceEntryForm({
       const total = entry.total_amount || 0;
       const paid = entry.paid || 0;
       const balance = entry.balance || 0;
-      // Debit is the increase from previous balance (if any)
       const debit = Math.max(0, total - prevBalance);
-      // Credit is the paid amount
       const credit = paid;
-      // Determine particulars
       let particulars = "—";
       if (debit > 0 && credit > 0) particulars = "Sale & Payment";
       else if (debit > 0) particulars = "Sale";
@@ -1971,7 +1886,101 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {/* Office Admin: Salary category message */}
+          {/* ===== ITEMS SECTION (only for categories that require items) ===== */}
+          {options.show_items && (
+            (department !== "MedTech" || (department === "MedTech" && MEDTECH_ITEM_CATEGORIES.includes(form.category))) ? (
+              <div className="form-group">
+                <label className="form-label">Items</label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {items.map((item) => (
+                    <div key={item._key} style={{ display: "grid", gridTemplateColumns: "1fr 90px 120px 32px", gap: 8, alignItems: "center" }}>
+                      <input
+                        value={item.item_name}
+                        onChange={(e) => handleItemChange(item._key, "item_name", e.target.value)}
+                        placeholder="Item name"
+                        className="form-control"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.quantity}
+                        onChange={(e) => handleItemChange(item._key, "quantity", e.target.value)}
+                        placeholder="Qty"
+                        className="form-control"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.unit_price}
+                        onChange={(e) => handleItemChange(item._key, "unit_price", e.target.value)}
+                        placeholder="Unit price"
+                        className="form-control"
+                      />
+                      <button
+                        type="button"
+                        className="btn-icon btn-icon--danger"
+                        onClick={() => handleRemoveItem(item._key)}
+                        title="Remove item"
+                        disabled={items.length === 1}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" onClick={handleAddItem} className="btn btn-secondary" style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <Plus size={15} /> Add New Item
+                </button>
+                <div style={{ marginTop: 12, textAlign: "right" }}>
+                  {options.show_gst_tax ? (
+                    <>
+                      <div style={{ fontSize: 13, color: "var(--color-ink-500)" }}>Subtotal: {formatCurrency(baseAmount)}</div>
+                      <div style={{ fontSize: 13, color: "var(--color-ink-500)" }}>GST Tax ({gstTaxPercentValue || 0}%): {formatCurrency(gstTaxAmount)}</div>
+                      <div style={{ fontWeight: 700, marginTop: 4 }}>Total Amount: {formatCurrency(grandTotal)}</div>
+                    </>
+                  ) : (
+                    <div style={{ fontWeight: 600 }}>Total Amount: {formatCurrency(itemsTotal)}</div>
+                  )}
+                </div>
+              </div>
+            ) : null
+          )}
+
+          {/* ===== AMOUNT FIELD (shown when items are not required) ===== */}
+          {(!options.show_items || (department === "MedTech" && !MEDTECH_ITEM_CATEGORIES.includes(form.category))) && (
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Amount (₹)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  name="amount"
+                  value={form.amount}
+                  onChange={handleChange}
+                  placeholder="0.00"
+                  className="form-control"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Date</label>
+                <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange} className="form-control" />
+              </div>
+            </div>
+          )}
+
+          {(!options.show_items || (department === "MedTech" && !MEDTECH_ITEM_CATEGORIES.includes(form.category))) && options.show_gst_tax && (
+            <p className="text-muted" style={{ textAlign: "right", fontSize: 13, marginTop: -8 }}>
+              GST Tax ({gstTaxPercentValue || 0}%): {formatCurrency(gstTaxAmount)}
+              {" · "}
+              <strong style={{ color: "var(--color-ink-800)" }}>Total: {formatCurrency(grandTotal)}</strong>
+            </p>
+          )}
+
+          {/* ===== SALARY / OFFICE ADMIN / IT / etc. (unchanged) ===== */}
           {isOfficeAdmin && form.category === salaryCategoryName && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salary must be entered by Corporate Management only.</strong>
@@ -1981,7 +1990,6 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {/* Team field for IT Sales */}
           {isITSales && !isITSalesSalaryCategory && (
             <div className="form-group">
               <label className="form-label">Team</label>
@@ -1995,7 +2003,6 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {/* IT: Salary category message */}
           {isITSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
@@ -2005,7 +2012,6 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {/* IT Sales: Salary category message */}
           {isITSalesSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
@@ -2015,7 +2021,6 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {/* MedTech: Salary category message */}
           {isMedTechSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
@@ -2025,7 +2030,6 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {/* PCM: Salary category message */}
           {isPCMSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
@@ -2041,6 +2045,7 @@ export default function FinanceEntryForm({
               <label className="form-label">Employees</label>
               {employees.map((emp, index) => (
                 <div key={emp._key} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12, marginBottom: 12, position: "relative" }}>
+                  {/* ... salary employees fields ... */}
                   <div className="form-row">
                     <div className="form-group" style={{ flex: 1 }}>
                       <label className="form-label">Department</label>
@@ -2107,20 +2112,29 @@ export default function FinanceEntryForm({
                       />
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="btn-icon btn-icon--danger"
-                    onClick={() => handleRemoveEmployee(emp._key)}
-                    style={{ position: "absolute", top: 8, right: 8 }}
-                    title="Remove employee"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  {/* Editing an existing entry always maps to a single row —
+                      hide the remove button so the row can't be deleted down
+                      to zero rows while editing a specific record. */}
+                  {!isEditingSalaryEntry && (
+                    <button
+                      type="button"
+                      className="btn-icon btn-icon--danger"
+                      onClick={() => handleRemoveEmployee(emp._key)}
+                      style={{ position: "absolute", top: 8, right: 8 }}
+                      title="Remove employee"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
                 </div>
               ))}
-              <button type="button" onClick={handleAddEmployee} className="btn btn-secondary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <Plus size={15} /> Add Employee
-              </button>
+              {/* Adding more employees only makes sense when creating brand
+                  new entries; an edit targets exactly one existing record. */}
+              {!isEditingSalaryEntry && (
+                <button type="button" onClick={handleAddEmployee} className="btn btn-secondary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <Plus size={15} /> Add Employee
+                </button>
+              )}
 
               <div className="form-row" style={{ marginTop: 12 }}>
                 <div className="form-group" style={{ flex: 1 }}>
@@ -2134,11 +2148,7 @@ export default function FinanceEntryForm({
                     required
                   />
                 </div>
-                <div className="form-group" style={{ flex: 1 }}>
-                  {/* Empty placeholder for alignment */}
-                </div>
               </div>
-
               <div style={{ marginTop: 12, textAlign: "right", fontWeight: "bold" }}>
                 Total Salary Expense: {formatCurrency(salaryTotal)}
               </div>
@@ -2192,31 +2202,6 @@ export default function FinanceEntryForm({
                   )}
                 </>
               )}
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Amount (₹)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    name="amount"
-                    value={form.amount}
-                    onChange={handleChange}
-                    placeholder="0.00"
-                    className="form-control"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Date</label>
-                  <input
-                    type="date"
-                    name="entry_date"
-                    value={form.entry_date}
-                    onChange={handleChange}
-                    className="form-control"
-                  />
-                </div>
-              </div>
               {!officeFieldConfig?.showPurpose && (
                 <div className="form-group">
                   <label className="form-label">Remarks</label>
@@ -2253,7 +2238,7 @@ export default function FinanceEntryForm({
             showPCMFields ? renderPCMFields() : renderStandardFields()
           )}
 
-          {/* ===== STANDARD FIELDS (non-salary, non-office, non-IT, non-IT Sales, non-MedTech, non-PCM) ===== */}
+          {/* ===== STANDARD FIELDS ===== */}
           {!isSalaryCategory && !isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isLedger && renderStandardFields()}
 
           <div className="modal-footer">

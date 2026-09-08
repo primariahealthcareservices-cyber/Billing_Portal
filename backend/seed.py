@@ -12,7 +12,7 @@ DEMO_USERS = [
     {"name": "Afreed",     "email": "rd@primaria.com",    "password": "Primaria@123",  "role": "ResearchDevelopment",    "department": "ResearchDevelopment"},
     {"name": "Kumar M",      "email": "caredx@primaria.com",     "password": "Primaria@123",  "role": "Caredx",     "department": "Caredx"},
     # NEW ADMIN USER
-    {"name": "admin",      "email": "jnanesht@primariacare.com",     "password": "Primaria@123",  "role": "admin",     "department": "Administration"},
+    {"name": "admin",      "email": "jnanesht@primariacare.com",     "password": "Primaria@123",  "role": "SuperAdmin",     "department": "Administration"},
 ]
 
 app = create_app()

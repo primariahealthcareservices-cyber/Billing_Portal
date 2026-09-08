@@ -8,8 +8,6 @@ from flask_jwt_extended import JWTManager
 from config import Config
 from models import db, migrate_corporate_categories
 
-
-
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -23,16 +21,8 @@ def create_app():
 
     JWTManager(app)
 
-    # CORS – allow all origins in development
-    CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
-
-    @app.after_request
-    def after_request(response):
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
+    # ✅ CORS – explicit origin, single header
+    CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
 
     # Register blueprints
     from routes.auth import auth_bp
@@ -65,10 +55,8 @@ def create_app():
     def health():
         return jsonify({"status": "ok"}), 200
 
-    # Global error handler to catch all exceptions and return JSON with CORS headers
     @app.errorhandler(Exception)
     def handle_exception(e):
-        # Log the error with traceback
         print("🔴 Unhandled Exception:", file=sys.stderr)
         traceback.print_exc()
         return jsonify({
@@ -77,7 +65,6 @@ def create_app():
         }), 500
 
     return app
-
 
 app = create_app()
 
