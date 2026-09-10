@@ -108,236 +108,50 @@ const IT_CATEGORY_FIELDS = {
   "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
 };
 
-// IT Sales category fields (unchanged)
+// IT Sales category fields
 const IT_SALES_CATEGORY_FIELDS = {
-  "Travel & Entertainment (T&E)": {
-    showEmployeeName: true,
-    showVehicleType: true,
-    labelName: "Employee/Person Name",
-    labelVehicle: "Transport/Travel Type",
-    showPurpose: true,
-  },
-  "Marketing": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Employee/Person Name",
-    showPurpose: true,
-  },
-  "Sales Enablement & Tech Stack": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Employee/Person Name",
-    showPurpose: true,
-  },
-  "Legal/Administrative Expenses": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Vendor/Person Name",
-    showPurpose: true,
-  },
-  "Outsourced Services": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Vendor/Company Name",
-    showPurpose: true,
-  },
-  "Facilities & Overhead": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Employee/Person Name",
-    showPurpose: true,
-  },
-  "Supplies & Equipments": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Item/Equipment Name",
-    showPurpose: true,
-  },
-  "Guest Concierge": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Guest/Person Name",
-    showPurpose: true,
-  },
-  "Events-Conferences-Training": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Event/Training Name",
-    showPurpose: true,
-  },
-  "Business Services Revenue": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Service Name",
-    showPurpose: false,
-  },
-  "Miscellaneous": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Employee/Person Name",
-    showPurpose: true,
-  },
-  "General Operations": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Employee/Person Name",
-    showPurpose: true,
-  },
-  "Innovation": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Employee/Person Name",
-    showPurpose: true,
-  },
-  "Consulting": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Consultant/Company Name",
-    showPurpose: true,
-  },
-  "Management Fees": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Vendor/Company Name",
-    showPurpose: true,
-  },
-  "Other": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Name/Item",
-    showPurpose: true,
-  },
-  "Hardware Sales": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Customer/Client Name",
-    showPurpose: true,
-  },
-  "Professional Services & Implementation": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Service/Project Name",
-    showPurpose: true,
-  },
-  "Software Licenses & SaaS Subscriptions": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Product/Service Name",
-    showPurpose: true,
-  },
-  "Managed Services & Support (MSP)": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Client/Service Name",
-    showPurpose: true,
-  },
-  "Hardware & Infrastructure Reselling": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Customer/Client Name",
-    showPurpose: true,
-  },
-  "Support & Maintenance": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Client/Service Name",
-    showPurpose: true,
-  },
-  "Internal allocations": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Department/Team Name",
-    showPurpose: true,
-  },
+  "Travel & Entertainment (T&E)": { showEmployeeName: true, showVehicleType: true, labelName: "Employee/Person Name", labelVehicle: "Transport/Travel Type", showPurpose: true },
+  "Marketing": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Sales Enablement & Tech Stack": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Legal/Administrative Expenses": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Person Name", showPurpose: true },
+  "Outsourced Services": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
+  "Facilities & Overhead": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Supplies & Equipments": { showEmployeeName: true, showVehicleType: false, labelName: "Item/Equipment Name", showPurpose: true },
+  "Guest Concierge": { showEmployeeName: true, showVehicleType: false, labelName: "Guest/Person Name", showPurpose: true },
+  "Events-Conferences-Training": { showEmployeeName: true, showVehicleType: false, labelName: "Event/Training Name", showPurpose: true },
+  "Business Services Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Service Name", showPurpose: false },
+  "Miscellaneous": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "General Operations": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Innovation": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Consulting": { showEmployeeName: true, showVehicleType: false, labelName: "Consultant/Company Name", showPurpose: true },
+  "Management Fees": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
+  "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
+  "Hardware Sales": { showEmployeeName: true, showVehicleType: false, labelName: "Customer/Client Name", showPurpose: true },
+  "Professional Services & Implementation": { showEmployeeName: true, showVehicleType: false, labelName: "Service/Project Name", showPurpose: true },
+  "Software Licenses & SaaS Subscriptions": { showEmployeeName: true, showVehicleType: false, labelName: "Product/Service Name", showPurpose: true },
+  "Managed Services & Support (MSP)": { showEmployeeName: true, showVehicleType: false, labelName: "Client/Service Name", showPurpose: true },
+  "Hardware & Infrastructure Reselling": { showEmployeeName: true, showVehicleType: false, labelName: "Customer/Client Name", showPurpose: true },
+  "Support & Maintenance": { showEmployeeName: true, showVehicleType: false, labelName: "Client/Service Name", showPurpose: true },
+  "Internal allocations": { showEmployeeName: true, showVehicleType: false, labelName: "Department/Team Name", showPurpose: true },
 };
 
 // MedTech category fields (unchanged – we keep all but will add special handling for Ledger)
 const MEDTECH_CATEGORY_FIELDS = {
-  "Travel & Entertainment (T&E)": {
-    showEmployeeName: true,
-    showVehicleType: true,
-    labelName: "Employee/Person Name",
-    labelVehicle: "Transport/Travel Type",
-    showPurpose: true,
-  },
-  "Marketing": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Employee/Person Name",
-    showPurpose: true,
-  },
-  "Supplies & Equipments": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Item/Equipment Name",
-    showPurpose: true,
-  },
-  "Facilities & Overhead": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Employee/Person Name",
-    showPurpose: true,
-  },
-  "General Operations": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Employee/Person Name",
-    showPurpose: true,
-  },
-  "Innovation": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Employee/Person Name",
-    showPurpose: true,
-  },
-  "Guest Concierge": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Guest/Person Name",
-    showPurpose: true,
-  },
-  "Business Services Revenue": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Service Name",
-    showPurpose: false,
-  },
-  "Miscellaneous": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Employee/Person Name",
-    showPurpose: true,
-  },
-  "Outsourced Services": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Vendor/Company Name",
-    showPurpose: true,
-  },
-  "Events-Conferences-Training": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Event/Training Name",
-    showPurpose: true,
-  },
-  "B2B Revenue": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Client/Business Name",
-    showPurpose: true,
-  },
-  "B2C Revenue": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Customer/Client Name",
-    showPurpose: true,
-  },
-  "Other": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Name/Item",
-    showPurpose: true,
-  },
+  "Travel & Entertainment (T&E)": { showEmployeeName: true, showVehicleType: true, labelName: "Employee/Person Name", labelVehicle: "Transport/Travel Type", showPurpose: true },
+  "Marketing": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Supplies & Equipments": { showEmployeeName: true, showVehicleType: false, labelName: "Item/Equipment Name", showPurpose: true },
+  "Facilities & Overhead": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "General Operations": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Innovation": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Guest Concierge": { showEmployeeName: true, showVehicleType: false, labelName: "Guest/Person Name", showPurpose: true },
+  "Business Services Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Service Name", showPurpose: false },
+  "Miscellaneous": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Outsourced Services": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
+  "Events-Conferences-Training": { showEmployeeName: true, showVehicleType: false, labelName: "Event/Training Name", showPurpose: true },
+  "B2B Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Client/Business Name", showPurpose: true },
+  "B2C Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Customer/Client Name", showPurpose: true },
+  "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
+  // New: Goodwill (will use standard fields, not these)
 };
 
 // PCM category fields
@@ -418,8 +232,12 @@ export default function FinanceEntryForm({
   const [ledgerOutstanding, setLedgerOutstanding] = useState(0);
   const [ledgerTotalAmount, setLedgerTotalAmount] = useState(0);
 
+  // --- Goodwill client suggestions ---
+  const [clientSuggestions, setClientSuggestions] = useState([]);
+
   const isSalaryCategory = !isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && form.category === salaryCategoryName;
   const isLedger = isMedTech && form.category === ledgerCategoryName;
+  const isGoodwill = isMedTech && form.category === "Goodwill";
 
   // True only when we're editing an existing salary/payroll entry (one DB row == one employee row)
   const isEditingSalaryEntry = isSalaryCategory && !!(editingEntry && editingEntry.id !== undefined && editingEntry.id !== null);
@@ -433,7 +251,7 @@ export default function FinanceEntryForm({
   const isITSalesSalaryCategory = isITSales && form.category === salaryCategoryName;
 
   const medTechFieldConfig = isMedTech ? MEDTECH_CATEGORY_FIELDS[form.category] : null;
-  const showMedTechFields = isMedTech && medTechFieldConfig && form.category !== salaryCategoryName && form.category !== ledgerCategoryName;
+  const showMedTechFields = isMedTech && medTechFieldConfig && form.category !== salaryCategoryName && form.category !== ledgerCategoryName && form.category !== "Goodwill";
   const isMedTechSalaryCategory = isMedTech && form.category === salaryCategoryName;
 
   const pcmFieldConfig = isPCM ? PCM_CATEGORY_FIELDS[form.category] : null;
@@ -443,6 +261,21 @@ export default function FinanceEntryForm({
   const officeFieldConfig = isOfficeAdmin ? OFFICE_ADMIN_CATEGORY_FIELDS[form.category] : null;
   const showOfficeFields = isOfficeAdmin && officeFieldConfig;
   const usingCategoryFields = showOfficeFields || showITFields || showITSalesFields || showMedTechFields || showPCMFields;
+
+  // Fetch client suggestions when Goodwill is selected
+  useEffect(() => {
+    if (isGoodwill) {
+      const fetchClients = async () => {
+        try {
+          const res = await api.get(`/${apiBase}/clients`);
+          setClientSuggestions(res.data.clients || []);
+        } catch {
+          // ignore
+        }
+      };
+      fetchClients();
+    }
+  }, [isGoodwill, apiBase]);
 
   useEffect(() => {
     if (!open) return;
@@ -732,15 +565,15 @@ export default function FinanceEntryForm({
       const paid = parseFloat(ledgerPaid) || 0;
       setSaving(true);
       try {
-       const payload = {
-  entry_type: "Ledger",
-  category: "Ledger",
-  customer_name: ledgerCustomer.trim(),
-  entry_date: form.entry_date,
-  total_amount: totalAmount,
-  paid: paid,
-  remarks: form.remarks || "",
-};
+        const payload = {
+          entry_type: "Ledger",
+          category: "Ledger",
+          customer_name: ledgerCustomer.trim(),
+          entry_date: form.entry_date,
+          total_amount: totalAmount,
+          paid: paid,
+          remarks: form.remarks || "",
+        };
         const url = `/${apiBase}/entries`;
         if (editingEntry && editingEntry._type === "ledger") {
           await api.put(`${url}/${editingEntry.id}`, payload);
@@ -758,6 +591,20 @@ export default function FinanceEntryForm({
         setSaving(false);
       }
       return;
+    }
+
+    // --- Goodwill validation ---
+    if (isGoodwill) {
+      if (!form.client_name.trim()) {
+        toast.error("Client name is required for Goodwill entries.");
+        return;
+      }
+      const amount = Number(form.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        toast.error("Please enter a valid amount.");
+        return;
+      }
+      // Proceed to submit
     }
 
     // --- Rest of the validations (salary, office admin, IT, etc.) ---
@@ -948,7 +795,7 @@ export default function FinanceEntryForm({
     let cleanItems = [];
     let requireItems = false;
 
-    if (options.show_items) {
+    if (options.show_items && !isGoodwill) {
       if (department === "MedTech") {
         requireItems = MEDTECH_ITEM_CATEGORIES.includes(form.category);
       } else {
@@ -976,10 +823,13 @@ export default function FinanceEntryForm({
         cleanItems = [];
       }
     } else {
-      const amount = Number(form.amount);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        toast.error("Please enter a valid amount.");
-        return;
+      // For Goodwill or non-item departments, amount is already validated
+      if (!isGoodwill) {
+        const amount = Number(form.amount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+          toast.error("Please enter a valid amount.");
+          return;
+        }
       }
     }
 
@@ -999,13 +849,10 @@ export default function FinanceEntryForm({
         itemsTotal = cleanItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
       }
 
-      // ✅ Critical: check if editingEntry exists and has an id
       const isEditing = editingEntry && editingEntry.id !== undefined && editingEntry.id !== null;
-      console.log("🔍 Editing mode:", isEditing, "Entry ID:", editingEntry?.id);
 
-      // Determine if items are required for this category (for MedTech)
       let requireItems = false;
-      if (options.show_items) {
+      if (options.show_items && !isGoodwill) {
         if (department === "MedTech") {
           requireItems = MEDTECH_ITEM_CATEGORIES.includes(form.category);
         } else {
@@ -1049,7 +896,7 @@ export default function FinanceEntryForm({
           formData.append("purpose", form.purpose || "");
           formData.append("vehicle_type", form.vehicle_type || "");
         }
-        if (options.show_items) {
+        if (options.show_items && !isGoodwill) {
           formData.append("items", JSON.stringify(cleanItems || []));
           formData.append("amount", itemsTotal);
         } else {
@@ -1104,11 +951,10 @@ export default function FinanceEntryForm({
         if (!options.show_gst_tax) delete body.gst_tax_percent;
         if (!options.show_tax_invoice_number) delete body.tax_invoice_number;
         // Only send items if required
-        if (options.show_items && requireItems) {
+        if (options.show_items && requireItems && !isGoodwill) {
           body.items = cleanItems || [];
           body.amount = itemsTotal;
         } else {
-          // For categories that don't require items, delete the items field entirely
           delete body.items;
           body.amount = parseFloat(form.amount) || 0;
         }
@@ -1117,15 +963,11 @@ export default function FinanceEntryForm({
         }
       }
 
-      console.log("📤 Submitting entry:", body);
-
       const url = `/${apiBase}/entries`;
       if (isEditing) {
-        console.log(`📤 Updating entry ${editingEntry.id}`);
         await api.put(`${url}/${editingEntry.id}`, body, config);
         toast.success("Entry updated successfully.");
       } else {
-        console.log("📤 Creating new entry");
         await api.post(url, body, config);
         toast.success("Entry added successfully.");
       }
@@ -1134,8 +976,6 @@ export default function FinanceEntryForm({
     } catch (error) {
       console.error("❌ Finance entry error:", error);
       const responseData = error.response?.data;
-      console.error("❌ Response data:", responseData);
-      
       let errorMessage = "Something went wrong while saving the entry.";
       if (responseData) {
         if (responseData.errors && Array.isArray(responseData.errors)) {
@@ -1157,12 +997,6 @@ export default function FinanceEntryForm({
   };
 
   // ---- FIXED submitSalaryEntries ----
-  // Previously this always POSTed to the bulk "entries" list endpoint, even
-  // when editing an existing salary/payroll record. That created a brand new
-  // row on every edit instead of updating the row in place. Now, when we are
-  // editing an existing entry, we PUT to that entry's own id (same as every
-  // other entry type does), and only POST the bulk-create payload for
-  // genuinely new entries.
   const submitSalaryEntries = async () => {
     setSaving(true);
     try {
@@ -1170,7 +1004,6 @@ export default function FinanceEntryForm({
       const url = `/${apiBase}/entries`;
 
       if (isEditing) {
-        // A single existing salary record maps to exactly one employee row.
         const emp = employees[0] || emptyEmployee();
         const salaryAmount = parseFloat(emp.salary_amount) || 0;
         const allowanceAmount = parseFloat(emp.allowance_amount) || 0;
@@ -1185,7 +1018,6 @@ export default function FinanceEntryForm({
           remarks: emp.remarks || "",
           entry_date: form.entry_date,
         };
-        console.log(`📤 Updating salary entry ${editingEntry.id}`, body);
         await api.put(`${url}/${editingEntry.id}`, body);
         toast.success("Entry updated successfully.");
       } else {
@@ -1199,7 +1031,6 @@ export default function FinanceEntryForm({
             entry_date: form.entry_date,
           }))
         };
-        console.log("📤 Creating salary entries", payload);
         await api.post(url, payload);
         toast.success(`Added ${payload.entries.length} salary entries.`);
       }
@@ -1887,7 +1718,7 @@ export default function FinanceEntryForm({
           )}
 
           {/* ===== ITEMS SECTION (only for categories that require items) ===== */}
-          {options.show_items && (
+          {options.show_items && !isGoodwill && (
             (department !== "MedTech" || (department === "MedTech" && MEDTECH_ITEM_CATEGORIES.includes(form.category))) ? (
               <div className="form-group">
                 <label className="form-label">Items</label>
@@ -1948,8 +1779,8 @@ export default function FinanceEntryForm({
             ) : null
           )}
 
-          {/* ===== AMOUNT FIELD (shown when items are not required) ===== */}
-          {(!options.show_items || (department === "MedTech" && !MEDTECH_ITEM_CATEGORIES.includes(form.category))) && (
+          {/* ===== AMOUNT FIELD (shown when items are not required, and not Ledger/Goodwill) ===== */}
+          {(!options.show_items || (department === "MedTech" && !MEDTECH_ITEM_CATEGORIES.includes(form.category))) && !isLedger && !isGoodwill && (
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Amount (₹)</label>
@@ -1972,7 +1803,7 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {(!options.show_items || (department === "MedTech" && !MEDTECH_ITEM_CATEGORIES.includes(form.category))) && options.show_gst_tax && (
+          {(!options.show_items || (department === "MedTech" && !MEDTECH_ITEM_CATEGORIES.includes(form.category))) && options.show_gst_tax && !isLedger && !isGoodwill && (
             <p className="text-muted" style={{ textAlign: "right", fontSize: 13, marginTop: -8 }}>
               GST Tax ({gstTaxPercentValue || 0}%): {formatCurrency(gstTaxAmount)}
               {" · "}
@@ -2045,7 +1876,6 @@ export default function FinanceEntryForm({
               <label className="form-label">Employees</label>
               {employees.map((emp, index) => (
                 <div key={emp._key} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12, marginBottom: 12, position: "relative" }}>
-                  {/* ... salary employees fields ... */}
                   <div className="form-row">
                     <div className="form-group" style={{ flex: 1 }}>
                       <label className="form-label">Department</label>
@@ -2112,9 +1942,6 @@ export default function FinanceEntryForm({
                       />
                     </div>
                   </div>
-                  {/* Editing an existing entry always maps to a single row —
-                      hide the remove button so the row can't be deleted down
-                      to zero rows while editing a specific record. */}
                   {!isEditingSalaryEntry && (
                     <button
                       type="button"
@@ -2128,8 +1955,6 @@ export default function FinanceEntryForm({
                   )}
                 </div>
               ))}
-              {/* Adding more employees only makes sense when creating brand
-                  new entries; an edit targets exactly one existing record. */}
               {!isEditingSalaryEntry && (
                 <button type="button" onClick={handleAddEmployee} className="btn btn-secondary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <Plus size={15} /> Add Employee
@@ -2157,6 +1982,51 @@ export default function FinanceEntryForm({
 
           {/* ===== LEDGER FIELDS ===== */}
           {isLedger && renderLedgerFields()}
+
+          {/* ===== GOODWILL FIELDS ===== */}
+          {isGoodwill && (
+            <>
+              <div className="form-group">
+                <label className="form-label">Client Name <span style={{ color: "red" }}>*</span></label>
+                <input
+                  list="clientList"
+                  name="client_name"
+                  value={form.client_name || ""}
+                  onChange={handleChange}
+                  placeholder="Search or enter client name"
+                  className="form-control"
+                  required
+                />
+                <datalist id="clientList">
+                  {clientSuggestions.map(c => <option key={c} value={c} />)}
+                </datalist>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Amount (₹) <span style={{ color: "red" }}>*</span></label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    name="amount"
+                    value={form.amount}
+                    onChange={handleChange}
+                    placeholder="0.00"
+                    className="form-control"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
+                  <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange} className="form-control" required />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Remarks</label>
+                <textarea name="remarks" value={form.remarks} onChange={handleChange} rows={3} placeholder="Optional notes" className="form-control" />
+              </div>
+            </>
+          )}
 
           {/* ===== OFFICE ADMIN FIELDS (non-Ledger, non-Salary) ===== */}
           {isOfficeAdmin && !isOfficeAdminSalary && !isLedger && (
@@ -2228,8 +2098,8 @@ export default function FinanceEntryForm({
             showITSalesFields ? renderITSalesFields() : renderStandardFields()
           )}
 
-          {/* ===== MEDTECH FIELDS (excluding Salary and Ledger) ===== */}
-          {isMedTech && !isMedTechSalaryCategory && !isLedger && (
+          {/* ===== MEDTECH FIELDS (excluding Salary, Ledger, Goodwill) ===== */}
+          {isMedTech && !isMedTechSalaryCategory && !isLedger && !isGoodwill && (
             showMedTechFields ? renderMedTechFields() : renderStandardFields()
           )}
 
@@ -2239,7 +2109,7 @@ export default function FinanceEntryForm({
           )}
 
           {/* ===== STANDARD FIELDS ===== */}
-          {!isSalaryCategory && !isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isLedger && renderStandardFields()}
+          {!isSalaryCategory && !isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isLedger && !isGoodwill && renderStandardFields()}
 
           <div className="modal-footer">
             <button type="button" onClick={onClose} className="btn btn-secondary" disabled={saving}>Cancel</button>

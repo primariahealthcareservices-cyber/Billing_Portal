@@ -195,7 +195,7 @@ DEPARTMENT_CONFIG = {
     # =================== MedTech ===================
     "MedTech": {
         "categories": {
-            "Income": ["B2B Revenue", "B2C Revenue", "Business Services Revenue"],
+            "Income": ["B2B Revenue", "B2C Revenue", "Business Services Revenue","Goodwill"],
             "Expenses": [
                 "Personnel & Payroll",
                 "Travel & Entertainment (T&E)",
@@ -210,7 +210,8 @@ DEPARTMENT_CONFIG = {
                 "Miscellaneous",
                 "Outsourced Services",
                 "Events-Conferences-Training",
-                "Ledger",                     # ADDED
+                "Ledger",
+                "Goodwill",                     # ADDED
                 "Other"
             ]
         },

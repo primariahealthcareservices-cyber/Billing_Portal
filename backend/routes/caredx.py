@@ -1,10 +1,9 @@
-# backend/routes/caredx.py
 """
 Caredx routes.
 
 Modules:
 1. Lab Data Entry
-2. Expenses
+2. Expenses (with Referral Amount)
 3. Combined dashboard summary
 4. Excel import/export
 
@@ -631,7 +630,7 @@ def export_lab_entries():
 
 
 # ---------------------------------------------------------------------------
-# 2. EXPENSES (UPDATED)
+# 2. EXPENSES (UPDATED with referral_amount)
 # ---------------------------------------------------------------------------
 
 @caredx_bp.route(
@@ -644,7 +643,8 @@ def create_expense():
 
     expense_date = _parse_date(data.get("expense_date"), default=date.today())
     category = (data.get("category") or "").strip()
-    amount = data.get("amount")
+    amount = data.get("amount")               # base expense (without referral)
+    referral_amount = data.get("referral_amount", 0)
     remarks = (data.get("remarks") or "").strip()
     employee_name = (data.get("employee_name") or "").strip() or None
     purpose = (data.get("purpose") or "").strip() or None
@@ -656,7 +656,6 @@ def create_expense():
         errors.append("category is required.")
 
     # Prevent salary category from being created here
-    # Get the salary category name from Corporate config
     salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     if category == salary_category:
         errors.append("Salaries must be entered by Corporate Management only.")
@@ -664,10 +663,18 @@ def create_expense():
     try:
         amount = float(amount)
         if amount <= 0:
-            errors.append("amount must be greater than 0.")
+            errors.append("Expense amount must be greater than 0.")
     except (TypeError, ValueError):
-        errors.append("amount must be a number.")
+        errors.append("Expense amount must be a number.")
         amount = 0
+
+    try:
+        referral_amount = float(referral_amount)
+        if referral_amount < 0:
+            errors.append("Referral amount cannot be negative.")
+    except (TypeError, ValueError):
+        errors.append("Referral amount must be a number.")
+        referral_amount = 0
 
     if errors:
         return jsonify({"message": "Validation failed.", "errors": errors}), 400
@@ -675,7 +682,8 @@ def create_expense():
     expense = CaredxExpense(
         expense_date=expense_date,
         category=category,
-        amount=amount,
+        amount=amount,                     # base expense
+        referral_amount=referral_amount,   # new field
         remarks=remarks,
         employee_name=employee_name,
         purpose=purpose,
@@ -717,7 +725,6 @@ def list_expenses():
     ).all()
 
     # 2. Fetch salary entries from FinanceEntry for Caredx
-    # Use dynamic salary category from Corporate config
     salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     salary_query = FinanceEntry.query.filter(
         FinanceEntry.category == salary_category,
@@ -726,7 +733,6 @@ def list_expenses():
             (FinanceEntry.department == "Corporate") & (FinanceEntry.exec_department == "Caredx")
         )
     )
-    # Apply date filters
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
     if start_date:
@@ -752,8 +758,9 @@ def list_expenses():
         salary_items.append({
             "id": -s.id,  # negative to avoid collision with CaredxExpense IDs
             "expense_date": s.entry_date.isoformat(),
-            "category": salary_category,  # use dynamic name
+            "category": salary_category,
             "amount": float(s.amount),
+            "referral_amount": 0,  # salaries don't have referral
             "remarks": f"Salary for {s.employee_name} ({s.exec_department}) - {s.remarks or ''}",
             "employee_name": s.employee_name,
             "purpose": s.remarks,
@@ -793,8 +800,14 @@ def update_expense(expense_id):
         if "amount" in data:
             amount = float(data.get("amount"))
             if amount <= 0:
-                return jsonify({"message": "Amount must be greater than 0."}), 400
+                return jsonify({"message": "Expense amount must be greater than 0."}), 400
             expense.amount = amount
+
+        if "referral_amount" in data:
+            referral_amount = float(data.get("referral_amount"))
+            if referral_amount < 0:
+                return jsonify({"message": "Referral amount cannot be negative."}), 400
+            expense.referral_amount = referral_amount
 
         if "remarks" in data:
             expense.remarks = (data.get("remarks") or "").strip()
@@ -849,7 +862,7 @@ def delete_expense(expense_id):
 
 
 # ---------------------------------------------------------------------------
-# 3. COMBINED DASHBOARD SUMMARY
+# 3. COMBINED DASHBOARD SUMMARY (UPDATED)
 # ---------------------------------------------------------------------------
 
 @caredx_bp.route(
@@ -861,12 +874,13 @@ def lab_entries_summary():
     """
     Dashboard summary.
 
-    Profit =
-        Total Amount Paid
-        - Expenses
-        - Paid to Other Labs
+    Profit = Total Amount Paid - Total Expenses
+    where Total Expenses includes:
+        - CaredxExpense (amount + referral)
+        - Salary entries (from FinanceEntry)
+        - Lab entry 'paid_to_other_labs'
+        - Lab entry 'referral_amount'
     """
-
     lab_entries = _apply_date_filters(
         CaredxLabEntry.query,
         CaredxLabEntry.entry_date,
@@ -892,48 +906,47 @@ def lab_entries_summary():
         salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
     salary_entries = salary_query.all()
 
-    # Combine expenses
-    all_expenses = list(caredx_expenses) + list(salary_entries)
-
+    # Helper to sum a field from lab entries
     def total(field):
         return sum(
-            float(
-                getattr(entry, field) or 0
-            )
+            float(getattr(entry, field) or 0)
             for entry in lab_entries
         )
 
-    total_amount_paid = total(
-        "total_amount_paid"
+    total_amount_paid = total("total_amount_paid")
+    total_paid_to_other_labs = total("paid_to_other_labs")
+    total_referral = total("referral_amount")
+
+    # Total expenses from CaredxExpense (amount + referral)
+    caredx_expense_total = sum(
+        float(e.amount or 0) + float(e.referral_amount or 0)
+        for e in caredx_expenses
     )
 
-    total_paid_to_other_labs = total(
-        "paid_to_other_labs"
+    # Total salary expenses
+    salary_total = sum(float(s.amount or 0) for s in salary_entries)
+
+    # Grand total expenses = all costs
+    total_expenses = (
+        caredx_expense_total
+        + salary_total
+        + total_paid_to_other_labs
+        + total_referral
     )
 
-    total_expenses = sum(
-        float(expense.amount or 0) if hasattr(expense, 'amount') else float(expense.amount or 0)
-        for expense in all_expenses
-    )
-
-    profit = (
-        total_amount_paid
-        - total_expenses
-        - total_paid_to_other_labs
-    )
+    # Profit = income - total costs
+    profit = total_amount_paid - total_expenses
 
     # -----------------------------------------------------------------------
-    # Daily trend
+    # Daily trend (include all costs)
     # -----------------------------------------------------------------------
-
     by_date = {}
 
+    # Income from lab entries
     for entry in lab_entries:
         if not entry.entry_date:
             continue
-
         key = entry.entry_date.isoformat()
-
         by_date.setdefault(
             key,
             {
@@ -942,17 +955,13 @@ def lab_entries_summary():
                 "expenses": 0,
             },
         )
+        by_date[key]["income"] += float(entry.total_amount_paid or 0)
 
-        by_date[key]["income"] += float(
-            entry.total_amount_paid or 0
-        )
-
+    # Expenses from caredx_expenses (amount + referral)
     for expense in caredx_expenses:
         if not expense.expense_date:
             continue
-
         key = expense.expense_date.isoformat()
-
         by_date.setdefault(
             key,
             {
@@ -961,17 +970,13 @@ def lab_entries_summary():
                 "expenses": 0,
             },
         )
+        by_date[key]["expenses"] += float(expense.amount or 0) + float(expense.referral_amount or 0)
 
-        by_date[key]["expenses"] += float(
-            expense.amount or 0
-        )
-
+    # Salary expenses
     for salary in salary_entries:
         if not salary.entry_date:
             continue
-
         key = salary.entry_date.isoformat()
-
         by_date.setdefault(
             key,
             {
@@ -980,10 +985,23 @@ def lab_entries_summary():
                 "expenses": 0,
             },
         )
+        by_date[key]["expenses"] += float(salary.amount or 0)
 
-        by_date[key]["expenses"] += float(
-            salary.amount or 0
+    # Lab entry costs: paid_to_other_labs and referral_amount
+    for entry in lab_entries:
+        if not entry.entry_date:
+            continue
+        key = entry.entry_date.isoformat()
+        by_date.setdefault(
+            key,
+            {
+                "date": key,
+                "income": 0,
+                "expenses": 0,
+            },
         )
+        by_date[key]["expenses"] += float(entry.paid_to_other_labs or 0)
+        by_date[key]["expenses"] += float(entry.referral_amount or 0)
 
     trend = sorted(
         by_date.values(),
@@ -991,17 +1009,13 @@ def lab_entries_summary():
     )
 
     # -----------------------------------------------------------------------
-    # Expense category breakdown
+    # Expense category breakdown (include referral and paid_to_other_labs)
     # -----------------------------------------------------------------------
-
     by_category = {}
 
+    # Caredx expenses (amount + referral)
     for expense in caredx_expenses:
-        category = (
-            expense.category
-            or "Uncategorized"
-        )
-
+        category = (expense.category or "Uncategorized")
         by_category.setdefault(
             category,
             {
@@ -1009,62 +1023,49 @@ def lab_entries_summary():
                 "amount": 0,
             },
         )
-
         by_category[category]["amount"] += (
-            float(expense.amount or 0)
+            float(expense.amount or 0) + float(expense.referral_amount or 0)
         )
 
-    # Add salary category
-    total_salary = sum(float(s.amount or 0) for s in salary_entries)
-    if total_salary > 0:
+    # Salary category
+    if salary_total > 0:
         by_category.setdefault(
             salary_category,
             {"category": salary_category, "amount": 0}
         )
-        by_category[salary_category]["amount"] += total_salary
+        by_category[salary_category]["amount"] += salary_total
+
+    # Paid to other labs
+    if total_paid_to_other_labs > 0:
+        by_category.setdefault(
+            "Paid to Other Labs",
+            {"category": "Paid to Other Labs", "amount": 0}
+        )
+        by_category["Paid to Other Labs"]["amount"] += total_paid_to_other_labs
+
+    # Referral amounts
+    if total_referral > 0:
+        by_category.setdefault(
+            "Referral",
+            {"category": "Referral", "amount": 0}
+        )
+        by_category["Referral"]["amount"] += total_referral
 
     return jsonify(
         {
-            "entry_count":
-                len(lab_entries),
-
-            "total_amount_paid":
-                total_amount_paid,
-
-            "total_cash":
-                total("cash"),
-
-            "total_online":
-                total("online"),
-
-            "total_paid_to_other_labs":
-                total_paid_to_other_labs,
-
-            "total_rmp":
-                total("rmp"),
-
-            "total_salaries_expense":
-                total("salaries_expense"),
-
-            "total_referral_amount":
-                total("referral_amount"),
-
-            "total_sales":
-                total("sales"),
-
-            "total_expenses":
-                total_expenses,
-
-            "profit":
-                profit,
-
-            "expense_count":
-                len(all_expenses),
-
-            "trend":
-                trend,
-
-            "category_breakdown":
-                list(by_category.values()),
+            "entry_count": len(lab_entries),
+            "total_amount_paid": total_amount_paid,
+            "total_cash": total("cash"),
+            "total_online": total("online"),
+            "total_paid_to_other_labs": total_paid_to_other_labs,
+            "total_rmp": total("rmp"),
+            "total_salaries_expense": total("salaries_expense"),
+            "total_referral_amount": total_referral,
+            "total_sales": total("sales"),
+            "total_expenses": total_expenses,
+            "profit": profit,
+            "expense_count": len(caredx_expenses) + len(salary_entries),
+            "trend": trend,
+            "category_breakdown": list(by_category.values()),
         }
     ), 200

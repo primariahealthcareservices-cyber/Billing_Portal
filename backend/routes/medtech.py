@@ -97,6 +97,16 @@ def options():
         "is_ledger_category": "Ledger",
     }), 200
 
+# ==================== CLIENT SUGGESTIONS ====================
+@medtech_bp.route("/clients", methods=["GET"])
+@role_required("MedTech")
+def get_clients():
+    clients = db.session.query(FinanceEntry.client_name)\
+        .filter(FinanceEntry.department == DEPARTMENT, FinanceEntry.client_name.isnot(None))\
+        .distinct().all()
+    client_list = sorted([c[0] for c in clients if c[0]])
+    return jsonify({"clients": client_list}), 200
+
 # ==================== CREATE ENTRY ====================
 @medtech_bp.route("/entries", methods=["POST"])
 @role_required("MedTech")
@@ -176,15 +186,19 @@ def create_entry():
     if is_salary:
         errors.append("Salaries must be entered by Corporate Management only.")
 
+    # ---- Goodwill validation ----
+    if category == "Goodwill" and not client_name:
+        errors.append("Client name is required for Goodwill entries.")
+
     # ---- Category‑dependent item validation ----
-    MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments"]   # extend as needed
+    MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments"]
 
     if not is_salary:
         require_items = CONFIG["show_items"] and category in MEDTECH_ITEM_CATEGORIES
 
-        if entry_type == "Income" and not generated_by:
+        if entry_type == "Income" and not generated_by and category != "Goodwill":
             errors.append("generated_by (employee name) is required for Income entries.")
-        if CONFIG["show_revenue_type"] and revenue_type not in CONFIG["revenue_types"]:
+        if CONFIG["show_revenue_type"] and revenue_type not in CONFIG["revenue_types"] and category != "Goodwill":
             errors.append(f"revenue_type must be one of: {', '.join(CONFIG['revenue_types'])}.")
         if CONFIG["show_gst_number"] and category in CONFIG["gst_required_categories"] and not gst_number:
             errors.append(f"gst_number is required for {category} entries.")
@@ -209,7 +223,7 @@ def create_entry():
                 base_amount = float(data.get("amount") or 0)
             except (TypeError, ValueError):
                 base_amount = 0
-            if base_amount <= 0 and not is_salary:
+            if base_amount <= 0 and not is_salary and category != "Goodwill":
                 errors.append("Amount must be greater than 0.")
     else:
         clean_items = []
@@ -224,7 +238,7 @@ def create_entry():
 
     invoice_path = invoice_original = invoice_mimetype = None
     invoice_file = request.files.get("invoice")
-    if CONFIG["show_invoice"] and invoice_file and invoice_file.filename and not is_salary:
+    if CONFIG["show_invoice"] and invoice_file and invoice_file.filename and not is_salary and category != "Goodwill":
         try:
             invoice_path, invoice_original, invoice_mimetype = save_invoice_file(invoice_file, DEPARTMENT)
         except ValueError as e:
@@ -233,7 +247,7 @@ def create_entry():
     if errors:
         return jsonify({"message": "Validation failed.", "errors": errors}), 400
 
-    if not is_salary:
+    if not is_salary and category != "Goodwill":
         gst_tax_amount = round(base_amount * gst_tax_percent / 100, 2) if gst_tax_percent else 0
         total_amount = round(base_amount + gst_tax_amount, 2)
     else:
@@ -251,7 +265,7 @@ def create_entry():
         client_name=client_name,
         gst_number=gst_number if not is_salary else None,
         tax_invoice_number=tax_invoice_number if not is_salary else None,
-        amount=total_amount,
+        amount=total_amount if not is_salary and category != "Goodwill" else (float(amount) if category == "Goodwill" else 0),
         base_amount=base_amount,
         gst_tax_percent=gst_tax_percent,
         gst_tax_amount=gst_tax_amount,
@@ -265,7 +279,7 @@ def create_entry():
         created_by_id=get_jwt_identity(),
     )
 
-    if not is_salary and clean_items:
+    if not is_salary and clean_items and category != "Goodwill":
         for item in clean_items:
             entry.items.append(FinanceEntryItem(**item))
 
@@ -274,6 +288,7 @@ def create_entry():
     return jsonify({"message": "Entry created.", "entry": entry.to_dict()}), 201
 
 # ==================== LIST ENTRIES ====================
+# (unchanged, but ensure it includes Goodwill entries)
 @medtech_bp.route("/entries", methods=["GET"])
 @role_required("MedTech")
 def list_entries():
@@ -346,7 +361,7 @@ def list_entries():
     combined.sort(key=lambda x: (x["entry_date"], x["id"]), reverse=True)
     return jsonify({"entries": combined}), 200
 
-# ==================== UPDATE ENTRY (FIXED) ====================
+# ==================== UPDATE ENTRY ====================
 @medtech_bp.route("/entries/<int:entry_id>", methods=["PUT"])
 @role_required("MedTech")
 def update_entry(entry_id):
@@ -354,7 +369,6 @@ def update_entry(entry_id):
     if not entry:
         ledger = MedTechLedger.query.get(entry_id)
         if ledger:
-            # Handle ledger update (unchanged)
             data = request.get_json() or {}
             if "customer_name" in data:
                 ledger.customer_name = data["customer_name"].strip()
@@ -393,8 +407,15 @@ def update_entry(entry_id):
     new_entry_type = data.get("entry_type", entry.entry_type)
     MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments"]
 
-    # Determine if items are required for this category
     require_items = CONFIG["show_items"] and new_category in MEDTECH_ITEM_CATEGORIES
+
+    # ---- Goodwill client_name validation ----
+    if new_category == "Goodwill":
+        client_name = (data.get("client_name") or "").strip()
+        if not client_name:
+            errors.append("Client name is required for Goodwill entries.")
+        else:
+            entry.client_name = client_name
 
     # ---- Update simple fields ----
     if "entry_type" in data and data["entry_type"] in ENTRY_TYPES:
@@ -403,75 +424,113 @@ def update_entry(entry_id):
         allowed_categories = CONFIG["categories"].get(entry.entry_type, [])
         if data["category"] in allowed_categories:
             entry.category = data["category"]
+            # If changed to Goodwill, clear irrelevant fields
+            if data["category"] == "Goodwill":
+                entry.generated_by = None
+                entry.revenue_type = None
+                entry.gst_number = None
+                entry.gst_tax_percent = 0.0
+                entry.gst_tax_amount = 0.0
+                entry.employee_name = None
+                entry.vehicle_type = None
+                entry.items = []  # Clear items if any
+                # Remove any existing items from DB
+                for old_item in list(entry.items):
+                    db.session.delete(old_item)
         else:
             errors.append(f"category must be one of: {', '.join(allowed_categories)}")
-    if "generated_by" in data and data["generated_by"].strip():
-        entry.generated_by = data["generated_by"].strip()
-    if "revenue_type" in data and data["revenue_type"] in CONFIG["revenue_types"]:
-        entry.revenue_type = data["revenue_type"]
-    if "client_name" in data:
-        entry.client_name = (data["client_name"] or "").strip() or None
-    if "gst_number" in data:
-        entry.gst_number = (data["gst_number"] or "").strip() or None
-    if "tax_invoice_number" in data:
-        entry.tax_invoice_number = (data["tax_invoice_number"] or "").strip() or None
-    if "remarks" in data:
-        entry.remarks = data["remarks"]
-    if "entry_date" in data:
-        parsed = _parse_date(data["entry_date"])
-        if parsed:
-            entry.entry_date = parsed
-    if "employee_name" in data:
-        entry.employee_name = (data["employee_name"] or "").strip() or None
-    if "vehicle_type" in data:
-        entry.vehicle_type = (data["vehicle_type"] or "").strip() or None
+
+    # If new_category is Goodwill, we skip updating generated_by, revenue_type, etc.
+    if new_category != "Goodwill":
+        if "generated_by" in data and data["generated_by"].strip():
+            entry.generated_by = data["generated_by"].strip()
+        elif "generated_by" in data and not data["generated_by"].strip() and new_entry_type == "Income":
+            errors.append("generated_by (employee name) is required for Income entries.")
+        if "revenue_type" in data and data["revenue_type"] in CONFIG["revenue_types"]:
+            entry.revenue_type = data["revenue_type"]
+        if "client_name" in data:
+            entry.client_name = (data["client_name"] or "").strip() or None
+        if "gst_number" in data:
+            entry.gst_number = (data["gst_number"] or "").strip() or None
+        if "tax_invoice_number" in data:
+            entry.tax_invoice_number = (data["tax_invoice_number"] or "").strip() or None
+        if "employee_name" in data:
+            entry.employee_name = (data["employee_name"] or "").strip() or None
+        if "vehicle_type" in data:
+            entry.vehicle_type = (data["vehicle_type"] or "").strip() or None
+    else:
+        # For Goodwill, we only allow client_name (already handled), remarks, entry_date, amount
+        if "remarks" in data:
+            entry.remarks = data["remarks"]
+        if "entry_date" in data:
+            parsed = _parse_date(data["entry_date"])
+            if parsed:
+                entry.entry_date = parsed
+        # Amount will be handled below
 
     # ---- Amount and Items handling ----
     amount_from_request = data.get("amount")
-    if amount_from_request is not None and amount_from_request != "":
-        try:
-            base_amount = float(amount_from_request)
-            if base_amount < 0:
-                errors.append("amount must be >= 0.")
-        except (TypeError, ValueError):
-            errors.append("amount must be a valid number.")
+    if new_category == "Goodwill":
+        # For Goodwill, amount is directly used, no GST
+        if amount_from_request is not None and amount_from_request != "":
+            try:
+                amount_val = float(amount_from_request)
+                if amount_val < 0:
+                    errors.append("amount must be >= 0.")
+                else:
+                    entry.amount = amount_val
+            except (TypeError, ValueError):
+                errors.append("amount must be a valid number.")
+        else:
+            errors.append("amount is required for Goodwill entries.")
+    else:
+        # For non-Goodwill, handle items and GST
+        if amount_from_request is not None and amount_from_request != "":
+            try:
+                base_amount = float(amount_from_request)
+                if base_amount < 0:
+                    errors.append("amount must be >= 0.")
+            except (TypeError, ValueError):
+                errors.append("amount must be a valid number.")
+                base_amount = float(entry.base_amount) if entry.base_amount is not None else 0.0
+        else:
             base_amount = float(entry.base_amount) if entry.base_amount is not None else 0.0
-    else:
-        base_amount = float(entry.base_amount) if entry.base_amount is not None else 0.0
 
-    # Handle items only if the category requires items
-    if require_items:
-        items_changed = "items" in data
-        if items_changed:
-            items_data = data.get("items") or []
-            clean_items, items_total, item_errors = _validate_items(items_data)
-            errors.extend(item_errors)
-            if not item_errors:
-                # Replace items
-                for old_item in entry.items:
+        if require_items:
+            items_changed = "items" in data
+            if items_changed:
+                items_data = data.get("items") or []
+                clean_items, items_total, item_errors = _validate_items(items_data)
+                errors.extend(item_errors)
+                if not item_errors:
+                    for old_item in entry.items:
+                        db.session.delete(old_item)
+                    entry.items = [FinanceEntryItem(**item) for item in clean_items]
+                    base_amount = items_total
+        else:
+            # Remove any items if present
+            if entry.items:
+                for old_item in list(entry.items):
                     db.session.delete(old_item)
-                entry.items = [FinanceEntryItem(**item) for item in clean_items]
-                base_amount = items_total
-        # If items are not changed, keep existing items and base_amount
-    else:
-        # For non-item categories, ignore any "items" field and use amount
-        # Ensure any existing items are removed (since they shouldn't exist, but just in case)
-        if entry.items:
-            for old_item in entry.items:
-                db.session.delete(old_item)
-            entry.items = []
-        # base_amount is already from amount or existing
+                entry.items = []
 
-    # ---- GST ----
-    if "gst_tax_percent" in data:
-        gst_tax_percent, gst_tax_error = _parse_gst_tax_percent(data.get("gst_tax_percent"))
-        if gst_tax_error:
-            errors.append(gst_tax_error)
-    else:
-        gst_tax_percent = float(entry.gst_tax_percent) if entry.gst_tax_percent is not None else 0.0
+        # ---- GST ----
+        if "gst_tax_percent" in data:
+            gst_tax_percent, gst_tax_error = _parse_gst_tax_percent(data.get("gst_tax_percent"))
+            if gst_tax_error:
+                errors.append(gst_tax_error)
+        else:
+            gst_tax_percent = float(entry.gst_tax_percent) if entry.gst_tax_percent is not None else 0.0
 
-    # ---- Invoice file ----
-    if request.files:
+        if not errors:
+            gst_tax_amount = round(base_amount * gst_tax_percent / 100, 2) if gst_tax_percent else 0
+            entry.base_amount = base_amount
+            entry.gst_tax_percent = gst_tax_percent
+            entry.gst_tax_amount = gst_tax_amount
+            entry.amount = round(base_amount + gst_tax_amount, 2)
+
+    # ---- Invoice file (skip for Goodwill) ----
+    if request.files and new_category != "Goodwill":
         invoice_file = request.files.get("invoice")
         if invoice_file and invoice_file.filename:
             try:
@@ -492,16 +551,9 @@ def update_entry(entry_id):
     if errors:
         return jsonify({"message": "Validation failed.", "errors": errors}), 400
 
-    gst_tax_amount = round(base_amount * gst_tax_percent / 100, 2) if gst_tax_percent else 0
-    entry.base_amount = base_amount
-    entry.gst_tax_percent = gst_tax_percent
-    entry.gst_tax_amount = gst_tax_amount
-    entry.amount = round(base_amount + gst_tax_amount, 2)
-
     db.session.commit()
-    return jsonify({"message": "Entry updated.", "entry": entry.to_dict()}), 200
-
-# ==================== DELETE ENTRY ====================
+    return jsonify({"message": "Entry updated.", "entry": entry.to_dict()}), 200# ==================== DELETE ENTRY ====================
+# (unchanged)
 @medtech_bp.route("/entries/<int:entry_id>", methods=["DELETE"])
 @role_required("MedTech")
 def delete_entry(entry_id):
@@ -521,6 +573,7 @@ def delete_entry(entry_id):
     return jsonify({"message": "Entry not found."}), 404
 
 # ==================== LEDGER HISTORY ====================
+# (unchanged)
 @medtech_bp.route("/ledger/history", methods=["GET"])
 @role_required("MedTech")
 def get_ledger_history():
@@ -533,6 +586,7 @@ def get_ledger_history():
     return jsonify({"history": [e.to_dict() for e in entries]}), 200
 
 # ==================== SUMMARY ====================
+# (unchanged – it already includes Goodwill as expenses)
 @medtech_bp.route("/summary", methods=["GET"])
 @role_required("MedTech")
 def finance_summary():
