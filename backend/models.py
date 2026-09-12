@@ -129,7 +129,7 @@ DEPARTMENT_CONFIG = {
             ],
         },
         "revenue_types": [],
-        "show_generated_by": False,
+        "show_generated_by": True,
         "show_revenue_type": False,
         "show_patient_fields": False,
         "show_client_name": False,

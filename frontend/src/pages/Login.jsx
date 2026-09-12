@@ -66,7 +66,7 @@ export default function Login() {
             <div className="login-logo-fallback"><Lock color="#fff" size={24} /></div>
           )}
         </div>
-        <div className="login-brand"><h1>Finance Hub Dashboard</h1></div>
+        <div className="login-brand"><h1>CEO Governance Dashboard</h1></div>
 
         <div className="login-card">
           {!otpRequired ? (

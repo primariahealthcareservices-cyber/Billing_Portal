@@ -31,9 +31,7 @@ const handleViewInvoice = async (entry) => {
       fullUrl = `${origin}${fullUrl}`;
     }
 
-    const response = await api.get(fullUrl, {
-      responseType: "blob",
-    });
+    const response = await api.get(fullUrl, { responseType: "blob" });
 
     const contentType = response.headers["content-type"] || "application/pdf";
     const blob = new Blob([response.data], { type: contentType });
@@ -48,16 +46,10 @@ const handleViewInvoice = async (entry) => {
   } catch (error) {
     console.error("Invoice open error:", error);
     const status = error.response?.status;
-
-    if (status === 401) {
-      toast.error("Session expired. Please login again.");
-    } else if (status === 403) {
-      toast.error("You are not authorized to view this invoice.");
-    } else if (status === 404) {
-      toast.error("Invoice file not found.");
-    } else {
-      toast.error("Unable to open invoice.");
-    }
+    if (status === 401) toast.error("Session expired. Please login again.");
+    else if (status === 403) toast.error("You are not authorized to view this invoice.");
+    else if (status === 404) toast.error("Invoice file not found.");
+    else toast.error("Unable to open invoice.");
   }
 };
 
@@ -76,27 +68,34 @@ export default function FinanceTable({
     );
   }
 
-  const showClientName = entries.some((entry) => entry?.client_name);
-  const showGstNumber = entries.some((entry) => entry?.gst_number);
-  const showItems = entries.some(
-    (entry) => Array.isArray(entry?.items) && entry.items.length > 0
+  // ---- Column visibility: only render a column if at least one row has the field ----
+  const showSubCategory       = entries.some((e) => e?.sub_category);
+  const showClientName        = entries.some((e) => e?.client_name);
+  const showGstNumber         = entries.some((e) => e?.gst_number);
+  const showGstTax            = entries.some(
+    (e) => e?.gst_tax_percent !== null && e?.gst_tax_percent !== undefined
   );
-  const showPatientName = entries.some((entry) => entry?.patient_name);
-  const showPatientPlace = entries.some((entry) => entry?.patient_place);
-  const showGeneratedBy = entries.some((entry) => entry?.generated_by);
-  const showRevenueType = entries.some((entry) => entry?.revenue_type);
-  const showInvoice = entries.some((entry) => entry?.invoice_url);
-  const showSubCategory = entries.some((entry) => entry?.sub_category);
-  const showExecDepartment = entries.some((entry) => entry?.exec_department);
-  const showEmployeeName = entries.some((entry) => entry?.employee_name);
-  const showSalaryAmount = entries.some(
-    (entry) => entry?.salary_amount !== null && entry?.salary_amount !== undefined
+  const showTaxInvoiceNumber  = entries.some((e) => e?.tax_invoice_number);
+  const showItems             = entries.some(
+    (e) => Array.isArray(e?.items) && e.items.length > 0
   );
-  const showAllowanceAmount = entries.some(
-    (entry) => entry?.allowance_amount !== null && entry?.allowance_amount !== undefined
+  const showPatientName       = entries.some((e) => e?.patient_name);
+  const showPatientPlace      = entries.some((e) => e?.patient_place);
+  const showGeneratedBy       = entries.some((e) => e?.generated_by);
+  const showRevenueType       = entries.some((e) => e?.revenue_type);
+  const showExecDepartment    = entries.some((e) => e?.exec_department);
+  const showEmployeeName      = entries.some((e) => e?.employee_name);
+  const showVehicleType       = entries.some((e) => e?.vehicle_type);          // ✅ NEW
+  const showPurpose           = entries.some((e) => e?.purpose);               // ✅ NEW
+  const showSalaryAmount      = entries.some(
+    (e) => e?.salary_amount !== null && e?.salary_amount !== undefined
   );
-  const showTeam = entries.some((entry) => entry?.team);
-  const showLedgerDetails = entries.some((entry) => entry._type === "ledger");
+  const showAllowanceAmount   = entries.some(
+    (e) => e?.allowance_amount !== null && e?.allowance_amount !== undefined
+  );
+  const showTeam              = entries.some((e) => e?.team);
+  const showLedgerDetails     = entries.some((e) => e._type === "ledger");
+  const showInvoice           = entries.some((e) => e?.invoice_url);
 
   return (
     <div className="table-responsive">
@@ -109,6 +108,8 @@ export default function FinanceTable({
             {showSubCategory && <th>Sub-Category</th>}
             {showClientName && <th>Client Name</th>}
             {showGstNumber && <th>GST Number</th>}
+            {showGstTax && <th className="text-right">GST Tax %</th>}
+            {showTaxInvoiceNumber && <th>Tax Invoice #</th>}
             {showItems && <th>Items</th>}
             {showPatientName && <th>Patient Name</th>}
             {showPatientPlace && <th>Patient Place</th>}
@@ -116,6 +117,8 @@ export default function FinanceTable({
             {showRevenueType && <th>Revenue Type</th>}
             {showExecDepartment && <th>Exec Dept</th>}
             {showEmployeeName && <th>Employee</th>}
+            {showVehicleType && <th>Vehicle Type</th>}              {/* ✅ NEW */}
+            {showPurpose && <th>Purpose</th>}                        {/* ✅ NEW */}
             {showSalaryAmount && <th className="text-right">Salary</th>}
             {showAllowanceAmount && <th className="text-right">Allowance</th>}
             {showTeam && <th>Team</th>}
@@ -158,6 +161,16 @@ export default function FinanceTable({
                 {showSubCategory && <td>{entry.sub_category || "—"}</td>}
                 {showClientName && <td>{entry.client_name || "—"}</td>}
                 {showGstNumber && <td>{entry.gst_number || "—"}</td>}
+                {showGstTax && (
+                  <td className="text-right">
+                    {entry.gst_tax_percent !== null && entry.gst_tax_percent !== undefined
+                      ? `${Number(entry.gst_tax_percent)}%`
+                      : "—"}
+                  </td>
+                )}
+                {showTaxInvoiceNumber && (
+                  <td>{entry.tax_invoice_number || "—"}</td>
+                )}
                 {showItems && (
                   <td>
                     {items.length > 0
@@ -171,6 +184,19 @@ export default function FinanceTable({
                 {showRevenueType && <td>{entry.revenue_type || "—"}</td>}
                 {showExecDepartment && <td>{entry.exec_department || "—"}</td>}
                 {showEmployeeName && <td>{entry.employee_name || "—"}</td>}
+                {showVehicleType && <td>{entry.vehicle_type || "—"}</td>}   {/* ✅ NEW */}
+                {showPurpose && (
+                  <td
+                    style={{
+                      maxWidth: 220,
+                      whiteSpace: "normal",
+                      wordBreak: "break-word",
+                    }}
+                    title={entry.purpose || ""}
+                  >
+                    {entry.purpose || "—"}
+                  </td>
+                )}                                                          {/* ✅ NEW */}
                 {showSalaryAmount && (
                   <td className="text-right">
                     {formatCurrency(entry.salary_amount)}

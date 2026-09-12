@@ -34,7 +34,6 @@ const DEPARTMENTS_CONFIG = [
   { label: "Sales Enterprise", value: "SalesEnterprise" },
 ];
 
-// Sub‑departments for SalesEnterprise
 const SUB_DEPARTMENTS = [
   "All",
   "Corporate Management",
@@ -60,7 +59,6 @@ const SUB_DEPT_TO_MAIN = {
   "Research Development": "ResearchDevelopment",
 };
 
-// KPI display names and keys
 const KPI_DISPLAY_NAMES = {
   revenue_growth: "Revenue Growth Rate",
   win_rate: "Win Rate",
@@ -89,7 +87,6 @@ const firstOfMonth = () => {
 };
 const todayStr = () => new Date().toISOString().split("T")[0];
 
-// Helpers for months and quarters
 const getMonthNumber = (monthName) => {
   const months = {
     January: 1, February: 2, March: 3, April: 4, May: 5, June: 6,
@@ -120,6 +117,42 @@ const formatKpiValue = (val) => {
   return num.toFixed(2);
 };
 
+// ------------------------------------------------------------------
+// Helper: determine whether an entry is income or expense
+// Adjust the field names here if your backend uses different keys.
+// ------------------------------------------------------------------
+const getEntryKind = (entry) => {
+  if (!entry) return null;
+  const raw = (
+    entry.entry_type ??
+    entry.type ??
+    entry.transaction_type ??
+    entry.kind ??
+    entry.flow ??
+    ""
+  )
+    .toString()
+    .trim()
+    .toLowerCase();
+
+  if (!raw) {
+    const amt = Number(entry.amount ?? entry.total_amount_paid ?? 0);
+    if (!Number.isNaN(amt) && amt !== 0) return amt < 0 ? "expenses" : "income";
+    return null;
+  }
+
+  if (raw.includes("income") || raw.includes("revenue") || raw.includes("credit") || raw === "in") return "income";
+  if (raw.includes("expense") || raw.includes("expenditure") || raw.includes("debit") || raw === "out") return "expenses";
+  return null;
+};
+
+const matchesDataView = (entry, view) => {
+  if (view === "all") return true;
+  const kind = getEntryKind(entry);
+  if (!kind) return true;
+  return kind === view;
+};
+
 export default function SuperAdminDashboard() {
   // ---------- State ----------
   const [overview, setOverview] = useState(null);
@@ -132,9 +165,11 @@ export default function SuperAdminDashboard() {
   const [endDate, setEndDate] = useState(todayStr());
   const [searchTerm, setSearchTerm] = useState("");
 
-  // NEW: Quarter filter for non-SalesEnterprise departments
-  const [quarterFilter, setQuarterFilter] = useState("");                 // "" | "1" | "2" | "3" | "4"
+  const [quarterFilter, setQuarterFilter] = useState("");
   const [yearFilter, setYearFilter] = useState(String(new Date().getFullYear()));
+
+  // Shared Income / Expenses / All filter
+  const [dataView, setDataView] = useState("all");
 
   // SalesEnterprise specific
   const [selectedQuarter, setSelectedQuarter] = useState("");
@@ -168,7 +203,7 @@ export default function SuperAdminDashboard() {
 
   const [viewEntry, setViewEntry] = useState(null);
 
-  // ---------- Effect: update start/end for SalesEnterprise ----------
+  // ---------- Effect: SalesEnterprise quarter → dates ----------
   useEffect(() => {
     if (activeDept !== "SalesEnterprise") return;
     if (!selectedYear) return;
@@ -192,10 +227,10 @@ export default function SuperAdminDashboard() {
     }
   }, [selectedQuarter, selectedYear, activeDept]);
 
-  // ---------- NEW Effect: auto-update start/end when Quarter/Year change (non-SalesEnterprise) ----------
+  // ---------- Effect: Non-SalesEnterprise quarter → dates ----------
   useEffect(() => {
-    if (activeDept === "SalesEnterprise") return;   // handled by the other effect
-    if (!quarterFilter) return;                     // "All" → leave dates alone
+    if (activeDept === "SalesEnterprise") return;
+    if (!quarterFilter) return;
 
     const year = parseInt(yearFilter, 10);
     const q = parseInt(quarterFilter, 10);
@@ -241,7 +276,6 @@ export default function SuperAdminDashboard() {
         const records = res.data.kpis || [];
         setSalesKpis(records);
 
-        // Aggregate by month
         const monthMap = {};
         records.forEach(record => {
           const month = record.month || "January";
@@ -330,12 +364,10 @@ export default function SuperAdminDashboard() {
     }
   }, []);
 
-  // ---------- Main fetch for department data ----------
   const fetchDeptData = useCallback(async () => {
     if (activeDept === "overview" || activeDept === "SalesEnterprise") return;
     setDeptLoading(true);
     try {
-      // Base parameters (without section)
       const baseParams = {
         start_date: startDate,
         end_date: endDate,
@@ -343,7 +375,6 @@ export default function SuperAdminDashboard() {
         ...(selectedCategory && { category: selectedCategory }),
       };
 
-      // For entries, add search, pagination, and (if Caredx) section
       const entriesParams = {
         ...baseParams,
         search: searchTerm || undefined,
@@ -354,7 +385,6 @@ export default function SuperAdminDashboard() {
         entriesParams.section = caredxSection;
       }
 
-      // Summary params: NO section, so backend returns combined for Caredx
       const summaryParams = { ...baseParams };
 
       const [entriesRes, summaryRes] = await Promise.all([
@@ -382,12 +412,10 @@ export default function SuperAdminDashboard() {
     }
   }, [activeDept, activeExtra, startDate, endDate, searchTerm, selectedCategory, caredxSection, page, perPage]);
 
-  // Reset page when filters change
   useEffect(() => {
     setPage(1);
   }, [startDate, endDate, searchTerm, selectedCategory, caredxSection]);
 
-  // Fetch options and data when department changes
   useEffect(() => {
     fetchOptions(activeDept);
   }, [activeDept, fetchOptions]);
@@ -418,8 +446,9 @@ export default function SuperAdminDashboard() {
     setSelectedYear("");
     setSelectedSubDept("All");
     setSalesSelectedDept(null);
-    setQuarterFilter("");                                       // NEW
-    setYearFilter(String(new Date().getFullYear()));            // NEW
+    setQuarterFilter("");
+    setYearFilter(String(new Date().getFullYear()));
+    setDataView("all");
     setDeptEntries([]);
     setCaredxLabEntries([]);
     setCaredxExpenses([]);
@@ -439,9 +468,18 @@ export default function SuperAdminDashboard() {
     setSelectedYear("");
     setSelectedSubDept("All");
     setSalesSelectedDept(null);
-    setQuarterFilter("");                                       // NEW
-    setYearFilter(String(new Date().getFullYear()));            // NEW
+    setQuarterFilter("");
+    setYearFilter(String(new Date().getFullYear()));
+    setDataView("all");
     setPage(1);
+  };
+
+  const handleDataViewChange = (view) => {
+    setDataView(view);
+    if (activeDept === "Caredx") {
+      if (view === "income") setCaredxSection("lab");
+      else if (view === "expenses") setCaredxSection("expenses");
+    }
   };
 
   const handlePageChange = (newPage) => {
@@ -576,8 +614,67 @@ export default function SuperAdminDashboard() {
 
   const pieData = (overview?.by_department || []).map((d) => ({
     name: d.department,
-    value: d.income + d.expenses,
+    value:
+      dataView === "income"
+        ? d.income
+        : dataView === "expenses"
+        ? d.expenses
+        : d.income + d.expenses,
   }));
+
+  const filteredDeptEntries = React.useMemo(() => {
+    if (dataView === "all") return deptEntries;
+    return deptEntries.filter(e => matchesDataView(e, dataView));
+  }, [deptEntries, dataView]);
+
+  const visibleCaredxLabEntries = React.useMemo(() => {
+    if (dataView === "expenses") return [];
+    return caredxLabEntries;
+  }, [caredxLabEntries, dataView]);
+
+  const visibleCaredxExpenses = React.useMemo(() => {
+    if (dataView === "income") return [];
+    return caredxExpenses;
+  }, [caredxExpenses, dataView]);
+
+  // ---------- Reusable: Income / Expenses / All toggle ----------
+  const renderDataViewToggle = () => (
+    <div
+      className="card"
+      style={{
+        display: "flex",
+        gap: 8,
+        marginBottom: 16,
+        alignItems: "center",
+        flexWrap: "wrap",
+      }}
+    >
+      <span style={{ fontWeight: 600, marginRight: 8 }}>View:</span>
+      <button
+        type="button"
+        className={`btn ${dataView === "all" ? "btn-primary" : "btn-secondary"}`}
+        onClick={() => handleDataViewChange("all")}
+      >
+        All
+      </button>
+      <button
+        type="button"
+        className={`btn ${dataView === "income" ? "btn-primary" : "btn-secondary"}`}
+        onClick={() => handleDataViewChange("income")}
+        style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+      >
+        <TrendingUp size={15} /> Income
+      </button>
+      <button
+        type="button"
+        className={`btn ${dataView === "expenses" ? "btn-primary" : "btn-secondary"}`}
+        onClick={() => handleDataViewChange("expenses")}
+        style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+      >
+        <TrendingDown size={15} /> Expenses
+      </button>
+    </div>
+  );
 
   // ---------- Pagination Render ----------
   const renderPagination = () => {
@@ -621,7 +718,7 @@ export default function SuperAdminDashboard() {
   // ---------- Render ----------
   return (
     <div className="page">
-      <Navbar title="CEO Dashboard" roleColor="#7c3aed" />
+      <Navbar title="CEO Governance Dashboard" roleColor="#7c3aed" />
 
       <main className="page-main">
         {/* ========== FILTER PANEL ========== */}
@@ -642,7 +739,6 @@ export default function SuperAdminDashboard() {
 
           {activeDept !== "SalesEnterprise" && (
             <>
-              {/* NEW: Quarter selector */}
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Quarter</label>
                 <select
@@ -658,7 +754,6 @@ export default function SuperAdminDashboard() {
                 </select>
               </div>
 
-              {/* NEW: Year selector */}
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Year</label>
                 <select
@@ -681,7 +776,7 @@ export default function SuperAdminDashboard() {
                   value={startDate}
                   onChange={(e) => {
                     setStartDate(e.target.value);
-                    setQuarterFilter("");   // clear quarter when user overrides manually
+                    setQuarterFilter("");
                   }}
                 />
               </div>
@@ -693,7 +788,7 @@ export default function SuperAdminDashboard() {
                   value={endDate}
                   onChange={(e) => {
                     setEndDate(e.target.value);
-                    setQuarterFilter("");   // clear quarter when user overrides manually
+                    setQuarterFilter("");
                   }}
                 />
               </div>
@@ -818,12 +913,21 @@ export default function SuperAdminDashboard() {
               </div>
             </div>
 
+            {/* Toggle for Overview (no transactional panel exists here) */}
+            <div style={{ marginTop: 16 }}>
+              {renderDataViewToggle()}
+            </div>
+
             {overview?.by_department && (
               <>
                 <p className="section-title" style={{ marginBottom: 8 }}>Categories Panel</p>
                 <div className="card">
                   <p className="section-title" style={{ marginBottom: 16 }}>
-                    Income / Expenses / Profit by Department
+                    {dataView === "income"
+                      ? "Income by Department"
+                      : dataView === "expenses"
+                      ? "Expenses by Department"
+                      : "Income / Expenses / Profit by Department"}
                   </p>
                   <div className="dept-grid">
                     {sortedDepartments.map((d) => {
@@ -838,20 +942,29 @@ export default function SuperAdminDashboard() {
                           style={{ textAlign: "left", cursor: "pointer", border: activeDept === d.department ? "2px solid #7c3aed" : undefined }}
                         >
                           <p className="dept-card-title">{label}</p>
-                          <div className="dept-row">
-                            <span className="dept-row-label">Income</span>
-                            <span className="dept-row-value--income">{formatCurrency(d.income)}</span>
-                          </div>
-                          <div className="dept-row">
-                            <span className="dept-row-label">Expenses</span>
-                            <span className="dept-row-value--expense">{formatCurrency(d.expenses)}</span>
-                          </div>
-                          <div className="dept-row dept-row--total">
-                            <span className="dept-row-label">Profit</span>
-                            <span className={`dept-row-value--profit ${d.profit < 0 ? "negative" : ""}`}>
-                              {formatCurrency(d.profit)}
-                            </span>
-                          </div>
+
+                          {dataView !== "expenses" && (
+                            <div className="dept-row">
+                              <span className="dept-row-label">Income</span>
+                              <span className="dept-row-value--income">{formatCurrency(d.income)}</span>
+                            </div>
+                          )}
+
+                          {dataView !== "income" && (
+                            <div className="dept-row">
+                              <span className="dept-row-label">Expenses</span>
+                              <span className="dept-row-value--expense">{formatCurrency(d.expenses)}</span>
+                            </div>
+                          )}
+
+                          {dataView === "all" && (
+                            <div className="dept-row dept-row--total">
+                              <span className="dept-row-label">Profit</span>
+                              <span className={`dept-row-value--profit ${d.profit < 0 ? "negative" : ""}`}>
+                                {formatCurrency(d.profit)}
+                              </span>
+                            </div>
+                          )}
                         </button>
                       );
                     })}
@@ -865,7 +978,13 @@ export default function SuperAdminDashboard() {
                 <p className="section-title" style={{ marginBottom: 8 }}>Display Panel</p>
                 <div className="chart-grid">
                   <div className="card chart-card">
-                    <h3>Income vs Expenses by Department</h3>
+                    <h3>
+                      {dataView === "income"
+                        ? "Income by Department"
+                        : dataView === "expenses"
+                        ? "Expenses by Department"
+                        : "Income vs Expenses by Department"}
+                    </h3>
                     <ResponsiveContainer width="100%" height={280}>
                       <BarChart data={overview.by_department}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#eef0f4" />
@@ -873,13 +992,23 @@ export default function SuperAdminDashboard() {
                         <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} />
                         <Tooltip formatter={(v) => formatCurrency(v)} />
                         <Legend />
-                        <Bar dataKey="income" fill="#16a34a" name="Income" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="expenses" fill="#dc2626" name="Expenses" radius={[4, 4, 0, 0]} />
+                        {dataView !== "expenses" && (
+                          <Bar dataKey="income" fill="#16a34a" name="Income" radius={[4, 4, 0, 0]} />
+                        )}
+                        {dataView !== "income" && (
+                          <Bar dataKey="expenses" fill="#dc2626" name="Expenses" radius={[4, 4, 0, 0]} />
+                        )}
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
                   <div className="card chart-card">
-                    <h3>Department Share of Total Volume</h3>
+                    <h3>
+                      {dataView === "income"
+                        ? "Department Share of Income"
+                        : dataView === "expenses"
+                        ? "Department Share of Expenses"
+                        : "Department Share of Total Volume"}
+                    </h3>
                     <ResponsiveContainer width="100%" height={280}>
                       <PieChart>
                         <Pie
@@ -911,7 +1040,6 @@ export default function SuperAdminDashboard() {
               <div className="card empty-state">Loading...</div>
             ) : (
               <>
-                {/* SUMMARY PANEL */}
                 <p className="section-title" style={{ marginBottom: 8 }}>
                   Summary Panel {selectedSubDept !== "All" ? `– ${selectedSubDept}` : ""}
                   {salesSelectedDept && ` (${DEPARTMENTS_CONFIG.find(d => d.value === salesSelectedDept)?.label || salesSelectedDept})`}
@@ -956,7 +1084,6 @@ export default function SuperAdminDashboard() {
                   </div>
                 )}
 
-                {/* CATEGORIES PANEL – show averages per KPI */}
                 <p className="section-title" style={{ marginBottom: 8 }}>Categories Panel</p>
                 <div className="card">
                   {selectedSubDept === "All" ? (
@@ -997,7 +1124,6 @@ export default function SuperAdminDashboard() {
                   )}
                 </div>
 
-                {/* DISPLAY PANEL – dynamic chart types */}
                 <p className="section-title" style={{ marginBottom: 8 }}>
                   Display Panel {selectedSubDept !== "All" ? `– ${selectedSubDept}` : ""}
                 </p>
@@ -1096,11 +1222,20 @@ export default function SuperAdminDashboard() {
               <>
                 <p className="section-title" style={{ marginBottom: 8 }}>Summary Panel</p>
                 <StatCards
-                  totalIncome={deptSummary.total_income}
-                  totalExpenses={deptSummary.total_expenses}
-                  profit={deptSummary.profit}
-                  entryCount={deptSummary.entry_count}
-                  // Pass paidToOtherLabs only for Caredx
+                  totalIncome={dataView === "expenses" ? 0 : deptSummary.total_income}
+                  totalExpenses={dataView === "income" ? 0 : deptSummary.total_expenses}
+                  profit={
+                    dataView === "income"
+                      ? deptSummary.total_income
+                      : dataView === "expenses"
+                      ? -deptSummary.total_expenses
+                      : deptSummary.profit
+                  }
+                  entryCount={
+                    activeDept === "Caredx"
+                      ? visibleCaredxLabEntries.length + visibleCaredxExpenses.length
+                      : filteredDeptEntries.length || deptSummary.entry_count
+                  }
                   paidToOtherLabs={activeDept === "Caredx" ? deptSummary.total_paid_to_other_labs : undefined}
                 />
               </>
@@ -1113,7 +1248,8 @@ export default function SuperAdminDashboard() {
               </>
             )}
 
-            {activeDept === "Caredx" && (
+            {/* Section toggle for Caredx — only visible when dataView === "all" */}
+            {activeDept === "Caredx" && dataView === "all" && (
               <div className="card" style={{ display: "flex", gap: 12, marginBottom: 16 }}>
                 <button
                   className={`btn ${caredxSection === "lab" ? "btn-primary" : "btn-secondary"}`}
@@ -1161,11 +1297,14 @@ export default function SuperAdminDashboard() {
               <div className="card empty-state">Loading...</div>
             ) : activeDept === "Caredx" ? (
               <>
-                {caredxSection === "lab" && (
+                {/* Transactional Panel header + Income/Expenses/All toggle */}
+                <p className="section-title" style={{ marginBottom: 8 }}>Transactional Panel</p>
+                {renderDataViewToggle()}
+
+                {dataView !== "expenses" && (
                   <div>
-                    <p className="section-title" style={{ marginBottom: 8 }}>Transactional Panel</p>
                     <p className="section-title" style={{ marginBottom: 12 }}>Lab Data Entries</p>
-                    {caredxLabEntries.length === 0 ? (
+                    {visibleCaredxLabEntries.length === 0 ? (
                       <div className="card empty-state">No lab entries found for this filter.</div>
                     ) : (
                       <div className="card table-wrap">
@@ -1179,7 +1318,7 @@ export default function SuperAdminDashboard() {
                             </tr>
                           </thead>
                           <tbody>
-                            {caredxLabEntries.map((e) => (
+                            {visibleCaredxLabEntries.map((e) => (
                               <tr key={e.id}>
                                 <td style={{ whiteSpace: "nowrap" }}>{e.entry_date}</td>
                                 <td>{e.patient_name}</td>
@@ -1208,11 +1347,10 @@ export default function SuperAdminDashboard() {
                   </div>
                 )}
 
-                {caredxSection === "expenses" && (
-                  <div>
-                    <p className="section-title" style={{ marginBottom: 8 }}>Transactional Panel</p>
+                {dataView !== "income" && (
+                  <div style={{ marginTop: 16 }}>
                     <p className="section-title" style={{ marginBottom: 12 }}>Expenses</p>
-                    {caredxExpenses.length === 0 ? (
+                    {visibleCaredxExpenses.length === 0 ? (
                       <div className="card empty-state">No expenses found for this filter.</div>
                     ) : (
                       <div className="card table-wrap">
@@ -1226,7 +1364,7 @@ export default function SuperAdminDashboard() {
                             </tr>
                           </thead>
                           <tbody>
-                            {caredxExpenses.map((e) => (
+                            {visibleCaredxExpenses.map((e) => (
                               <tr key={e.id || e._key}>
                                 <td style={{ whiteSpace: "nowrap" }}>{e.expense_date || e.entry_date}</td>
                                 <td>{e.category}</td>
@@ -1256,10 +1394,17 @@ export default function SuperAdminDashboard() {
               </>
             ) : (
               <div>
+                {/* Transactional Panel header + Income/Expenses/All toggle */}
                 <p className="section-title" style={{ marginBottom: 8 }}>Transactional Panel</p>
-                <p className="section-title" style={{ marginBottom: 12 }}>{currentDeptLabel} Finance Entries</p>
+                {renderDataViewToggle()}
+
+                <p className="section-title" style={{ marginBottom: 12 }}>
+                  {currentDeptLabel} Finance Entries
+                  {dataView === "income" && " — Income"}
+                  {dataView === "expenses" && " — Expenses"}
+                </p>
                 <FinanceTable
-                  entries={deptEntries}
+                  entries={filteredDeptEntries}
                   onView={(entry) => setViewEntry({ type: "finance", data: entry })}
                 />
                 {renderPagination()}
