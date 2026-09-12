@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import toast from "react-hot-toast";
 import Navbar from "./Navbar.jsx";
 import FilterBar from "./FilterBar.jsx";
@@ -8,24 +8,31 @@ import FinanceTable from "./FinanceTable.jsx";
 import FinanceEntryForm from "./FinanceEntryForm.jsx";
 import api from "../api/axios.js";
 
+const PAGE_SIZE = 25;
+
 const firstOfMonth = () => {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split("T")[0];
 };
 const todayStr = () => new Date().toISOString().split("T")[0];
 
-/**
- * Reusable finance dashboard for departments that only need the standard
- * Income/Expenses module (IT, PCM, MedTech). Caredx has its own dedicated
- * page (CaredxDashboard.jsx) because it also has the Lab Data Entry module.
- * Hits that department's own dedicated route file, e.g. /api/it/..., 
- * /api/pcm/..., /api/medtech/... (see backend/routes/it.py, pcm.py, medtech.py).
- *
- * PCM additionally supports Excel import (POST /pcm/import, multipart file
- * upload) and Excel export (GET /pcm/export, downloads a formatted .xlsx).
- */
+// Build a compact page-number array (with "…" ellipsis markers).
+const buildPageNumbers = (current, total) => {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = [];
+  if (current <= 4) {
+    for (let i = 1; i <= 5; i++) pages.push(i);
+    pages.push("…", total);
+  } else if (current >= total - 3) {
+    pages.push(1, "…");
+    for (let i = total - 4; i <= total; i++) pages.push(i);
+  } else {
+    pages.push(1, "…", current - 1, current, current + 1, "…", total);
+  }
+  return pages;
+};
+
 export default function FinanceDashboard({ department, title, roleColor }) {
-  // Remove spaces from department name to match URL slug (e.g., "IT Sales" -> "itsales")
   const apiBase = department.toLowerCase().replace(/\s/g, '');
   const supportsExcelImportExport = department === "PCM";
 
@@ -38,6 +45,9 @@ export default function FinanceDashboard({ department, title, roleColor }) {
   const [options, setOptions] = useState(null);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+
+  // NEW: pagination
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
@@ -80,10 +90,34 @@ export default function FinanceDashboard({ department, title, roleColor }) {
     fetchData();
   }, [fetchData]);
 
+  // NEW: reset page to 1 whenever any filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [startDate, endDate, searchTerm, department]);
+
+  // NEW: paginated slice
+  const totalEntries = entries.length;
+  const totalPages = Math.max(1, Math.ceil(totalEntries / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageNumbers = buildPageNumbers(safePage, totalPages);
+  const rangeStart = totalEntries === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(safePage * PAGE_SIZE, totalEntries);
+
+  const paginatedEntries = useMemo(
+    () => entries.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [entries, safePage]
+  );
+
+  // Guard against out-of-range page when data shrinks
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
   const handleReset = () => {
     setStartDate(firstOfMonth());
     setEndDate(todayStr());
     setSearchTerm("");
+    setCurrentPage(1); // NEW
   };
 
   const handleDelete = async (entry) => {
@@ -245,7 +279,70 @@ export default function FinanceDashboard({ department, title, roleColor }) {
           {loading ? (
             <div className="card empty-state">Loading...</div>
           ) : (
-            <FinanceTable entries={entries} onEdit={openEditEntry} onDelete={handleDelete} />
+            <>
+              <FinanceTable
+                entries={paginatedEntries}
+                onEdit={openEditEntry}
+                onDelete={handleDelete}
+              />
+
+              {/* NEW: Pagination controls */}
+              {totalEntries > 0 && (
+                <div
+                  className="card"
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 12,
+                    flexWrap: "wrap",
+                    marginTop: 12,
+                  }}
+                >
+                  <span style={{ fontSize: 13, color: "#6b7280" }}>
+                    Showing {rangeStart}–{rangeEnd} of {totalEntries} transactions
+                  </span>
+
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={safePage === 1}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    >
+                      Previous
+                    </button>
+
+                    {pageNumbers.map((p, idx) =>
+                      p === "…" ? (
+                        <span key={`ellipsis-${idx}`} style={{ padding: "0 6px", color: "#9ca3af" }}>
+                          …
+                        </span>
+                      ) : (
+                        <button
+                          key={p}
+                          type="button"
+                          className={`btn ${p === safePage ? "btn-primary" : "btn-secondary"}`}
+                          onClick={() => setCurrentPage(p)}
+                          style={{ minWidth: 36 }}
+                        >
+                          {p}
+                        </button>
+                      )
+                    )}
+
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={safePage === totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>

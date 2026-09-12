@@ -127,17 +127,6 @@ def team_stats():
 @superadmin_bp.route("/overview", methods=["GET"])
 @role_required("SuperAdmin")
 def overview():
-    """
-    High level snapshot across the platform for the SuperAdmin dashboard,
-    filterable by date range.
-
-    Optional query params:
-        start_date (YYYY-MM-DD) – filter entries on or after this date
-        end_date   (YYYY-MM-DD) – filter entries on or before this date
-
-    Returns total/active members, platform-wide income/expenses/profit,
-    and a breakdown per department.
-    """
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
 
@@ -200,8 +189,10 @@ def overview():
     }), 200
 
 
-def _apply_finance_filters(query, args):
-    """Apply common finance entry filters (date, type, category, search, revenue_type, sub_category)."""
+def _apply_finance_filters(query, args, department=None):
+    """
+    Apply common finance entry filters (date, type, category, search, revenue_type, sub_category).
+    """
     start_date = _parse_date(args.get("start_date"))
     end_date = _parse_date(args.get("end_date"))
     if start_date:
@@ -269,11 +260,10 @@ def department_options(department):
 
 
 def _caredx_entries():
-    """Return lab entries and expenses with optional section and category filters."""
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
     search = request.args.get("search")
-    section = request.args.get("section")   # 'lab' or 'expenses'
+    section = request.args.get("section")
     category = request.args.get("category")
 
     lab_entries = []
@@ -328,7 +318,7 @@ def department_entries(department):
         return _caredx_entries()
 
     query = FinanceEntry.query.filter_by(department=department)
-    query = _apply_finance_filters(query, request.args)
+    query = _apply_finance_filters(query, request.args, department=department)
     query = query.order_by(FinanceEntry.entry_date.desc(), FinanceEntry.id.desc())
     return jsonify({"entries": [e.to_dict() for e in query.all()]}), 200
 
@@ -357,7 +347,6 @@ def department_summary(department):
             total_income = sum(float(e.total_amount_paid) for e in lab_entries)
             total_paid = sum(float(e.paid_to_other_labs or 0) for e in lab_entries)
 
-            # Build trend (income per date)
             by_date = {}
             for e in lab_entries:
                 key = e.entry_date.isoformat()
@@ -365,7 +354,6 @@ def department_summary(department):
                 by_date[key]["income"] += float(e.total_amount_paid)
             trend = sorted(by_date.values(), key=lambda x: x["date"])
 
-            # Build category breakdown by test_name
             by_category = {}
             for e in lab_entries:
                 cat = e.test_name or "Uncategorized"
@@ -385,7 +373,6 @@ def department_summary(department):
                 "category_breakdown": category_breakdown,
             }), 200
 
-        # Expenses section (default)
         exp_query = CaredxExpense.query
         if start_date:
             exp_query = exp_query.filter(CaredxExpense.expense_date >= start_date)
@@ -427,8 +414,10 @@ def department_summary(department):
         query = query.filter(FinanceEntry.entry_date >= start_date)
     if end_date:
         query = query.filter(FinanceEntry.entry_date <= end_date)
+
     if revenue_type:
         query = query.filter(FinanceEntry.revenue_type == revenue_type)
+
     if category:
         query = query.filter(FinanceEntry.category == category)
 
@@ -479,7 +468,7 @@ def department_export(department):
     else:
         config = DEPARTMENT_CONFIG[department]
         query = FinanceEntry.query.filter_by(department=department)
-        query = _apply_finance_filters(query, request.args)
+        query = _apply_finance_filters(query, request.args, department=department)
         entries = query.order_by(FinanceEntry.entry_date.asc(), FinanceEntry.id.asc()).all()
         buffer = build_finance_entries_workbook(entries, config, department)
         filename = f"{department}_Finance_Entries_{date.today().isoformat()}.xlsx"

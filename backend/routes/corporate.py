@@ -249,5 +249,4 @@ def finance_summary():
         "profit": total_income - total_expenses,
         "entry_count": len(entries),
         "trend": trend,
-        "category_breakdown": list(by_category.values()),
-    }), 200
+        "category_breakdown": list(by_category.values()),}), 200

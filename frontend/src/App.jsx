@@ -2,6 +2,7 @@ import React from "react";
 import { Routes, Route } from "react-router-dom";
 import Login from "./pages/Login.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
+import DentalDashboard from "./pages/dashboards/DentalDashboard.jsx";
 import ITDashboard from "./pages/dashboards/ITDashboard.jsx";
 import ITSalesDashboard from "./pages/dashboards/ITSalesDashboard.jsx";
 import PCMDashboard from "./pages/dashboards/PCMDashboard.jsx";
@@ -86,6 +87,16 @@ export default function App() {
         element={
           <ProtectedRoute allowedRoles={["SuperAdmin"]}>
             <SuperAdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* NEW: Dental dashboard — path matches ROLE_ROUTES.Dental */}
+      <Route
+        path="/dashboard/dental"
+        element={
+          <ProtectedRoute allowedRoles={["Dental"]}>
+            <DentalDashboard />
           </ProtectedRoute>
         }
       />

@@ -13,6 +13,7 @@ export const ROLE_ROUTES = {
   Corporate: "/dashboard/corporate",
   Adminstrationfunctionalunit: "/dashboard/adminfunctionalunit",
   ResearchDevelopment: "/dashboard/researchdevelopment",
+  Dental: "/dashboard/dental",   // <-- NEW
 };
 
 export function AuthProvider({ children }) {

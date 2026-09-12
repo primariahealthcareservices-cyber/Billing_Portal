@@ -4,7 +4,11 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
 
-ROLES = ["SuperAdmin", "IT", "IT Sales","PCM", "MedTech", "Caredx", "Corporate", "Adminstrationfunctionalunit", "ResearchDevelopment"]
+ROLES = [
+    "SuperAdmin", "IT", "IT Sales", "PCM", "MedTech", "Caredx",
+    "Corporate", "Adminstrationfunctionalunit", "ResearchDevelopment",
+    "Dental",   # NEW
+]
 ENTRY_TYPES = ["Income", "Expenses"]
 
 DEPARTMENT_CONFIG = {
@@ -33,36 +37,71 @@ DEPARTMENT_CONFIG = {
         "show_tax_invoice_number": False,
     },
 
-    "IT Sales": {  # NEW
+    "IT Sales": {
+    "categories": {
+        "Income": [
+            "Professional Services & Implementation",
+            "Software Licenses & SaaS Subscriptions",
+            "Managed Services & Support",
+            "Hardware & Infrastructure Reselling",
+            "Others"
+        ],
+        "Expenses": [
+            "Personnel & Compensation",
+            "Sales Enablement & Tech Stack",
+            "Travel, Entertainment & Field Costs",
+            "Training, Enablement & Administration",
+            "Others"
+        ]
+    },
+    "revenue_types": ["Direct", "Recurring", "Project-based"],
+    "show_generated_by": True,
+    "show_revenue_type": True,
+    "show_patient_fields": False,
+    "show_client_name": True,
+    "show_gst_number": True,
+    "gst_required_categories": ["Hardware & Infrastructure Reselling"],
+    "show_items": False,
+    "show_invoice": True,
+    "show_gst_tax": True,
+    "show_tax_invoice_number": True,
+},
+    "Dental": {
         "categories": {
             "Income": [
-                "Software Sales",
-                "Hardware Sales",
-                "Consulting",
-                "Support & Maintenance",
-                "Others"
+                "Laboratory Services Revenue",
+                "Doctor / Clinic Services",
+                "Dental Prosthetics / Products",
+                "Business Services Revenue",
+                "Miscellaneous",
+                "Others",
             ],
             "Expenses": [
-                "Hardware and Infrastructure Reselling (Servers, Equipment)",
-                "Personal Costs and Compensation (Salaries, Bonuses, Benefits, Recruiter Hiring)",
-                "Travel, Entertainment and Field Costs (Client Meetings, Dinners, Team Lunch, Conferences)",
-                "Software Services and Implementations",
-                "Others"
-            ]
+                "Dental Lab Operations",
+                "Dental Materials & Supplies",
+                "Dental Equipment & Instruments",
+                "Outsourced Dental Services",
+                "Personnel & Payroll",
+                "Facilities & Overhead",
+                "Travel & Entertainment",
+                "Marketing & Promotion",
+                "Office Supplies & Equipment",
+                "Miscellaneous",
+                "Others",
+            ],
         },
         "revenue_types": ["Direct", "Recurring", "Project-based"],
         "show_generated_by": True,
         "show_revenue_type": True,
         "show_patient_fields": False,
         "show_client_name": True,
-        "show_gst_number": True,
-        "gst_required_categories": ["Hardware Sales", "Software Sales"],
+        "show_gst_number": False,
+        "gst_required_categories": [],
         "show_items": False,
-        "show_invoice": True,
-        "show_gst_tax": True,
-        "show_tax_invoice_number": True,
+        "show_invoice": False,
+        "show_gst_tax": False,
+        "show_tax_invoice_number": False,
     },
-
     "Caredx": {
         "categories": {
             "Income": ["Lab", "Camp", "Walkin/Person", "Referral"],

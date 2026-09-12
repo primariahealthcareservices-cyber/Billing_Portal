@@ -16,21 +16,23 @@ import EntryViewModal from "../../components/EntryViewModal.jsx";
 import api from "../../api/axios.js";
 
 // ------------------------------------------------------------------
-// Configuration - Department order and labels
+// Config
 // ------------------------------------------------------------------
+const PAGE_SIZE = 25;
+
 const DEPARTMENTS_CONFIG = [
   { label: "Overview", value: "overview" },
   { label: "Corporate Management", value: "Corporate" },
   { label: "Office Management", value: "Adminstrationfunctionalunit" },
   { label: "Caredx", value: "Caredx" },
-  { label: "IT Development", value: "IT", extra: { revenue_type: "Development" } },
-  { label: "IT Sales", value: "IT Sales" },   // <-- now separate department
+  { label: "IT Development", value: "IT" },
+  { label: "IT Sales", value: "IT Sales" },
   { label: "MedTech", value: "MedTech" },
   { label: "PCM", value: "PCM" },
+    { label: "Dental", value: "Dental" },
   { label: "Research Development", value: "ResearchDevelopment" },
 ];
 
-// Hardcoded category lists for specific departments (Caredx expenses, PCM)
 const DEPARTMENT_CATEGORIES = {
   Caredx: {
     expenses: [
@@ -63,9 +65,22 @@ const firstOfMonth = () => {
 };
 const todayStr = () => new Date().toISOString().split("T")[0];
 
-// ------------------------------------------------------------------
-// Main Component
-// ------------------------------------------------------------------
+// Build a compact page-number array (with "..." ellipsis markers).
+const buildPageNumbers = (current, total) => {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = [];
+  if (current <= 4) {
+    for (let i = 1; i <= 5; i++) pages.push(i);
+    pages.push("…", total);
+  } else if (current >= total - 3) {
+    pages.push(1, "…");
+    for (let i = total - 4; i <= total; i++) pages.push(i);
+  } else {
+    pages.push(1, "…", current - 1, current, current + 1, "…", total);
+  }
+  return pages;
+};
+
 export default function SuperAdminDashboard() {
   // ---------- State ----------
   const [overview, setOverview] = useState(null);
@@ -79,8 +94,13 @@ export default function SuperAdminDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
 
   const [selectedCategory, setSelectedCategory] = useState(null);
-  const [caredxSection, setCaredxSection] = useState("lab"); // "lab" or "expenses"
+  const [caredxSection, setCaredxSection] = useState("lab");
   const [departmentOptions, setDepartmentOptions] = useState(null);
+
+  // NEW: transaction type filter (Income / Expenses / All)
+  const [entryTypeFilter, setEntryTypeFilter] = useState(null); // null | "Income" | "Expenses"
+  // NEW: pagination
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [deptEntries, setDeptEntries] = useState([]);
   const [deptSummary, setDeptSummary] = useState(null);
@@ -132,10 +152,12 @@ export default function SuperAdminDashboard() {
         ...(activeExtra?.revenue_type && { revenue_type: activeExtra.revenue_type }),
         ...(selectedCategory && { category: selectedCategory }),
         ...(activeDept === "Caredx" && { section: caredxSection }),
+        // NEW: entry_type filter only applies to standard departments.
+        // Caredx uses section=lab|expenses to switch income/expense.
+        ...(entryTypeFilter && activeDept !== "Caredx" && { entry_type: entryTypeFilter }),
       };
 
       const entriesRes = await api.get(`/admin/departments/${activeDept}/entries`, { params });
-
       const summaryParams = {
         start_date: startDate,
         end_date: endDate,
@@ -158,7 +180,16 @@ export default function SuperAdminDashboard() {
     } finally {
       setDeptLoading(false);
     }
-  }, [activeDept, activeExtra, startDate, endDate, searchTerm, selectedCategory, caredxSection]);
+  }, [
+    activeDept,
+    activeExtra,
+    startDate,
+    endDate,
+    searchTerm,
+    selectedCategory,
+    caredxSection,
+    entryTypeFilter, // NEW
+  ]);
 
   // ---------- Effects ----------
   useEffect(() => {
@@ -177,9 +208,14 @@ export default function SuperAdminDashboard() {
     }
   }, [fetchDeptData]);
 
+  // NEW: reset pagination to page 1 whenever any filter changes.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeDept, entryTypeFilter, selectedCategory, startDate, endDate, searchTerm, caredxSection]);
+
   // ---------- Handlers ----------
   const handleSelectDept = (value) => {
-    const config = DEPARTMENTS_CONFIG.find(d => d.value === value);
+    const config = DEPARTMENTS_CONFIG.find((d) => d.value === value);
     if (!config) return;
     setActiveDept(config.value);
     setActiveExtra(config.extra || null);
@@ -188,6 +224,8 @@ export default function SuperAdminDashboard() {
     setSearchTerm("");
     setSelectedCategory(null);
     setCaredxSection("lab");
+    setEntryTypeFilter(null); // NEW
+    setCurrentPage(1);        // NEW
     setDeptEntries([]);
     setCaredxLabEntries([]);
     setCaredxExpenses([]);
@@ -200,15 +238,23 @@ export default function SuperAdminDashboard() {
     setSearchTerm("");
     setSelectedCategory(null);
     setCaredxSection("lab");
+    setEntryTypeFilter(null); // NEW
+    setCurrentPage(1);        // NEW
   };
 
   const handleCategoryClick = (cat) => {
-    setSelectedCategory(prev => (prev === cat ? null : cat));
+    setSelectedCategory((prev) => (prev === cat ? null : cat));
   };
 
   const handleCaredxSectionChange = (section) => {
     setCaredxSection(section);
     setSelectedCategory(null);
+    setCurrentPage(1); // NEW
+  };
+
+  // NEW: transaction type toggle
+  const handleEntryTypeChange = (type) => {
+    setEntryTypeFilter(type);
   };
 
   const handleExportExcel = async () => {
@@ -219,6 +265,7 @@ export default function SuperAdminDashboard() {
         ...(activeExtra?.revenue_type && { revenue_type: activeExtra.revenue_type }),
         ...(selectedCategory && { category: selectedCategory }),
         ...(activeDept === "Caredx" && { section: caredxSection }),
+        ...(entryTypeFilter && activeDept !== "Caredx" && { entry_type: entryTypeFilter }),
       };
       const res = await api.get(`/admin/departments/${activeDept}/export`, {
         params,
@@ -276,9 +323,8 @@ export default function SuperAdminDashboard() {
   };
 
   // ---------- Derived data ----------
-  const currentDeptLabel = DEPARTMENTS_CONFIG.find(d => d.value === activeDept)?.label || activeDept;
+  const currentDeptLabel = DEPARTMENTS_CONFIG.find((d) => d.value === activeDept)?.label || activeDept;
 
-  // Determine which categories to show
   let categories = [];
   if (activeDept === "Caredx") {
     if (caredxSection === "expenses") {
@@ -288,11 +334,12 @@ export default function SuperAdminDashboard() {
     categories = DEPARTMENT_CATEGORIES.PCM;
   } else if (departmentOptions?.categories) {
     const allCats = new Set();
-    Object.values(departmentOptions.categories).forEach(catList => catList.forEach(c => allCats.add(c)));
-    categories = Array.from(allCats).filter(c => c !== "Others");
+    Object.values(departmentOptions.categories).forEach((catList) =>
+      catList.forEach((c) => allCats.add(c))
+    );
+    categories = Array.from(allCats).filter((c) => c !== "Others");
   }
 
-  // Sort overview departments by custom order
   const sortedDepartments = React.useMemo(() => {
     if (!overview?.by_department) return [];
     const orderMap = {};
@@ -313,13 +360,21 @@ export default function SuperAdminDashboard() {
     value: d.income + d.expenses,
   }));
 
+  // NEW: client-side pagination for the transactional table
+  const totalEntries = deptEntries.length;
+  const totalPages = Math.max(1, Math.ceil(totalEntries / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedEntries = deptEntries.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const rangeStart = totalEntries === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(safePage * PAGE_SIZE, totalEntries);
+  const pageNumbers = buildPageNumbers(safePage, totalPages);
+
   // ---------- Render ----------
   return (
     <div className="page">
       <Navbar title="CEO Dashboard" roleColor="#7c3aed" />
 
       <main className="page-main">
-        {/* Filter Bar */}
         <div className="card" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Department</label>
@@ -396,7 +451,7 @@ export default function SuperAdminDashboard() {
               <div className="card stat-card">
                 <div className="stat-icon stat-icon--team"><Users size={22} /></div>
                 <div>
-                  <p className="stat-label">Total Team Members</p>
+                  <p className="stat-label">Total Departments</p>
                   <p className="stat-value">{overview?.total_members ?? "—"}</p>
                 </div>
               </div>
@@ -430,7 +485,7 @@ export default function SuperAdminDashboard() {
                 </p>
                 <div className="dept-grid">
                   {sortedDepartments.map((d) => {
-                    const config = DEPARTMENTS_CONFIG.find(c => c.value === d.department);
+                    const config = DEPARTMENTS_CONFIG.find((c) => c.value === d.department);
                     const label = config ? config.label : d.department;
                     return (
                       <button
@@ -540,7 +595,7 @@ export default function SuperAdminDashboard() {
               <div className="card" style={{ marginBottom: 16 }}>
                 <p className="section-title" style={{ marginBottom: 12 }}>Categories</p>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {categories.map(cat => (
+                  {categories.map((cat) => (
                     <button
                       key={cat}
                       className={`btn ${selectedCategory === cat ? "btn-primary" : "btn-secondary"}`}
@@ -654,13 +709,111 @@ export default function SuperAdminDashboard() {
               </>
             ) : (
               <div>
-                <p className="section-title" style={{ marginBottom: 12 }}>{currentDeptLabel} Finance Entries</p>
+                <p className="section-title" style={{ marginBottom: 12 }}>
+                  {currentDeptLabel} Finance Entries
+                </p>
+
+                {/* NEW: Income / Expenses / All toggle */}
+                <div
+                  className="card"
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    marginBottom: 12,
+                  }}
+                >
+                  <span style={{ fontWeight: 600, fontSize: 14, marginRight: 4 }}>
+                    Transaction Type:
+                  </span>
+                  <button
+                    type="button"
+                    className={`btn ${entryTypeFilter === null ? "btn-primary" : "btn-secondary"}`}
+                    onClick={() => handleEntryTypeChange(null)}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn ${entryTypeFilter === "Income" ? "btn-primary" : "btn-secondary"}`}
+                    onClick={() => handleEntryTypeChange("Income")}
+                  >
+                    Income
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn ${entryTypeFilter === "Expenses" ? "btn-primary" : "btn-secondary"}`}
+                    onClick={() => handleEntryTypeChange("Expenses")}
+                  >
+                    Expenses
+                  </button>
+                </div>
+
+                {/* Transactional table – paginated */}
                 <FinanceTable
-                  entries={deptEntries}
+                  entries={paginatedEntries}
                   onEdit={() => {}}
                   onDelete={() => {}}
                   onView={(entry) => setViewEntry({ type: "finance", data: entry })}
                 />
+
+                {/* NEW: Pagination controls */}
+                {totalEntries > 0 && (
+                  <div
+                    className="card"
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 12,
+                      flexWrap: "wrap",
+                      marginTop: 12,
+                    }}
+                  >
+                    <span style={{ fontSize: 13, color: "#6b7280" }}>
+                      Showing {rangeStart}–{rangeEnd} of {totalEntries} transactions
+                    </span>
+
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        disabled={safePage === 1}
+                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      >
+                        Previous
+                      </button>
+
+                      {pageNumbers.map((p, idx) =>
+                        p === "…" ? (
+                          <span key={`ellipsis-${idx}`} style={{ padding: "0 6px", color: "#9ca3af" }}>
+                            …
+                          </span>
+                        ) : (
+                          <button
+                            key={p}
+                            type="button"
+                            className={`btn ${p === safePage ? "btn-primary" : "btn-secondary"}`}
+                            onClick={() => setCurrentPage(p)}
+                            style={{ minWidth: 36 }}
+                          >
+                            {p}
+                          </button>
+                        )
+                      )}
+
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        disabled={safePage === totalPages}
+                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </>
