@@ -37,6 +37,7 @@ def create_app():
     from routes.researchdevelopment import researchdevelopment_bp
     from routes.itsales import itsales_bp
     from routes.salesenterprise import salesenterprise_bp
+    from routes.dental import dental_bp 
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(it_bp)
@@ -50,6 +51,7 @@ def create_app():
     app.register_blueprint(researchdevelopment_bp)
     app.register_blueprint(itsales_bp)
     app.register_blueprint(salesenterprise_bp)
+    app.register_blueprint(dental_bp)   
 
     @app.route("/api/health", methods=["GET"])
     def health():

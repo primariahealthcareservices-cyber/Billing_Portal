@@ -132,6 +132,10 @@ export default function SuperAdminDashboard() {
   const [endDate, setEndDate] = useState(todayStr());
   const [searchTerm, setSearchTerm] = useState("");
 
+  // NEW: Quarter filter for non-SalesEnterprise departments
+  const [quarterFilter, setQuarterFilter] = useState("");                 // "" | "1" | "2" | "3" | "4"
+  const [yearFilter, setYearFilter] = useState(String(new Date().getFullYear()));
+
   // SalesEnterprise specific
   const [selectedQuarter, setSelectedQuarter] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
@@ -187,6 +191,26 @@ export default function SuperAdminDashboard() {
       setEndDate(end.toISOString().split("T")[0]);
     }
   }, [selectedQuarter, selectedYear, activeDept]);
+
+  // ---------- NEW Effect: auto-update start/end when Quarter/Year change (non-SalesEnterprise) ----------
+  useEffect(() => {
+    if (activeDept === "SalesEnterprise") return;   // handled by the other effect
+    if (!quarterFilter) return;                     // "All" → leave dates alone
+
+    const year = parseInt(yearFilter, 10);
+    const q = parseInt(quarterFilter, 10);
+    if (isNaN(year) || isNaN(q)) return;
+
+    let start, end;
+    if (q === 1) { start = new Date(year, 0, 1); end = new Date(year, 2, 31); }
+    else if (q === 2) { start = new Date(year, 3, 1); end = new Date(year, 5, 30); }
+    else if (q === 3) { start = new Date(year, 6, 1); end = new Date(year, 8, 30); }
+    else if (q === 4) { start = new Date(year, 9, 1); end = new Date(year, 11, 31); }
+    else return;
+
+    setStartDate(start.toISOString().split("T")[0]);
+    setEndDate(end.toISOString().split("T")[0]);
+  }, [quarterFilter, yearFilter, activeDept]);
 
   // ---------- Fetch KPIs for SalesEnterprise ----------
   useEffect(() => {
@@ -394,6 +418,8 @@ export default function SuperAdminDashboard() {
     setSelectedYear("");
     setSelectedSubDept("All");
     setSalesSelectedDept(null);
+    setQuarterFilter("");                                       // NEW
+    setYearFilter(String(new Date().getFullYear()));            // NEW
     setDeptEntries([]);
     setCaredxLabEntries([]);
     setCaredxExpenses([]);
@@ -413,6 +439,8 @@ export default function SuperAdminDashboard() {
     setSelectedYear("");
     setSelectedSubDept("All");
     setSalesSelectedDept(null);
+    setQuarterFilter("");                                       // NEW
+    setYearFilter(String(new Date().getFullYear()));            // NEW
     setPage(1);
   };
 
@@ -614,13 +642,47 @@ export default function SuperAdminDashboard() {
 
           {activeDept !== "SalesEnterprise" && (
             <>
+              {/* NEW: Quarter selector */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Quarter</label>
+                <select
+                  className="form-control"
+                  value={quarterFilter}
+                  onChange={(e) => setQuarterFilter(e.target.value)}
+                >
+                  <option value="">All</option>
+                  <option value="1">Q1 (Jan–Mar)</option>
+                  <option value="2">Q2 (Apr–Jun)</option>
+                  <option value="3">Q3 (Jul–Sep)</option>
+                  <option value="4">Q4 (Oct–Dec)</option>
+                </select>
+              </div>
+
+              {/* NEW: Year selector */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Year</label>
+                <select
+                  className="form-control"
+                  value={yearFilter}
+                  onChange={(e) => setYearFilter(e.target.value)}
+                >
+                  {Array.from({ length: 10 }, (_, i) => {
+                    const y = new Date().getFullYear() - i;
+                    return <option key={y} value={y}>{y}</option>;
+                  })}
+                </select>
+              </div>
+
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Start Date</label>
                 <input
                   type="date"
                   className="form-control"
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    setQuarterFilter("");   // clear quarter when user overrides manually
+                  }}
                 />
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
@@ -629,7 +691,10 @@ export default function SuperAdminDashboard() {
                   type="date"
                   className="form-control"
                   value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
+                  onChange={(e) => {
+                    setEndDate(e.target.value);
+                    setQuarterFilter("");   // clear quarter when user overrides manually
+                  }}
                 />
               </div>
             </>

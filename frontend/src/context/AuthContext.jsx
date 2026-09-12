@@ -15,6 +15,7 @@ export const ROLE_ROUTES = {
   Adminstrationfunctionalunit: "/dashboard/adminfunctionalunit",
   ResearchDevelopment: "/dashboard/researchdevelopment",
   SalesEnterprise: "/dashboard/salesenterprise",
+   Dental: "/dashboard/dental",
 };
 
 export function AuthProvider({ children }) {

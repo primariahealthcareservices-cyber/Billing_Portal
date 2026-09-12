@@ -97,11 +97,36 @@ DEPARTMENT_CONFIG = {
         "show_tax_invoice_number": True,
     },
 
-    # =================== Dental ===================
+        # =================== Dental ===================
     "Dental": {
         "categories": {
-            "Income": ["Consulting", "Other"],
-            "Expenses": ["Salaries", "Supplies", "Equipment", "Payroll Salaries", "Other"],
+            "Income": [
+                "Dental Operations",
+                "Doctor Consultation",
+                "Clinical Procedures",
+                "Diagnostics & X-Ray",
+                "Other",
+            ],
+            "Expenses": [
+                "Payroll Salaries",
+                "Personnel & Payroll",
+                "Travel & Entertainment (T&E)",
+                "Marketing",
+                "Dental Supplies & Consumables",
+                "Equipment Purchase & Maintenance",
+                "Lab Fees & Prosthetics",
+                "Facilities & Overhead",
+                "General Operations",
+                "Innovation",
+                "Guest Concierge",
+                "Business Services Revenue",
+                "Miscellaneous",
+                "Outsourced Services",
+                "Events-Conferences-Training",
+                "Consulting",
+                "Management Fees",
+                "Other",
+            ],
         },
         "revenue_types": [],
         "show_generated_by": False,
@@ -117,7 +142,6 @@ DEPARTMENT_CONFIG = {
         "is_salary_category": "Payroll Salaries",
         "exec_departments": ["Dental"],
     },
-
     # =================== Caredx ===================
     "Caredx": {
         "categories": {

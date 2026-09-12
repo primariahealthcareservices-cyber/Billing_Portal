@@ -1,5 +1,4 @@
-// frontend/src/components/FinanceDashboard.jsx
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import toast from "react-hot-toast";
 import Navbar from "./Navbar.jsx";
 import FilterBar from "./FilterBar.jsx";
@@ -9,19 +8,31 @@ import FinanceTable from "./FinanceTable.jsx";
 import FinanceEntryForm from "./FinanceEntryForm.jsx";
 import api from "../api/axios.js";
 
+const PAGE_SIZE = 25;
+
 const firstOfMonth = () => {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split("T")[0];
 };
 const todayStr = () => new Date().toISOString().split("T")[0];
 
-export default function FinanceDashboard({
-  department,
-  title,
-  roleColor,
-  paginateByCategory = false,
-  itemsPerPage = 30,
-}) {
+// Build a compact page-number array (with "…" ellipsis markers).
+const buildPageNumbers = (current, total) => {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = [];
+  if (current <= 4) {
+    for (let i = 1; i <= 5; i++) pages.push(i);
+    pages.push("…", total);
+  } else if (current >= total - 3) {
+    pages.push(1, "…");
+    for (let i = total - 4; i <= total; i++) pages.push(i);
+  } else {
+    pages.push(1, "…", current - 1, current, current + 1, "…", total);
+  }
+  return pages;
+};
+
+export default function FinanceDashboard({ department, title, roleColor }) {
   const apiBase = department.toLowerCase().replace(/\s/g, '');
   const supportsExcelImportExport = department === "PCM";
 
@@ -35,7 +46,7 @@ export default function FinanceDashboard({
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
 
-  const [selectedCategory, setSelectedCategory] = useState(null);
+  // NEW: pagination
   const [currentPage, setCurrentPage] = useState(1);
 
   const [formOpen, setFormOpen] = useState(false);
@@ -62,24 +73,14 @@ export default function FinanceDashboard({
         api.get(`/${apiBase}/entries`, { params }),
         api.get(`/${apiBase}/summary`, { params: { start_date: startDate, end_date: endDate } }),
       ]);
-
-      const entriesData = Array.isArray(entriesRes.data)
-        ? entriesRes.data
-        : (entriesRes.data.entries || []);
-
-      setEntries(entriesData);
+      setEntries(entriesRes.data.entries);
       setSummary(summaryRes.data);
-
-      if (paginateByCategory) {
-        setSelectedCategory(null);
-        setCurrentPage(1);
-      }
     } catch (err) {
       toast.error("Failed to load finance data.");
     } finally {
       setLoading(false);
     }
-  }, [apiBase, startDate, endDate, searchTerm, paginateByCategory]);
+  }, [apiBase, startDate, endDate, searchTerm]);
 
   useEffect(() => {
     fetchOptions();
@@ -89,10 +90,34 @@ export default function FinanceDashboard({
     fetchData();
   }, [fetchData]);
 
+  // NEW: reset page to 1 whenever any filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [startDate, endDate, searchTerm, department]);
+
+  // NEW: paginated slice
+  const totalEntries = entries.length;
+  const totalPages = Math.max(1, Math.ceil(totalEntries / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageNumbers = buildPageNumbers(safePage, totalPages);
+  const rangeStart = totalEntries === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(safePage * PAGE_SIZE, totalEntries);
+
+  const paginatedEntries = useMemo(
+    () => entries.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [entries, safePage]
+  );
+
+  // Guard against out-of-range page when data shrinks
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
   const handleReset = () => {
     setStartDate(firstOfMonth());
     setEndDate(todayStr());
     setSearchTerm("");
+    setCurrentPage(1); // NEW
   };
 
   const handleDelete = async (entry) => {
@@ -188,38 +213,6 @@ export default function FinanceDashboard({
     }
   };
 
-  const categoriesWithCounts = React.useMemo(() => {
-    if (!paginateByCategory) return [];
-    const counts = {};
-    entries.forEach(e => {
-      counts[e.category] = (counts[e.category] || 0) + 1;
-    });
-    return Object.entries(counts)
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([category, count]) => ({ category, count }));
-  }, [entries, paginateByCategory]);
-
-  const filteredEntries = React.useMemo(() => {
-    if (!paginateByCategory || !selectedCategory) return entries;
-    return entries.filter(e => e.category === selectedCategory);
-  }, [entries, paginateByCategory, selectedCategory]);
-
-  const totalItems = filteredEntries.length;
-  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
-  const paginatedEntries = React.useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredEntries.slice(start, start + itemsPerPage);
-  }, [filteredEntries, currentPage, itemsPerPage]);
-
-  const handlePageChange = (page) => {
-    if (page < 1 || page > totalPages) return;
-    setCurrentPage(page);
-  };
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedCategory]);
-
   const openNewEntry = () => {
     setEditingEntry(null);
     setFormOpen(true);
@@ -281,79 +274,72 @@ export default function FinanceDashboard({
           <FinanceCharts trend={summary.trend} categoryBreakdown={summary.category_breakdown} />
         )}
 
-        {paginateByCategory && (
-          <div className="category-selector" style={{ marginBottom: 20 }}>
-            <h3 style={{ marginBottom: 8 }}>Select a Category</h3>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {categoriesWithCounts.map(({ category, count }) => (
-                <button
-                  key={category}
-                  className={`btn ${selectedCategory === category ? "btn-primary" : "btn-secondary"}`}
-                  onClick={() => setSelectedCategory(category)}
-                  style={{ padding: "6px 14px" }}
-                >
-                  {category} ({count})
-                </button>
-              ))}
-              {categoriesWithCounts.length === 0 && <span className="text-muted">No categories with data.</span>}
-            </div>
-          </div>
-        )}
-
         <div>
-          <p className="section-title" style={{ marginBottom: 12 }}>
-            {paginateByCategory && selectedCategory
-              ? `${selectedCategory} (${totalItems})`
-              : "Finance Entries"}
-          </p>
-
+          <p className="section-title" style={{ marginBottom: 12 }}>Finance Entries</p>
           {loading ? (
             <div className="card empty-state">Loading...</div>
           ) : (
             <>
-              {(!paginateByCategory || selectedCategory) ? (
-                <>
-                  <FinanceTable
-                    entries={paginatedEntries}
-                    onEdit={openEditEntry}
-                    onDelete={handleDelete}
-                  />
+              <FinanceTable
+                entries={paginatedEntries}
+                onEdit={openEditEntry}
+                onDelete={handleDelete}
+              />
 
-                  {paginateByCategory && totalPages > 1 && (
-                    <div className="pagination" style={{ marginTop: 16, display: "flex", justifyContent: "center", gap: 8, alignItems: "center" }}>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => handlePageChange(currentPage - 1)}
-                        disabled={currentPage === 1}
-                      >
-                        Previous
-                      </button>
-                      <span>
-                        Page {currentPage} of {totalPages}
-                      </span>
-                      {[...Array(totalPages).keys()].map(i => (
+              {/* NEW: Pagination controls */}
+              {totalEntries > 0 && (
+                <div
+                  className="card"
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 12,
+                    flexWrap: "wrap",
+                    marginTop: 12,
+                  }}
+                >
+                  <span style={{ fontSize: 13, color: "#6b7280" }}>
+                    Showing {rangeStart}–{rangeEnd} of {totalEntries} transactions
+                  </span>
+
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={safePage === 1}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    >
+                      Previous
+                    </button>
+
+                    {pageNumbers.map((p, idx) =>
+                      p === "…" ? (
+                        <span key={`ellipsis-${idx}`} style={{ padding: "0 6px", color: "#9ca3af" }}>
+                          …
+                        </span>
+                      ) : (
                         <button
-                          key={i}
-                          className={`btn ${currentPage === i + 1 ? "btn-primary" : "btn-secondary"}`}
-                          onClick={() => handlePageChange(i + 1)}
-                          style={{ padding: "4px 10px" }}
+                          key={p}
+                          type="button"
+                          className={`btn ${p === safePage ? "btn-primary" : "btn-secondary"}`}
+                          onClick={() => setCurrentPage(p)}
+                          style={{ minWidth: 36 }}
                         >
-                          {i + 1}
+                          {p}
                         </button>
-                      ))}
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => handlePageChange(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                      >
-                        Next
-                      </button>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="card empty-state">
-                  Please select a category to view its entries.
+                      )
+                    )}
+
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={safePage === totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               )}
             </>

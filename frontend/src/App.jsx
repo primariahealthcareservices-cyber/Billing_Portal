@@ -12,6 +12,7 @@ import CorporateDashboard from "./pages/dashboards/CorporateDashboard.jsx";
 import AdminFunctionalUnitDashboard from "./pages/dashboards/AdminFunctionalUnitDashboard.jsx";
 import ResearchDevelopmentDashboard from "./pages/dashboards/ResearchDevelopmentDashboard.jsx";
 import SalesEnterpriseDashboard from "./pages/dashboards/SalesEnterpriseDashboard.jsx";
+import DentalDashboard from "./pages/dashboards/DentalDashboard.jsx";
 
 export default function App() {
   return (
@@ -98,6 +99,16 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+
+      {/* NEW: Dental dashboard — path matches ROLE_ROUTES.Dental */}
+      <Route
+        path="/dashboard/dental"
+        element={
+          <ProtectedRoute allowedRoles={["Dental"]}>
+            <DentalDashboard />
+          </ProtectedRoute>
+        }
+        />
 
       <Route path="*" element={<Login />} />
     </Routes>
