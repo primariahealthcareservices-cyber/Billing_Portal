@@ -563,12 +563,14 @@ class CaredxLabEntry(db.Model):
         }
 
 # ---------- CaredxExpense model ----------
+# ---------- CaredxExpense model ----------
 class CaredxExpense(db.Model):
     __tablename__ = "caredx_expenses"
     id = db.Column(db.Integer, primary_key=True)
     expense_date = db.Column(db.Date, nullable=False)
     category = db.Column(db.String(150), nullable=False)
     amount = db.Column(db.Numeric(14, 2), nullable=False)
+    referral_amount = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     remarks = db.Column(db.Text, nullable=True)
     employee_name = db.Column(db.String(150), nullable=True)
     purpose = db.Column(db.Text, nullable=True)
@@ -583,13 +585,13 @@ class CaredxExpense(db.Model):
             "expense_date": self.expense_date.isoformat() if self.expense_date else None,
             "category": self.category,
             "amount": float(self.amount or 0),
+            "referral_amount": float(self.referral_amount or 0),
             "remarks": self.remarks,
             "employee_name": self.employee_name,
             "purpose": self.purpose,
             "vehicle_type": self.vehicle_type,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
-
 # ---------- SalesEnterpriseKPI model ----------
 class SalesEnterpriseKPI(db.Model):
     __tablename__ = "sales_enterprise_kpis"
