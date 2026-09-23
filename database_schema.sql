@@ -12,6 +12,8 @@ CREATE TABLE users (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+
+
 CREATE TABLE finance_entries (
   id INT AUTO_INCREMENT PRIMARY KEY,
   department ENUM('IT','PCM','MedTech','Caredx') NOT NULL,
