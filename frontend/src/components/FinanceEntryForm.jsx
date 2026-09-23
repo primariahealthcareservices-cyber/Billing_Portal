@@ -89,6 +89,7 @@ const OFFICE_ADMIN_CATEGORY_FIELDS = {
   "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
   "Outsourced Services": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
   "Events-Conferences-Training": { showEmployeeName: true, showVehicleType: false, labelName: "Event/Training Name", showPurpose: true },
+  "Corpus Fund": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true }, 
 };
 
 const IT_CATEGORY_FIELDS = {
@@ -105,6 +106,7 @@ const IT_CATEGORY_FIELDS = {
   "Events-Conferences-Training": { showEmployeeName: true, showVehicleType: false, labelName: "Event/Training Name", showPurpose: true },
   "Consulting": { showEmployeeName: true, showVehicleType: false, labelName: "Consultant/Company Name", showPurpose: true },
   "Management Fees": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
+  "Corpus Fund": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
   "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
 };
 
@@ -132,6 +134,7 @@ const IT_SALES_CATEGORY_FIELDS = {
   "Hardware & Infrastructure Reselling": { showEmployeeName: true, showVehicleType: false, labelName: "Customer/Client Name", showPurpose: true },
   "Support & Maintenance": { showEmployeeName: true, showVehicleType: false, labelName: "Client/Service Name", showPurpose: true },
   "Internal allocations": { showEmployeeName: true, showVehicleType: false, labelName: "Department/Team Name", showPurpose: true },
+  "Corpus Fund": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
 };
 
 const MEDTECH_CATEGORY_FIELDS = {
@@ -148,6 +151,7 @@ const MEDTECH_CATEGORY_FIELDS = {
   "Events-Conferences-Training": { showEmployeeName: true, showVehicleType: false, labelName: "Event/Training Name", showPurpose: true },
   "B2B Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Client/Business Name", showPurpose: true },
   "B2C Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Customer/Client Name", showPurpose: true },
+  "Corpus Fund": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
   "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
 };
 
@@ -163,6 +167,7 @@ const PCM_CATEGORY_FIELDS = {
   "General Operations": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
   "Innovation": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
   "Supplies & Equipment": { showEmployeeName: true, showVehicleType: false, labelName: "Item/Equipment Name", showPurpose: true },
+   "Corpus Fund": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
   "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
 };
 
@@ -196,6 +201,7 @@ const DENTAL_CATEGORY_FIELDS = {
  "Diagnostics & X-Ray":                { showEmployeeName: true, showVehicleType: false, labelName: "Technician Name",      showPurpose: true },
   // ── Both ────────────────────────────────────────────────────────────
   "Other":                              { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item",            showPurpose: true },
+   "Corpus Fund":                        { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item",            showPurpose: true },
 };
 
 export default function FinanceEntryForm({
