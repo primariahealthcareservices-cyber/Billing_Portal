@@ -33,7 +33,6 @@ const CATEGORIES = [
   "Equipment Maintenance, Leases, and Automation",
   "Waste Management, Compliance, and Safety",
   "Billing, Revenue Cycle, and Administration",
-  "Corpus Fund",
   "Other"
 ];
 

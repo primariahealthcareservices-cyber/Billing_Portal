@@ -243,13 +243,13 @@ def overview():
             "expenses": expenses,
             "profit": income - expenses,
         })
+
     total_income = sum(d["income"] for d in by_department)
     total_expenses = sum(d["expenses"] for d in by_department)
 
     return jsonify({
         "total_members": total_members,
         "active_members": active_members,
-        "total_departments": len(by_department),
         "total_income": total_income,
         "total_expenses": total_expenses,
         "total_profit": total_income - total_expenses,
@@ -319,65 +319,48 @@ def _get_medtech_entries_with_ledger():
     if per_page > 100:
         per_page = 100
 
-    # Decide whether to include ledger entries:
-    #   - include if no category filter, OR
-    #   - include if the category filter is exactly "Ledger"
-    include_ledger = (not category) or (category == "Ledger")
-    # Decide whether to include finance entries:
-    #   - include if no category filter, OR
-    #   - include if the category filter is NOT "Ledger"
-    include_finance = (not category) or (category != "Ledger")
-
-    finance_entries = []
-    ledger_entries = []
-
     # 1. Finance entries (exclude Ledger category)
-    if include_finance:
-        finance_query = FinanceEntry.query.filter(
-            FinanceEntry.department == "MedTech",
-            FinanceEntry.category != "Ledger"
-        )
-        if start_date:
-            finance_query = finance_query.filter(FinanceEntry.entry_date >= start_date)
-        if end_date:
-            finance_query = finance_query.filter(FinanceEntry.entry_date <= end_date)
-        if category:
-            finance_query = finance_query.filter(FinanceEntry.category == category)
-        if search:
-            like = f"%{search}%"
-            finance_query = finance_query.filter(
-                or_(
-                    FinanceEntry.remarks.ilike(like),
-                    FinanceEntry.generated_by.ilike(like),
-                    FinanceEntry.client_name.ilike(like),
-                    FinanceEntry.patient_name.ilike(like),
-                    FinanceEntry.patient_place.ilike(like),
-                    FinanceEntry.gst_number.ilike(like),
-                    FinanceEntry.category.ilike(like),
-                )
+    finance_query = FinanceEntry.query.filter(
+        FinanceEntry.department == "MedTech",
+        FinanceEntry.category != "Ledger"
+    )
+    if start_date:
+        finance_query = finance_query.filter(FinanceEntry.entry_date >= start_date)
+    if end_date:
+        finance_query = finance_query.filter(FinanceEntry.entry_date <= end_date)
+    if category:
+        finance_query = finance_query.filter(FinanceEntry.category == category)
+    if search:
+        like = f"%{search}%"
+        finance_query = finance_query.filter(
+            or_(
+                FinanceEntry.remarks.ilike(like),
+                FinanceEntry.generated_by.ilike(like),
+                FinanceEntry.client_name.ilike(like),
+                FinanceEntry.patient_name.ilike(like),
+                FinanceEntry.patient_place.ilike(like),
+                FinanceEntry.gst_number.ilike(like),
+                FinanceEntry.category.ilike(like),
             )
-        finance_entries = finance_query.order_by(
-            FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()
-        ).all()
+        )
+    finance_entries = finance_query.order_by(FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()).all()
 
     # 2. Ledger entries
-    if include_ledger:
-        ledger_query = MedTechLedger.query
-        if start_date:
-            ledger_query = ledger_query.filter(MedTechLedger.entry_date >= start_date)
-        if end_date:
-            ledger_query = ledger_query.filter(MedTechLedger.entry_date <= end_date)
-        if search:
-            like = f"%{search}%"
-            ledger_query = ledger_query.filter(
-                or_(
-                    MedTechLedger.customer_name.ilike(like),
-                    MedTechLedger.remarks.ilike(like)
-                )
+    ledger_query = MedTechLedger.query
+    if start_date:
+        ledger_query = ledger_query.filter(MedTechLedger.entry_date >= start_date)
+    if end_date:
+        ledger_query = ledger_query.filter(MedTechLedger.entry_date <= end_date)
+    if search:
+        like = f"%{search}%"
+        ledger_query = ledger_query.filter(
+            or_(
+                MedTechLedger.customer_name.ilike(like),
+                MedTechLedger.remarks.ilike(like)
             )
-        ledger_entries = ledger_query.order_by(
-            MedTechLedger.entry_date.desc(), MedTechLedger.id.desc()
-        ).all()
+        )
+    # category filter does not apply to ledger (it's always Ledger)
+    ledger_entries = ledger_query.order_by(MedTechLedger.entry_date.desc(), MedTechLedger.id.desc()).all()
 
     # 3. Convert to dict and combine
     combined = []
@@ -421,40 +404,33 @@ def _get_medtech_entries_with_ledger():
         }
     }), 200
 
+
 def _get_medtech_summary_with_ledger():
     """Return summary for MedTech including Ledger entries."""
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
-    category = request.args.get("category")
-
-    include_ledger = (not category) or (category == "Ledger")
-    include_finance = (not category) or (category != "Ledger")
-
-    finance_entries = []
-    ledger_entries = []
+    category = request.args.get("category")  # only used for finance entries
 
     # Finance entries (exclude Ledger)
-    if include_finance:
-        finance_query = FinanceEntry.query.filter(
-            FinanceEntry.department == "MedTech",
-            FinanceEntry.category != "Ledger"
-        )
-        if start_date:
-            finance_query = finance_query.filter(FinanceEntry.entry_date >= start_date)
-        if end_date:
-            finance_query = finance_query.filter(FinanceEntry.entry_date <= end_date)
-        if category:
-            finance_query = finance_query.filter(FinanceEntry.category == category)
-        finance_entries = finance_query.all()
+    finance_query = FinanceEntry.query.filter(
+        FinanceEntry.department == "MedTech",
+        FinanceEntry.category != "Ledger"
+    )
+    if start_date:
+        finance_query = finance_query.filter(FinanceEntry.entry_date >= start_date)
+    if end_date:
+        finance_query = finance_query.filter(FinanceEntry.entry_date <= end_date)
+    if category:
+        finance_query = finance_query.filter(FinanceEntry.category == category)
+    finance_entries = finance_query.all()
 
     # Ledger entries
-    if include_ledger:
-        ledger_query = MedTechLedger.query
-        if start_date:
-            ledger_query = ledger_query.filter(MedTechLedger.entry_date >= start_date)
-        if end_date:
-            ledger_query = ledger_query.filter(MedTechLedger.entry_date <= end_date)
-        ledger_entries = ledger_query.all()
+    ledger_query = MedTechLedger.query
+    if start_date:
+        ledger_query = ledger_query.filter(MedTechLedger.entry_date >= start_date)
+    if end_date:
+        ledger_query = ledger_query.filter(MedTechLedger.entry_date <= end_date)
+    ledger_entries = ledger_query.all()
 
     # Combine all items
     all_items = []
@@ -503,6 +479,7 @@ def _get_medtech_summary_with_ledger():
         "trend": trend,
         "category_breakdown": list(by_category.values()),
     }), 200
+
 
 # ----------------------------------------------------------------------
 # Department options
@@ -647,33 +624,11 @@ def _get_caredx_entries_and_summary(for_summary=False):
             by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0})
             by_date[key]["income"] += float(e.total_amount_paid)
         trend = sorted(by_date.values(), key=lambda x: x["date"])
-
-        # Group by CATEGORY (not test_name). Normalizes casing/whitespace
-        # and splits comma-separated test lists into individual categories.
         by_category = {}
         for e in entries:
-            raw_cat = (
-                getattr(e, "category", None)
-                or getattr(e, "test_category", None)
-                or "Uncategorized"
-            )
-            raw_cat = str(raw_cat or "Uncategorized").strip() or "Uncategorized"
-
-            # Some rows store multiple tests as "A, B, C" — split them.
-            parts = [p.strip() for p in raw_cat.split(",") if p.strip()]
-            if not parts:
-                parts = ["Uncategorized"]
-
-            amount = float(e.total_amount_paid)
-            share = amount / len(parts) if parts else 0.0
-
-            for part in parts:
-                # Title-case each part so "full body check up" and
-                # "Full Body Check Up" collapse into the same key.
-                key = part.title()
-                by_category.setdefault(key, {"category": key, "amount": 0.0})
-                by_category[key]["amount"] += share
-
+            cat = e.test_name or "Uncategorized"
+            by_category.setdefault(cat, {"category": cat, "amount": 0})
+            by_category[cat]["amount"] += float(e.total_amount_paid)
         return {
             "total_income": total_income,
             "total_paid_to_other_labs": total_paid_other,
@@ -692,8 +647,8 @@ def _get_caredx_entries_and_summary(for_summary=False):
         trend = sorted(by_date.values(), key=lambda x: x["date"])
         by_category = {}
         for e in exp_list:
-            cat = (e["category"] or "Uncategorized").strip().title()
-            by_category.setdefault(cat, {"category": cat, "amount": 0.0})
+            cat = e["category"] or "Uncategorized"
+            by_category.setdefault(cat, {"category": cat, "amount": 0})
             by_category[cat]["amount"] += float(e["amount"])
         return {
             "total_expenses": total_expenses,

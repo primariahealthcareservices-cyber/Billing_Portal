@@ -119,6 +119,7 @@ const formatKpiValue = (val) => {
 
 // ------------------------------------------------------------------
 // Helper: determine whether an entry is income or expense
+// Adjust the field names here if your backend uses different keys.
 // ------------------------------------------------------------------
 const getEntryKind = (entry) => {
   if (!entry) return null;
@@ -150,39 +151,6 @@ const matchesDataView = (entry, view) => {
   const kind = getEntryKind(entry);
   if (!kind) return true;
   return kind === view;
-};
-
-// ------------------------------------------------------------------
-// Helper: convert a quarter value to start/end date strings
-// Returns { start, end } or null if quarter is "All"/empty
-// ------------------------------------------------------------------
-const getQuarterDateRange = (quarter, year) => {
-  if (!year) return null;
-  const y = parseInt(year, 10);
-  if (isNaN(y)) return null;
-
-  if (quarter === "" || quarter === null || quarter === undefined) {
-    // "All" → full year
-    return {
-      start: new Date(y, 0, 1).toISOString().split("T")[0],
-      end: new Date(y, 11, 31).toISOString().split("T")[0],
-    };
-  }
-
-  const q = parseInt(quarter, 10);
-  if (isNaN(q)) return null;
-
-  let start, end;
-  if (q === 1) { start = new Date(y, 0, 1); end = new Date(y, 2, 31); }
-  else if (q === 2) { start = new Date(y, 3, 1); end = new Date(y, 5, 30); }
-  else if (q === 3) { start = new Date(y, 6, 1); end = new Date(y, 8, 30); }
-  else if (q === 4) { start = new Date(y, 9, 1); end = new Date(y, 11, 31); }
-  else return null;
-
-  return {
-    start: start.toISOString().split("T")[0],
-    end: end.toISOString().split("T")[0],
-  };
 };
 
 export default function SuperAdminDashboard() {
@@ -240,23 +208,43 @@ export default function SuperAdminDashboard() {
     if (activeDept !== "SalesEnterprise") return;
     if (!selectedYear) return;
 
-    const range = getQuarterDateRange(selectedQuarter, selectedYear);
-    if (range) {
-      setStartDate(range.start);
-      setEndDate(range.end);
+    const year = parseInt(selectedYear, 10);
+    let start, end;
+    if (selectedQuarter === "") {
+      start = new Date(year, 0, 1);
+      end = new Date(year, 11, 31);
+    } else {
+      const q = parseInt(selectedQuarter, 10);
+      if (q === 1) { start = new Date(year, 0, 1); end = new Date(year, 2, 31); }
+      else if (q === 2) { start = new Date(year, 3, 1); end = new Date(year, 5, 30); }
+      else if (q === 3) { start = new Date(year, 6, 1); end = new Date(year, 8, 30); }
+      else if (q === 4) { start = new Date(year, 9, 1); end = new Date(year, 11, 31); }
+      else return;
+    }
+    if (start && end) {
+      setStartDate(start.toISOString().split("T")[0]);
+      setEndDate(end.toISOString().split("T")[0]);
     }
   }, [selectedQuarter, selectedYear, activeDept]);
 
   // ---------- Effect: Non-SalesEnterprise quarter → dates ----------
   useEffect(() => {
     if (activeDept === "SalesEnterprise") return;
-    if (!yearFilter) return;
+    if (!quarterFilter) return;
 
-    const range = getQuarterDateRange(quarterFilter, yearFilter);
-    if (range) {
-      setStartDate(range.start);
-      setEndDate(range.end);
-    }
+    const year = parseInt(yearFilter, 10);
+    const q = parseInt(quarterFilter, 10);
+    if (isNaN(year) || isNaN(q)) return;
+
+    let start, end;
+    if (q === 1) { start = new Date(year, 0, 1); end = new Date(year, 2, 31); }
+    else if (q === 2) { start = new Date(year, 3, 1); end = new Date(year, 5, 30); }
+    else if (q === 3) { start = new Date(year, 6, 1); end = new Date(year, 8, 30); }
+    else if (q === 4) { start = new Date(year, 9, 1); end = new Date(year, 11, 31); }
+    else return;
+
+    setStartDate(start.toISOString().split("T")[0]);
+    setEndDate(end.toISOString().split("T")[0]);
   }, [quarterFilter, yearFilter, activeDept]);
 
   // ---------- Fetch KPIs for SalesEnterprise ----------
@@ -590,16 +578,11 @@ export default function SuperAdminDashboard() {
       categories = [];
     } else {
       const allCats = new Set();
-Object.values(departmentOptions.categories).forEach(catList => catList.forEach(c => allCats.add(c)));
-categories = Array.from(allCats).filter(c => {
-  const lower = c.trim().toLowerCase();
-  if (lower === "others" || lower === "other") return false;
-  // MedTech has a special "Ledger" category handled via a separate table;
-  // exclude it from the clickable category chips to avoid mixing ledger
-  // entries with category-filtered finance entries.
-  if (activeDept === "MedTech" && lower === "ledger") return false;
-  return true;
-});
+      Object.values(departmentOptions.categories).forEach(catList => catList.forEach(c => allCats.add(c)));
+      categories = Array.from(allCats).filter(c => {
+        const lower = c.trim().toLowerCase();
+        return lower !== "others" && lower !== "other";
+      });
     }
   }
 
@@ -627,13 +610,6 @@ categories = Array.from(allCats).filter(c => {
         };
       }
     });
-  }, [overview]);
-
-  // Count of departments (excludes SalesEnterprise since overview endpoint omits it)
-  const totalDepartments = React.useMemo(() => {
-    if (overview?.total_departments !== undefined) return overview.total_departments;
-    if (!overview?.by_department) return 0;
-    return overview.by_department.length;
   }, [overview]);
 
   const pieData = (overview?.by_department || []).map((d) => ({
@@ -911,7 +887,7 @@ categories = Array.from(allCats).filter(c => {
                 <div className="stat-icon stat-icon--team"><Users size={22} /></div>
                 <div>
                   <p className="stat-label">Total Departments</p>
-                  <p className="stat-value">{totalDepartments}</p>
+                  <p className="stat-value">{overview?.total_members ?? "—"}</p>
                 </div>
               </div>
               <div className="card stat-card">
@@ -1081,7 +1057,7 @@ categories = Array.from(allCats).filter(c => {
                       <div className="stat-icon stat-icon--team"><Users size={22} /></div>
                       <div>
                         <p className="stat-label">Total Departments</p>
-                        <p className="stat-value">{totalDepartments}</p>
+                        <p className="stat-value">{overview?.total_members ?? "—"}</p>
                       </div>
                     </div>
                     <div className="card stat-card">
@@ -1268,26 +1244,9 @@ categories = Array.from(allCats).filter(c => {
             {deptSummary && (
               <>
                 <p className="section-title" style={{ marginBottom: 8 }}>Display Panel</p>
-                <FinanceCharts
-                  trend={deptSummary.trend}
-                  categoryBreakdown={deptSummary.category_breakdown}
-                  selectedCategory={selectedCategory}
-                  title={
-                    activeDept === "Caredx"
-                      ? caredxSection === "lab"
-                        ? "By Test"
-                        : caredxSection === "expenses"
-                        ? "By Expense Category"
-                        : "By Test / Expense Category"
-                      : "By Category"
-                  }
-                />
+                <FinanceCharts trend={deptSummary.trend} categoryBreakdown={deptSummary.category_breakdown} />
               </>
             )}
-
-            {/* View toggle — moved ABOVE Categories */}
-            <p className="section-title" style={{ marginBottom: 8 }}>Transactional Panel</p>
-            {renderDataViewToggle()}
 
             {/* Section toggle for Caredx — only visible when dataView === "all" */}
             {activeDept === "Caredx" && dataView === "all" && (
@@ -1338,6 +1297,10 @@ categories = Array.from(allCats).filter(c => {
               <div className="card empty-state">Loading...</div>
             ) : activeDept === "Caredx" ? (
               <>
+                {/* Transactional Panel header + Income/Expenses/All toggle */}
+                <p className="section-title" style={{ marginBottom: 8 }}>Transactional Panel</p>
+                {renderDataViewToggle()}
+
                 {dataView !== "expenses" && (
                   <div>
                     <p className="section-title" style={{ marginBottom: 12 }}>Lab Data Entries</p>
@@ -1431,6 +1394,10 @@ categories = Array.from(allCats).filter(c => {
               </>
             ) : (
               <div>
+                {/* Transactional Panel header + Income/Expenses/All toggle */}
+                <p className="section-title" style={{ marginBottom: 8 }}>Transactional Panel</p>
+                {renderDataViewToggle()}
+
                 <p className="section-title" style={{ marginBottom: 12 }}>
                   {currentDeptLabel} Finance Entries
                   {dataView === "income" && " — Income"}

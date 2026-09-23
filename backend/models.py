@@ -19,7 +19,7 @@ DEPARTMENT_CONFIG = {
     # =================== IT ===================
     "IT": {
         "categories": {
-            "Income": ["Web Services", "Portal Services", "Corpus Fund", "Others"],
+            "Income": ["Web Services", "Portal Services", "Others"],
             "Expenses": [
                 "Personnel & Payroll",
                 "Travel & Entertainment (T&E)",
@@ -33,7 +33,6 @@ DEPARTMENT_CONFIG = {
                 "Miscellaneous",
                 "Outsourced Services",
                 "Events-Conferences-Training",
-                "Corpus Fund",
                 "Other"
             ]
         },
@@ -63,7 +62,6 @@ DEPARTMENT_CONFIG = {
                 "Support & Maintenance",
                 "Internal allocations",
                 "Business Services Revenue",
-                "Corpus Fund",
                 "Others"
             ],
             "Expenses": [
@@ -83,7 +81,6 @@ DEPARTMENT_CONFIG = {
                 "Innovation",
                 "Consulting",
                 "Management Fees",
-                "Corpus Fund",
                 "Other"
             ]
         },
@@ -100,7 +97,7 @@ DEPARTMENT_CONFIG = {
         "show_tax_invoice_number": True,
     },
 
-    # =================== Dental ===================
+        # =================== Dental ===================
     "Dental": {
         "categories": {
             "Income": [
@@ -108,7 +105,6 @@ DEPARTMENT_CONFIG = {
                 "Doctor Consultation",
                 "Clinical Procedures",
                 "Diagnostics & X-Ray",
-                "Corpus Fund",
                 "Other",
             ],
             "Expenses": [
@@ -129,7 +125,6 @@ DEPARTMENT_CONFIG = {
                 "Events-Conferences-Training",
                 "Consulting",
                 "Management Fees",
-                "Corpus Fund",
                 "Other",
             ],
         },
@@ -147,11 +142,10 @@ DEPARTMENT_CONFIG = {
         "is_salary_category": "Payroll Salaries",
         "exec_departments": ["Dental"],
     },
-
     # =================== Caredx ===================
     "Caredx": {
         "categories": {
-            "Income": ["Lab", "Camp", "Walkin/Person", "Referral", "Corpus Fund"],
+            "Income": ["Lab", "Camp", "Walkin/Person", "Referral"],
             "Expenses": [
                 "Personnel & Payroll",
                 "Travel & Entertainment (T&E)",
@@ -169,8 +163,7 @@ DEPARTMENT_CONFIG = {
                 "Specimen Collection",
                 "Equipment Maintenance",
                 "Waste Management",
-                "Billing Administration",
-                "Corpus Fund"
+                "Billing Administration"
             ],
         },
         "revenue_types": ["Direct", "Recurring"],
@@ -193,8 +186,7 @@ DEPARTMENT_CONFIG = {
                 "Field Labour and Nursing Care",
                 "Digital Health",
                 "Equipment & Supplies",
-                "Back Office Logistics",
-                "Corpus Fund"
+                "Back Office Logistics"
             ],
             "Expenses": [
                 "Personnel & Payroll",
@@ -208,7 +200,6 @@ DEPARTMENT_CONFIG = {
                 "General Operations",
                 "Innovation",
                 "Supplies & Equipment",
-                "Corpus Fund",
                 "Other"
             ]
         },
@@ -228,7 +219,7 @@ DEPARTMENT_CONFIG = {
     # =================== MedTech ===================
     "MedTech": {
         "categories": {
-            "Income": ["B2B Revenue", "B2C Revenue", "Business Services Revenue", "Goodwill", "Corpus Fund"],
+            "Income": ["B2B Revenue", "B2C Revenue", "Business Services Revenue","Goodwill"],
             "Expenses": [
                 "Personnel & Payroll",
                 "Travel & Entertainment (T&E)",
@@ -237,14 +228,14 @@ DEPARTMENT_CONFIG = {
                 "Facilities & Overhead",
                 "General Operations",
                 "Innovation",
+                # "Supplies and Equipments",   # REMOVED
                 "Guest Concierge",
                 "Business Services Revenue",
                 "Miscellaneous",
                 "Outsourced Services",
                 "Events-Conferences-Training",
                 "Ledger",
-                "Goodwill",
-                "Corpus Fund",
+                "Goodwill",                     # ADDED
                 "Other"
             ]
         },
@@ -267,7 +258,6 @@ DEPARTMENT_CONFIG = {
             "Income": [
                 "Consulting",
                 "Management Fees",
-                "Corpus Fund",
                 "Other"
             ],
             "Expenses": [
@@ -283,8 +273,7 @@ DEPARTMENT_CONFIG = {
                 "Business Services Revenue",
                 "Miscellaneous",
                 "Outsourced Services",
-                "Events-Conferences-Training",
-                "Corpus Fund"
+                "Events-Conferences-Training"
             ]
         },
         "revenue_types": [],
@@ -305,7 +294,7 @@ DEPARTMENT_CONFIG = {
     # =================== Office Administration ===================
     "Adminstrationfunctionalunit": {
         "categories": {
-            "Income": ["Corpus Fund", "Other"],
+            "Income": ["Other"],
             "Expenses": [
                 "Personnel & Payroll",
                 "Travel & Entertainment (T&E)",
@@ -320,7 +309,6 @@ DEPARTMENT_CONFIG = {
                 "Management Fees",
                 "Outsourced Services",
                 "Events-Conferences-Training",
-                "Corpus Fund",
                 "Other"
             ],
         },
@@ -341,13 +329,12 @@ DEPARTMENT_CONFIG = {
     # =================== Research & Development ===================
     "ResearchDevelopment": {
         "categories": {
-            "Income": ["Grants", "Funding", "Corpus Fund", "Other"],
+            "Income": ["Grants", "Funding", "Other"],
             "Expenses": [
                 "R&D Salaries",
                 "Lab Supplies",
                 "Equipment",
                 "Testing",
-                "Corpus Fund",
                 "Other"
             ],
         },
