@@ -22,10 +22,8 @@ def create_app():
 
     JWTManager(app)
 
-    # ✅ CORS – explicit origin, single header
     CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
 
-    # Register blueprints
     from routes.auth import auth_bp
     from routes.it import it_bp
     from routes.pcm import pcm_bp

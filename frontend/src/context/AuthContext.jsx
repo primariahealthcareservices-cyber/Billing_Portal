@@ -1,11 +1,12 @@
-import React, { createContext, useContext, useState, useCallback } from "react";
+// frontend/src/context/AuthContext.jsx
+import React, { createContext, useContext, useState, useCallback, useRef } from "react";
 import api from "../api/axios.js";
 
 const AuthContext = createContext(null);
 
 export const ROLE_ROUTES = {
   SuperAdmin: "/dashboard/admin",
-  admin: "/dashboard/admin", // Mapped for safety
+  admin: "/dashboard/admin",
   IT: "/dashboard/it",
   "IT Sales": "/dashboard/itsales",
   PCM: "/dashboard/pcm",
@@ -16,7 +17,7 @@ export const ROLE_ROUTES = {
   ResearchDevelopment: "/dashboard/researchdevelopment",
   SalesEnterprise: "/dashboard/salesenterprise",
   Dental: "/dashboard/dental",
-  Everglades: "/dashboard/everglades",   // ✅ NEW — fixes silent redirect failure
+  Everglades: "/dashboard/everglades",
 };
 
 export function AuthProvider({ children }) {
@@ -26,32 +27,51 @@ export function AuthProvider({ children }) {
   });
   const [loading, setLoading] = useState(false);
 
+  // ✅ Prevent double-submits (mobile double-tap, React StrictMode, etc.)
+  const inFlightRef = useRef(null);
+
   const login = useCallback(async (email, password, otpData = null) => {
-    setLoading(true);
-    try {
-      let res;
-      if (otpData) {
-        res = await api.post("/auth/verify-otp", otpData);
-      } else {
-        res = await api.post("/auth/login", { email, password });
-      }
-
-      if (res.data.requires_2fa) {
-        return { success: true, requires_2fa: true, temp_token: res.data.temp_token };
-      }
-
-      const { access_token, user: userData } = res.data;
-      localStorage.setItem("token", access_token);
-      localStorage.setItem("user", JSON.stringify(userData));
-      setUser(userData);
-      return { success: true, user: userData };
-    } catch (err) {
-      const message =
-        err.response?.data?.message || "Unable to log in. Please try again.";
-      return { success: false, message };
-    } finally {
-      setLoading(false);
+    // If a login/verify is already running, ignore the new request
+    if (inFlightRef.current) {
+      return { success: false, message: "Please wait..." };
     }
+
+    setLoading(true);
+    const promise = (async () => {
+      try {
+        let res;
+        if (otpData) {
+          res = await api.post("/auth/verify-otp", otpData);
+        } else {
+          res = await api.post("/auth/login", { email, password });
+        }
+
+        if (res.data.requires_2fa) {
+          return { success: true, requires_2fa: true, temp_token: res.data.temp_token };
+        }
+
+        const { access_token, user: userData } = res.data;
+        if (!access_token || !userData) {
+          return { success: false, message: "Login response was malformed." };
+        }
+
+        localStorage.setItem("token", access_token);
+        localStorage.setItem("user", JSON.stringify(userData));
+        setUser(userData);
+
+        return { success: true, user: userData };
+      } catch (err) {
+        const message =
+          err.response?.data?.message || "Unable to log in. Please try again.";
+        return { success: false, message };
+      } finally {
+        setLoading(false);
+        inFlightRef.current = null;
+      }
+    })();
+
+    inFlightRef.current = promise;
+    return promise;
   }, []);
 
   const logout = useCallback(() => {
