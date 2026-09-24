@@ -9,7 +9,7 @@ db = SQLAlchemy()
 ROLES = [
     "SuperAdmin", "admin", "IT", "IT Sales", "PCM", "MedTech",
     "Caredx", "Corporate", "Adminstrationfunctionalunit",
-    "ResearchDevelopment", "Dental", "SalesEnterprise"
+    "ResearchDevelopment", "Dental", "SalesEnterprise", "Everglades",
 ]
 
 ENTRY_TYPES = ["Income", "Expenses"]
@@ -19,7 +19,7 @@ DEPARTMENT_CONFIG = {
     # =================== IT ===================
     "IT": {
         "categories": {
-            "Income": ["Web Services", "Portal Services", "Others"],
+            "Income": ["Web Services", "Portal Services", "Corpus Fund", "Others"],
             "Expenses": [
                 "Personnel & Payroll",
                 "Travel & Entertainment (T&E)",
@@ -33,6 +33,7 @@ DEPARTMENT_CONFIG = {
                 "Miscellaneous",
                 "Outsourced Services",
                 "Events-Conferences-Training",
+                "Corpus Fund",
                 "Other"
             ]
         },
@@ -62,6 +63,7 @@ DEPARTMENT_CONFIG = {
                 "Support & Maintenance",
                 "Internal allocations",
                 "Business Services Revenue",
+                "Corpus Fund",
                 "Others"
             ],
             "Expenses": [
@@ -81,6 +83,7 @@ DEPARTMENT_CONFIG = {
                 "Innovation",
                 "Consulting",
                 "Management Fees",
+                "Corpus Fund",
                 "Other"
             ]
         },
@@ -97,7 +100,7 @@ DEPARTMENT_CONFIG = {
         "show_tax_invoice_number": True,
     },
 
-        # =================== Dental ===================
+    # =================== Dental ===================
     "Dental": {
         "categories": {
             "Income": [
@@ -105,6 +108,7 @@ DEPARTMENT_CONFIG = {
                 "Doctor Consultation",
                 "Clinical Procedures",
                 "Diagnostics & X-Ray",
+                "Corpus Fund",
                 "Other",
             ],
             "Expenses": [
@@ -125,6 +129,7 @@ DEPARTMENT_CONFIG = {
                 "Events-Conferences-Training",
                 "Consulting",
                 "Management Fees",
+                "Corpus Fund",
                 "Other",
             ],
         },
@@ -142,10 +147,11 @@ DEPARTMENT_CONFIG = {
         "is_salary_category": "Payroll Salaries",
         "exec_departments": ["Dental"],
     },
+
     # =================== Caredx ===================
     "Caredx": {
         "categories": {
-            "Income": ["Lab", "Camp", "Walkin/Person", "Referral"],
+            "Income": ["Lab", "Camp", "Walkin/Person", "Referral", "Corpus Fund"],
             "Expenses": [
                 "Personnel & Payroll",
                 "Travel & Entertainment (T&E)",
@@ -164,6 +170,7 @@ DEPARTMENT_CONFIG = {
                 "Equipment Maintenance",
                 "Waste Management",
                 "Billing Administration"
+                "Corpus Fund",
             ],
         },
         "revenue_types": ["Direct", "Recurring"],
@@ -186,7 +193,8 @@ DEPARTMENT_CONFIG = {
                 "Field Labour and Nursing Care",
                 "Digital Health",
                 "Equipment & Supplies",
-                "Back Office Logistics"
+                "Back Office Logistics",
+                "Corpus Fund"
             ],
             "Expenses": [
                 "Personnel & Payroll",
@@ -200,6 +208,7 @@ DEPARTMENT_CONFIG = {
                 "General Operations",
                 "Innovation",
                 "Supplies & Equipment",
+                "Corpus Fund",
                 "Other"
             ]
         },
@@ -219,7 +228,7 @@ DEPARTMENT_CONFIG = {
     # =================== MedTech ===================
     "MedTech": {
         "categories": {
-            "Income": ["B2B Revenue", "B2C Revenue", "Business Services Revenue","Goodwill"],
+            "Income": ["B2B Revenue", "B2C Revenue", "Business Services Revenue", "Goodwill", "Corpus Fund"],
             "Expenses": [
                 "Personnel & Payroll",
                 "Travel & Entertainment (T&E)",
@@ -228,18 +237,71 @@ DEPARTMENT_CONFIG = {
                 "Facilities & Overhead",
                 "General Operations",
                 "Innovation",
-                # "Supplies and Equipments",   # REMOVED
                 "Guest Concierge",
                 "Business Services Revenue",
                 "Miscellaneous",
                 "Outsourced Services",
                 "Events-Conferences-Training",
                 "Ledger",
-                "Goodwill",                     # ADDED
+                "Goodwill",
+                "Corpus Fund",
                 "Other"
             ]
         },
         "revenue_types": ["Direct", "Recurring"],
+        "show_generated_by": True,
+        "show_revenue_type": True,
+        "show_patient_fields": False,
+        "show_client_name": True,
+        "show_gst_number": True,
+        "gst_required_categories": [],
+        "show_items": True,
+        "show_invoice": True,
+        "show_gst_tax": True,
+        "show_tax_invoice_number": True,
+    },
+
+    # =================== Everglades (Pharmacy) ===================
+    "Everglades": {
+        "categories": {
+            "Income": [
+                "Prescription Sales",
+                "OTC Sales",
+                "Insurance Claims",
+                "Consultation Fees",
+                "Health Screenings",
+                "Vaccinations",
+                "Home Delivery",
+                "Loyalty & Subscription Revenue",
+                "B2B Wholesale",
+                "Business Services Revenue",
+                "Goodwill",
+                "Corpus Fund",
+                "Other",
+            ],
+            "Expenses": [
+                "Personnel & Payroll",
+                "Travel & Entertainment (T&E)",
+                "Marketing",
+                "Pharmaceuticals & Inventory",
+                "Supplies & Equipments",
+                "Facilities & Overhead",
+                "General Operations",
+                "Innovation",
+                "Guest Concierge",
+                "Business Services Revenue",
+                "Miscellaneous",
+                "Outsourced Services",
+                "Events-Conferences-Training",
+                "Consulting",
+                "Management Fees",
+                "Ledger",
+                "Goodwill",
+                "Corpus Fund",
+                "Other",
+            ],
+        },
+        "revenue_types": ["Direct", "Recurring", "Insurance"],
         "show_generated_by": True,
         "show_revenue_type": True,
         "show_patient_fields": False,
@@ -258,6 +320,7 @@ DEPARTMENT_CONFIG = {
             "Income": [
                 "Consulting",
                 "Management Fees",
+                "Corpus Fund",
                 "Other"
             ],
             "Expenses": [
@@ -273,7 +336,8 @@ DEPARTMENT_CONFIG = {
                 "Business Services Revenue",
                 "Miscellaneous",
                 "Outsourced Services",
-                "Events-Conferences-Training"
+                "Events-Conferences-Training",
+                "Corpus Fund"
             ]
         },
         "revenue_types": [],
@@ -288,7 +352,10 @@ DEPARTMENT_CONFIG = {
         "show_gst_tax": False,
         "show_tax_invoice_number": False,
         "is_salary_category": "Personnel & Payroll",
-        "exec_departments": ["Corporate", "Caredx", "MedTech", "IT", "IT Sales", "PCM", "Dental", "Adminstrationfunctionalunit"],
+        "exec_departments": [
+            "Corporate", "Caredx", "MedTech", "IT", "IT Sales",
+            "PCM", "Dental", "Adminstrationfunctionalunit", "Everglades"
+        ],
     },
 
     # =================== Office Administration ===================
@@ -309,6 +376,7 @@ DEPARTMENT_CONFIG = {
                 "Management Fees",
                 "Outsourced Services",
                 "Events-Conferences-Training",
+                "Corpus Fund",
                 "Other"
             ],
         },
@@ -335,6 +403,7 @@ DEPARTMENT_CONFIG = {
                 "Lab Supplies",
                 "Equipment",
                 "Testing",
+                "Corpus Fund",
                 "Other"
             ],
         },
@@ -520,6 +589,33 @@ class MedTechLedger(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+# ---------- EvergladesLedger model ----------
+class EvergladesLedger(db.Model):
+    __tablename__ = "everglades_ledger"
+
+    id = db.Column(db.Integer, primary_key=True)
+    customer_name = db.Column(db.String(150), nullable=False)
+    entry_date = db.Column(db.Date, nullable=False)
+    total_amount = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    paid = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    balance = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    remarks = db.Column(db.Text, nullable=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "customer_name": self.customer_name,
+            "entry_date": self.entry_date.isoformat() if self.entry_date else None,
+            "total_amount": float(self.total_amount or 0),
+            "paid": float(self.paid or 0),
+            "balance": float(self.balance or 0),
+            "remarks": self.remarks,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
 # ---------- CaredxLabEntry model ----------
 class CaredxLabEntry(db.Model):
     __tablename__ = "caredx_lab_entries"
@@ -563,7 +659,6 @@ class CaredxLabEntry(db.Model):
         }
 
 # ---------- CaredxExpense model ----------
-# ---------- CaredxExpense model ----------
 class CaredxExpense(db.Model):
     __tablename__ = "caredx_expenses"
     id = db.Column(db.Integer, primary_key=True)
@@ -592,6 +687,7 @@ class CaredxExpense(db.Model):
             "vehicle_type": self.vehicle_type,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
 # ---------- SalesEnterpriseKPI model ----------
 class SalesEnterpriseKPI(db.Model):
     __tablename__ = "sales_enterprise_kpis"
@@ -640,8 +736,6 @@ class SalesEnterpriseKPI(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
-# ---------- Migration functions ----------
-# (unchanged – keep as is)
 # ---------- Migration functions ----------
 def migrate_corporate_categories():
     """Rename existing Corporate entries from old category names to new ones."""
@@ -886,3 +980,36 @@ def migrate_pcm_categories():
         print(f"✅ PCM category migration complete ({migrated} entries updated).")
     else:
         print("ℹ️ No PCM category migration needed.")
+
+def migrate_everglades_categories():
+    """Rename existing Everglades entries from old category names to new ones."""
+    from sqlalchemy import update
+    category_map = {
+        "Payroll Salaries": "Personnel & Payroll",
+        "Travel & Entertainment": "Travel & Entertainment (T&E)",
+        "Marketing Expenses": "Marketing",
+        "Assets & Infra Cost": "Supplies & Equipments",
+        "Office Management": "Facilities & Overhead",
+        "Service Revenue": "Business Services Revenue",
+        "Miscellaneous Categories": "Miscellaneous",
+        "Legal Governance": "Miscellaneous",
+    }
+    migrated = 0
+    for old, new in category_map.items():
+        count = db.session.query(FinanceEntry).filter(
+            FinanceEntry.department == "Everglades",
+            FinanceEntry.category == old
+        ).count()
+        if count > 0:
+            stmt = update(FinanceEntry).where(
+                FinanceEntry.department == "Everglades",
+                FinanceEntry.category == old
+            ).values(category=new)
+            db.session.execute(stmt)
+            print(f"✅ Migrated {count} Everglades entries from '{old}' to '{new}'")
+            migrated += count
+    if migrated > 0:
+        db.session.commit()
+        print(f"✅ Everglades category migration complete ({migrated} entries updated).")
+    else:
+        print("ℹ️ No Everglades category migration needed.")

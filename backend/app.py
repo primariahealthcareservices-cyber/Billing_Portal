@@ -6,7 +6,7 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 
 from config import Config
-from models import db, migrate_corporate_categories
+from models import db, migrate_corporate_categories, migrate_everglades_categories
 
 def create_app():
     app = Flask(__name__)
@@ -18,6 +18,7 @@ def create_app():
 
     with app.app_context():
         migrate_corporate_categories()
+        migrate_everglades_categories()
 
     JWTManager(app)
 
@@ -37,7 +38,8 @@ def create_app():
     from routes.researchdevelopment import researchdevelopment_bp
     from routes.itsales import itsales_bp
     from routes.salesenterprise import salesenterprise_bp
-    from routes.dental import dental_bp 
+    from routes.dental import dental_bp
+    from routes.everglades import everglades_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(it_bp)
@@ -51,7 +53,8 @@ def create_app():
     app.register_blueprint(researchdevelopment_bp)
     app.register_blueprint(itsales_bp)
     app.register_blueprint(salesenterprise_bp)
-    app.register_blueprint(dental_bp)   
+    app.register_blueprint(dental_bp)
+    app.register_blueprint(everglades_bp)
 
     @app.route("/api/health", methods=["GET"])
     def health():

@@ -58,7 +58,6 @@ const invoiceHref = (entry) => {
   return `${apiOrigin}${entry.invoice_url}${tokenParam}`;
 };
 
-// Department mapping for dropdown display (keys vs labels)
 const DEPARTMENTS_CONFIG = [
   { label: "Corporate Management", value: "Corporate" },
   { label: "Office Administration", value: "Adminstrationfunctionalunit" },
@@ -69,6 +68,7 @@ const DEPARTMENTS_CONFIG = [
   { label: "PCM", value: "PCM" },
   { label: "Research Development", value: "ResearchDevelopment" },
   { label: "Dental", value: "Dental" },
+  { label: "Everglades", value: "Everglades" },
 ];
 
 /* ---------------- CATEGORY FIELD MAPS ---------------- */
@@ -166,12 +166,7 @@ const PCM_CATEGORY_FIELDS = {
   "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
 };
 
-/**
- * NEW — Dental category fields.
- * ⚠️ Update these keys to match exactly what /dental/options returns from your backend.
- */
 const DENTAL_CATEGORY_FIELDS = {
-  // ── Expenses ─────────────────────────────────────────────────────────
   "Travel & Entertainment (T&E)":       { showEmployeeName: true, showVehicleType: true,  labelName: "Employee/Person Name",  labelVehicle: "Transport/Travel Type", showPurpose: true },
   "Marketing":                          { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                        showPurpose: true },
   "Dental Supplies & Consumables":      { showEmployeeName: true, showVehicleType: false, labelName: "Item/Supply Name",                                             showPurpose: true },
@@ -189,13 +184,41 @@ const DENTAL_CATEGORY_FIELDS = {
   "Management Fees":                    { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name",                                          showPurpose: true },
   "Personnel & Payroll":                { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                         showPurpose: true },
 
-  // ── Income ───────────────────────────────────────────────────────────
   "Dental Operations":                  { showEmployeeName: true, showVehicleType: false, labelName: "Doctor/Staff Name",    showPurpose: true },
   "Doctor Consultation":                { showEmployeeName: true, showVehicleType: false, labelName: "Doctor Name",          showPurpose: true },
   "Clinical Procedures":                { showEmployeeName: true, showVehicleType: false, labelName: "Doctor/Staff Name",    showPurpose: true },
- "Diagnostics & X-Ray":                { showEmployeeName: true, showVehicleType: false, labelName: "Technician Name",      showPurpose: true },
-  // ── Both ────────────────────────────────────────────────────────────
+  "Diagnostics & X-Ray":                { showEmployeeName: true, showVehicleType: false, labelName: "Technician Name",      showPurpose: true },
   "Other":                              { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item",            showPurpose: true },
+};
+
+const EVERGLADES_CATEGORY_FIELDS = {
+  "Travel & Entertainment (T&E)":     { showEmployeeName: true, showVehicleType: true,  labelName: "Employee/Person Name",  labelVehicle: "Transport/Travel Type", showPurpose: true },
+  "Marketing":                        { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                        showPurpose: true },
+  "Pharmaceuticals & Inventory":      { showEmployeeName: true, showVehicleType: false, labelName: "Supplier/Vendor Name",                                        showPurpose: true },
+  "Supplies & Equipments":            { showEmployeeName: true, showVehicleType: false, labelName: "Item/Equipment Name",                                         showPurpose: true },
+  "Facilities & Overhead":            { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                        showPurpose: true },
+  "General Operations":               { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                        showPurpose: true },
+  "Innovation":                       { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                        showPurpose: true },
+  "Guest Concierge":                  { showEmployeeName: true, showVehicleType: false, labelName: "Guest/Person Name",                                           showPurpose: true },
+  "Business Services Revenue":        { showEmployeeName: true, showVehicleType: false, labelName: "Service Name",                                                showPurpose: false },
+  "Miscellaneous":                    { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                        showPurpose: true },
+  "Outsourced Services":              { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name",                                         showPurpose: true },
+  "Events-Conferences-Training":      { showEmployeeName: true, showVehicleType: false, labelName: "Event/Training Name",                                         showPurpose: true },
+  "Consulting":                       { showEmployeeName: true, showVehicleType: false, labelName: "Consultant/Company Name",                                     showPurpose: true },
+  "Management Fees":                  { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name",                                         showPurpose: true },
+  "Personnel & Payroll":              { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                        showPurpose: true },
+
+  "Prescription Sales":               { showEmployeeName: true, showVehicleType: false, labelName: "Pharmacist/Staff Name",   showPurpose: true },
+  "OTC Sales":                        { showEmployeeName: true, showVehicleType: false, labelName: "Cashier/Staff Name",      showPurpose: true },
+  "Insurance Claims":                 { showEmployeeName: true, showVehicleType: false, labelName: "Insurance Provider",      showPurpose: true },
+  "Consultation Fees":                { showEmployeeName: true, showVehicleType: false, labelName: "Pharmacist Name",         showPurpose: true },
+  "Health Screenings":                { showEmployeeName: true, showVehicleType: false, labelName: "Technician Name",         showPurpose: true },
+  "Vaccinations":                     { showEmployeeName: true, showVehicleType: false, labelName: "Pharmacist Name",         showPurpose: true },
+  "Home Delivery":                    { showEmployeeName: true, showVehicleType: true,  labelName: "Delivery Person",         labelVehicle: "Vehicle Type", showPurpose: true },
+  "Loyalty & Subscription Revenue":   { showEmployeeName: true, showVehicleType: false, labelName: "Customer/Client Name",    showPurpose: false },
+  "B2B Wholesale":                    { showEmployeeName: true, showVehicleType: false, labelName: "Client/Business Name",    showPurpose: true },
+
+  "Other":                            { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item",               showPurpose: true },
 };
 
 export default function FinanceEntryForm({
@@ -213,13 +236,16 @@ export default function FinanceEntryForm({
   const isITSales = department === "IT Sales";
   const isMedTech = department === "MedTech";
   const isPCM = department === "PCM";
-  const isDental = department === "Dental"; // ✅ NEW
+  const isDental = department === "Dental";
+  const isEverglades = department === "Everglades";
 
   const salaryCategoryName = options?.is_salary_category || "Payroll Salaries";
   const ledgerCategoryName = "Ledger";
 
-  // Categories that require item-level details (for MedTech)
-  const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments"];
+  // ✅ MedTech: add B2B Revenue + B2C Revenue → item-based
+  const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "B2B Revenue", "B2C Revenue"];
+  // ✅ Everglades: Pharma + Supplies → item-based
+  const EVERGLADES_ITEM_CATEGORIES = ["Pharmaceuticals & Inventory", "Supplies & Equipments"];
 
   const createEmptyForm = () => ({
     entry_type: "Income",
@@ -242,7 +268,7 @@ export default function FinanceEntryForm({
     allowance_amount: "",
     vehicle_type: "",
     team: "",
-    purpose: "",   
+    purpose: "",
   });
 
   const [form, setForm] = useState(createEmptyForm());
@@ -253,7 +279,6 @@ export default function FinanceEntryForm({
   const [saving, setSaving] = useState(false);
   const [employees, setEmployees] = useState([emptyEmployee()]);
 
-  // --- Ledger specific states ---
   const [ledgerCustomer, setLedgerCustomer] = useState("");
   const [ledgerNewAmount, setLedgerNewAmount] = useState("");
   const [ledgerPaid, setLedgerPaid] = useState("");
@@ -263,15 +288,14 @@ export default function FinanceEntryForm({
   const [ledgerOutstanding, setLedgerOutstanding] = useState(0);
   const [ledgerTotalAmount, setLedgerTotalAmount] = useState(0);
 
-  // --- Goodwill client suggestions ---
   const [clientSuggestions, setClientSuggestions] = useState([]);
 
   const isSalaryCategory =
-    !isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isDental &&
+    !isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isDental && !isEverglades &&
     form.category === salaryCategoryName;
 
-  const isLedger = isMedTech && form.category === ledgerCategoryName;
-  const isGoodwill = isMedTech && form.category === "Goodwill";
+  const isLedger = (isMedTech || isEverglades) && form.category === ledgerCategoryName;
+  const isGoodwill = (isMedTech || isEverglades) && form.category === "Goodwill";
 
   const isEditingSalaryEntry =
     isSalaryCategory && !!(editingEntry && editingEntry.id !== undefined && editingEntry.id !== null);
@@ -299,16 +323,29 @@ export default function FinanceEntryForm({
   const officeFieldConfig = isOfficeAdmin ? OFFICE_ADMIN_CATEGORY_FIELDS[form.category] : null;
   const showOfficeFields = isOfficeAdmin && officeFieldConfig;
 
-  // ✅ NEW — Dental
   const dentalFieldConfig = isDental ? DENTAL_CATEGORY_FIELDS[form.category] : null;
   const showDentalFields = isDental && dentalFieldConfig && form.category !== salaryCategoryName;
   const isDentalSalaryCategory = isDental && form.category === salaryCategoryName;
 
+  const evergladesFieldConfig = isEverglades ? EVERGLADES_CATEGORY_FIELDS[form.category] : null;
+  const showEvergladesFields =
+    isEverglades && evergladesFieldConfig &&
+    form.category !== salaryCategoryName &&
+    form.category !== ledgerCategoryName &&
+    form.category !== "Goodwill";
+  const isEvergladesSalaryCategory = isEverglades && form.category === salaryCategoryName;
+
+  // ✅ Does the current dept + category require items?
+  const requireItemsForCategory =
+    (isMedTech && MEDTECH_ITEM_CATEGORIES.includes(form.category)) ||
+    (isEverglades && EVERGLADES_ITEM_CATEGORIES.includes(form.category)) ||
+    (!isMedTech && !isEverglades && options?.show_items);
+
   const usingCategoryFields =
     showOfficeFields || showITFields || showITSalesFields ||
-    showMedTechFields || showPCMFields || showDentalFields;
+    showMedTechFields || showPCMFields || showDentalFields ||
+    showEvergladesFields;
 
-  // Fetch client suggestions when Goodwill is selected
   useEffect(() => {
     if (isGoodwill) {
       const fetchClients = async () => {
@@ -316,7 +353,7 @@ export default function FinanceEntryForm({
           const res = await api.get(`/${apiBase}/clients`);
           setClientSuggestions(res.data.clients || []);
         } catch {
-          // ignore
+          /* ignore */
         }
       };
       fetchClients();
@@ -351,7 +388,7 @@ export default function FinanceEntryForm({
         allowance_amount: entry.allowance_amount !== undefined && entry.allowance_amount !== null ? String(entry.allowance_amount) : "",
         vehicle_type: entry.vehicle_type || "",
         team: entry.team || "",
-        purpose: entry.purpose || "", 
+        purpose: entry.purpose || "",
       });
       setOtherCategory(isCustomCategory ? entry.category : "");
 
@@ -559,17 +596,19 @@ export default function FinanceEntryForm({
   };
 
   const salaryTotal = employees.reduce((sum, emp) => sum + (emp.total || 0), 0);
-  const itemsTotal = options?.show_items
-    ? items.reduce((sum, item) => {
-        const qty = Number(item.quantity) || 0;
-        const price = Number(item.unit_price) || 0;
-        return sum + qty * price;
-      }, 0)
-    : 0;
 
+  // ✅ Items total is always computed from the items grid
+  const itemsTotal = items.reduce((sum, item) => {
+    const qty = Number(item.quantity) || 0;
+    const price = Number(item.unit_price) || 0;
+    return sum + qty * price;
+  }, 0);
+
+  // ✅ When items are required for this category, baseAmount = itemsTotal
   const baseAmount = isSalaryCategory
     ? salaryTotal
-    : (options?.show_items && !usingCategoryFields ? itemsTotal : Number(form.amount) || 0);
+    : (requireItemsForCategory ? itemsTotal : (Number(form.amount) || 0));
+
   const gstTaxPercentValue = Number(form.gst_tax_percent) || 0;
   const gstTaxAmount = options?.show_gst_tax
     ? Number(((baseAmount * gstTaxPercentValue) / 100).toFixed(2))
@@ -595,7 +634,6 @@ export default function FinanceEntryForm({
       return;
     }
 
-    // --- LEDGER SUBMISSION ---
     if (isLedger) {
       if (!ledgerCustomer.trim()) {
         toast.error("Customer name is required.");
@@ -622,7 +660,7 @@ export default function FinanceEntryForm({
           customer_name: ledgerCustomer.trim(),
           entry_date: form.entry_date,
           total_amount: totalAmount,
-          paid: paid,
+          paid,
           remarks: form.remarks || "",
         };
         const url = `/${apiBase}/entries`;
@@ -644,7 +682,6 @@ export default function FinanceEntryForm({
       return;
     }
 
-    // --- Goodwill validation ---
     if (isGoodwill) {
       if (!form.client_name.trim()) {
         toast.error("Client name is required for Goodwill entries.");
@@ -657,52 +694,27 @@ export default function FinanceEntryForm({
       }
     }
 
-    // --- Salary lock validations ---
     if (isOfficeAdmin && form.category === salaryCategoryName) {
       toast.error("Salary must be entered by Corporate Management only.");
       return;
     }
-    if (isITSalaryCategory) {
-      toast.error("Salaries must be entered by Corporate Management only.");
-      return;
-    }
-    if (isITSalesSalaryCategory) {
-      toast.error("Salaries must be entered by Corporate Management only.");
-      return;
-    }
-    if (isMedTechSalaryCategory) {
-      toast.error("Salaries must be entered by Corporate Management only.");
-      return;
-    }
-    if (isPCMSalaryCategory) {
-      toast.error("Salaries must be entered by Corporate Management only.");
-      return;
-    }
-    // ✅ NEW — Dental salary lock
-    if (isDentalSalaryCategory) {
-      toast.error("Salaries must be entered by Corporate Management only.");
-      return;
-    }
+    if (isITSalaryCategory) { toast.error("Salaries must be entered by Corporate Management only."); return; }
+    if (isITSalesSalaryCategory) { toast.error("Salaries must be entered by Corporate Management only."); return; }
+    if (isMedTechSalaryCategory) { toast.error("Salaries must be entered by Corporate Management only."); return; }
+    if (isPCMSalaryCategory) { toast.error("Salaries must be entered by Corporate Management only."); return; }
+    if (isDentalSalaryCategory) { toast.error("Salaries must be entered by Corporate Management only."); return; }
+    if (isEvergladesSalaryCategory) { toast.error("Salaries must be entered by Corporate Management only."); return; }
 
     if (isSalaryCategory) {
       let valid = true;
       for (const emp of employees) {
-        if (!emp.exec_department) {
-          toast.error("Please select a department for all employees.");
-          valid = false;
-          break;
-        }
-        if (!emp.employee_name.trim()) {
-          toast.error("Please enter employee name for all employees.");
-          valid = false;
-          break;
-        }
+        if (!emp.exec_department) { toast.error("Please select a department for all employees."); valid = false; break; }
+        if (!emp.employee_name.trim()) { toast.error("Please enter employee name for all employees."); valid = false; break; }
         const sal = parseFloat(emp.salary_amount) || 0;
         const allow = parseFloat(emp.allowance_amount) || 0;
         if (sal <= 0 && allow <= 0) {
           toast.error(`For ${emp.employee_name || "employee"}, at least one of Salary or TADA must be greater than 0.`);
-          valid = false;
-          break;
+          valid = false; break;
         }
       }
       if (!valid) return;
@@ -710,70 +722,34 @@ export default function FinanceEntryForm({
     }
 
     if (isOfficeAdmin && officeFieldConfig) {
-      if (officeFieldConfig.showEmployeeName && !form.employee_name.trim()) {
-        toast.error(`Please enter ${officeFieldConfig.labelName || "name"}.`);
-        return;
-      }
-      if (officeFieldConfig.showVehicleType && !form.vehicle_type.trim()) {
-        toast.error(`Please enter ${officeFieldConfig.labelVehicle || "vehicle type"}.`);
-        return;
-      }
-      if (officeFieldConfig.showPurpose && !form.remarks.trim()) {
-        toast.error("Please enter the purpose.");
-        return;
-      }
-      const amount = Number(form.amount);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        toast.error("Please enter a valid amount.");
-        return;
+      if (officeFieldConfig.showEmployeeName && !form.employee_name.trim()) { toast.error(`Please enter ${officeFieldConfig.labelName || "name"}.`); return; }
+      if (officeFieldConfig.showVehicleType && !form.vehicle_type.trim()) { toast.error(`Please enter ${officeFieldConfig.labelVehicle || "vehicle type"}.`); return; }
+      if (officeFieldConfig.showPurpose && !form.remarks.trim()) { toast.error("Please enter the purpose."); return; }
+      if (!requireItemsForCategory) {
+        const amount = Number(form.amount);
+        if (!Number.isFinite(amount) || amount <= 0) { toast.error("Please enter a valid amount."); return; }
       }
     }
 
     if (isIT && showITFields) {
-      if (itFieldConfig.showEmployeeName && !form.employee_name.trim()) {
-        toast.error(`Please enter ${itFieldConfig.labelName || "name"}.`);
-        return;
-      }
-      if (itFieldConfig.showVehicleType && !form.vehicle_type.trim()) {
-        toast.error(`Please enter ${itFieldConfig.labelVehicle || "vehicle type"}.`);
-        return;
-      }
-      if (itFieldConfig.showPurpose && !form.remarks.trim()) {
-        toast.error("Please enter the purpose.");
-        return;
-      }
-      if (!form.remarks.trim()) {
-        toast.error("Remarks are required.");
-        return;
-      }
-      const amount = Number(form.amount);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        toast.error("Please enter a valid amount.");
-        return;
+      if (itFieldConfig.showEmployeeName && !form.employee_name.trim()) { toast.error(`Please enter ${itFieldConfig.labelName || "name"}.`); return; }
+      if (itFieldConfig.showVehicleType && !form.vehicle_type.trim()) { toast.error(`Please enter ${itFieldConfig.labelVehicle || "vehicle type"}.`); return; }
+      if (itFieldConfig.showPurpose && !form.remarks.trim()) { toast.error("Please enter the purpose."); return; }
+      if (!form.remarks.trim()) { toast.error("Remarks are required."); return; }
+      if (!requireItemsForCategory) {
+        const amount = Number(form.amount);
+        if (!Number.isFinite(amount) || amount <= 0) { toast.error("Please enter a valid amount."); return; }
       }
     }
 
     if (isITSales && showITSalesFields) {
-      if (itSalesFieldConfig.showEmployeeName && !form.employee_name.trim()) {
-        toast.error(`Please enter ${itSalesFieldConfig.labelName || "name"}.`);
-        return;
-      }
-      if (itSalesFieldConfig.showVehicleType && !form.vehicle_type.trim()) {
-        toast.error(`Please enter ${itSalesFieldConfig.labelVehicle || "vehicle type"}.`);
-        return;
-      }
-      if (itSalesFieldConfig.showPurpose && !form.remarks.trim()) {
-        toast.error("Please enter the purpose.");
-        return;
-      }
-      if (!form.remarks.trim()) {
-        toast.error("Remarks are required.");
-        return;
-      }
-      const amount = Number(form.amount);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        toast.error("Please enter a valid amount.");
-        return;
+      if (itSalesFieldConfig.showEmployeeName && !form.employee_name.trim()) { toast.error(`Please enter ${itSalesFieldConfig.labelName || "name"}.`); return; }
+      if (itSalesFieldConfig.showVehicleType && !form.vehicle_type.trim()) { toast.error(`Please enter ${itSalesFieldConfig.labelVehicle || "vehicle type"}.`); return; }
+      if (itSalesFieldConfig.showPurpose && !form.remarks.trim()) { toast.error("Please enter the purpose."); return; }
+      if (!form.remarks.trim()) { toast.error("Remarks are required."); return; }
+      if (!requireItemsForCategory) {
+        const amount = Number(form.amount);
+        if (!Number.isFinite(amount) || amount <= 0) { toast.error("Please enter a valid amount."); return; }
       }
       if (form.entry_type === "Income" && !form.generated_by.trim()) {
         toast.error("Please enter the employee name (Generated By) for Income entries.");
@@ -782,78 +758,13 @@ export default function FinanceEntryForm({
     }
 
     if (isMedTech && showMedTechFields) {
-  if (medTechFieldConfig.showEmployeeName && !form.employee_name.trim()) {
-    toast.error(`Please enter ${medTechFieldConfig.labelName || "name"}.`);
-    return;
-  }
-  if (medTechFieldConfig.showVehicleType && !form.vehicle_type.trim()) {
-    toast.error(`Please enter ${medTechFieldConfig.labelVehicle || "vehicle type"}.`);
-    return;
-  }
-  if (medTechFieldConfig.showPurpose && !form.remarks.trim()) {
-    toast.error("Please enter the purpose.");
-    return;
-  }
-  if (!form.remarks.trim()) {
-    toast.error("Remarks are required.");
-    return;
-  }
-  const amount = Number(form.amount);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    toast.error("Please enter a valid amount.");
-    return;
-  }
-  if (form.entry_type === "Income" && !form.generated_by.trim()) {
-    toast.error("Please enter the employee name (Generated By) for Income entries.");
-    return;
-  }
-}
-    if (isPCM && showPCMFields) {
-      if (pcmFieldConfig.showEmployeeName && !form.employee_name.trim()) {
-        toast.error(`Please enter ${pcmFieldConfig.labelName || "name"}.`);
-        return;
-      }
-      if (pcmFieldConfig.showVehicleType && !form.vehicle_type.trim()) {
-        toast.error(`Please enter ${pcmFieldConfig.labelVehicle || "vehicle type"}.`);
-        return;
-      }
-      if (pcmFieldConfig.showPurpose && !form.remarks.trim()) {
-        toast.error("Please enter the purpose.");
-        return;
-      }
-      if (!form.remarks.trim()) {
-        toast.error("Remarks are required.");
-        return;
-      }
-      const amount = Number(form.amount);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        toast.error("Please enter a valid amount.");
-        return;
-      }
-    }
-
-    // ✅ NEW — Dental validation (mirrors IT block)
-    if (isDental && showDentalFields) {
-      if (dentalFieldConfig.showEmployeeName && !form.employee_name.trim()) {
-        toast.error(`Please enter ${dentalFieldConfig.labelName || "name"}.`);
-        return;
-      }
-      if (dentalFieldConfig.showVehicleType && !form.vehicle_type.trim()) {
-        toast.error(`Please enter ${dentalFieldConfig.labelVehicle || "vehicle type"}.`);
-        return;
-      }
-      if (dentalFieldConfig.showPurpose && !form.remarks.trim()) {
-        toast.error("Please enter the purpose.");
-        return;
-      }
-      if (!form.remarks.trim()) {
-        toast.error("Remarks are required.");
-        return;
-      }
-      const amount = Number(form.amount);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        toast.error("Please enter a valid amount.");
-        return;
+      if (medTechFieldConfig.showEmployeeName && !form.employee_name.trim()) { toast.error(`Please enter ${medTechFieldConfig.labelName || "name"}.`); return; }
+      if (medTechFieldConfig.showVehicleType && !form.vehicle_type.trim()) { toast.error(`Please enter ${medTechFieldConfig.labelVehicle || "vehicle type"}.`); return; }
+      if (medTechFieldConfig.showPurpose && !form.remarks.trim()) { toast.error("Please enter the purpose."); return; }
+      if (!form.remarks.trim()) { toast.error("Remarks are required."); return; }
+      if (!requireItemsForCategory) {
+        const amount = Number(form.amount);
+        if (!Number.isFinite(amount) || amount <= 0) { toast.error("Please enter a valid amount."); return; }
       }
       if (form.entry_type === "Income" && !form.generated_by.trim()) {
         toast.error("Please enter the employee name (Generated By) for Income entries.");
@@ -861,7 +772,48 @@ export default function FinanceEntryForm({
       }
     }
 
-    if (!isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isDental && !usingCategoryFields && options.show_generated_by && !form.generated_by.trim()) {
+    if (isPCM && showPCMFields) {
+      if (pcmFieldConfig.showEmployeeName && !form.employee_name.trim()) { toast.error(`Please enter ${pcmFieldConfig.labelName || "name"}.`); return; }
+      if (pcmFieldConfig.showVehicleType && !form.vehicle_type.trim()) { toast.error(`Please enter ${pcmFieldConfig.labelVehicle || "vehicle type"}.`); return; }
+      if (pcmFieldConfig.showPurpose && !form.remarks.trim()) { toast.error("Please enter the purpose."); return; }
+      if (!form.remarks.trim()) { toast.error("Remarks are required."); return; }
+      if (!requireItemsForCategory) {
+        const amount = Number(form.amount);
+        if (!Number.isFinite(amount) || amount <= 0) { toast.error("Please enter a valid amount."); return; }
+      }
+    }
+
+    if (isDental && showDentalFields) {
+      if (dentalFieldConfig.showEmployeeName && !form.employee_name.trim()) { toast.error(`Please enter ${dentalFieldConfig.labelName || "name"}.`); return; }
+      if (dentalFieldConfig.showVehicleType && !form.vehicle_type.trim()) { toast.error(`Please enter ${dentalFieldConfig.labelVehicle || "vehicle type"}.`); return; }
+      if (dentalFieldConfig.showPurpose && !form.remarks.trim()) { toast.error("Please enter the purpose."); return; }
+      if (!form.remarks.trim()) { toast.error("Remarks are required."); return; }
+      if (!requireItemsForCategory) {
+        const amount = Number(form.amount);
+        if (!Number.isFinite(amount) || amount <= 0) { toast.error("Please enter a valid amount."); return; }
+      }
+      if (form.entry_type === "Income" && !form.generated_by.trim()) {
+        toast.error("Please enter the employee name (Generated By) for Income entries.");
+        return;
+      }
+    }
+
+    if (isEverglades && showEvergladesFields) {
+      if (evergladesFieldConfig.showEmployeeName && !form.employee_name.trim()) { toast.error(`Please enter ${evergladesFieldConfig.labelName || "name"}.`); return; }
+      if (evergladesFieldConfig.showVehicleType && !form.vehicle_type.trim()) { toast.error(`Please enter ${evergladesFieldConfig.labelVehicle || "vehicle type"}.`); return; }
+      if (evergladesFieldConfig.showPurpose && !form.remarks.trim()) { toast.error("Please enter the purpose."); return; }
+      if (!form.remarks.trim()) { toast.error("Remarks are required."); return; }
+      if (!requireItemsForCategory) {
+        const amount = Number(form.amount);
+        if (!Number.isFinite(amount) || amount <= 0) { toast.error("Please enter a valid amount."); return; }
+      }
+      if (form.entry_type === "Income" && !form.generated_by.trim()) {
+        toast.error("Please enter the employee name (Generated By) for Income entries.");
+        return;
+      }
+    }
+
+    if (!isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isDental && !isEverglades && !usingCategoryFields && options.show_generated_by && !form.generated_by.trim()) {
       toast.error("Please enter the employee name (Generated By).");
       return;
     }
@@ -878,44 +830,25 @@ export default function FinanceEntryForm({
       return;
     }
 
-    // ---- Category-dependent item validation ----
     let cleanItems = [];
-    let requireItems = false;
 
-    if (options.show_items && !isGoodwill) {
-      if (department === "MedTech") {
-        requireItems = MEDTECH_ITEM_CATEGORIES.includes(form.category);
-      } else {
-        requireItems = true;
+    if (requireItemsForCategory && !isGoodwill) {
+      cleanItems = items
+        .map((item) => {
+          const qty = Number(item.quantity);
+          const price = Number(item.unit_price);
+          return { item_name: item.item_name.trim(), quantity: qty, unit_price: price };
+        })
+        .filter((item) => item.item_name);
+      if (cleanItems.length === 0) {
+        toast.error("Add at least one item (name, quantity, unit price).");
+        return;
       }
-
-      if (requireItems) {
-        cleanItems = items
-          .map((item) => {
-            const qty = Number(item.quantity);
-            const price = Number(item.unit_price);
-            return { item_name: item.item_name.trim(), quantity: qty, unit_price: price };
-          })
-          .filter((item) => item.item_name);
-        if (cleanItems.length === 0) {
-          toast.error("Add at least one item (name, quantity, unit price).");
-          return;
-        }
-      } else {
-        const amount = Number(form.amount);
-        if (!Number.isFinite(amount) || amount <= 0) {
-          toast.error("Please enter a valid amount.");
-          return;
-        }
-        cleanItems = [];
-      }
-    } else {
-      if (!isGoodwill) {
-        const amount = Number(form.amount);
-        if (!Number.isFinite(amount) || amount <= 0) {
-          toast.error("Please enter a valid amount.");
-          return;
-        }
+    } else if (!isGoodwill) {
+      const amount = Number(form.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        toast.error("Please enter a valid amount.");
+        return;
       }
     }
 
@@ -929,21 +862,12 @@ export default function FinanceEntryForm({
       let body;
       let config = {};
 
-      let itemsTotal = 0;
-      if (options.show_items && cleanItems && cleanItems.length > 0) {
-        itemsTotal = cleanItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+      let itemsTotalCalc = 0;
+      if (cleanItems && cleanItems.length > 0) {
+        itemsTotalCalc = cleanItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
       }
 
       const isEditing = editingEntry && editingEntry.id !== undefined && editingEntry.id !== null;
-
-      let requireItems = false;
-      if (options.show_items && !isGoodwill) {
-        if (department === "MedTech") {
-          requireItems = MEDTECH_ITEM_CATEGORIES.includes(form.category);
-        } else {
-          requireItems = true;
-        }
-      }
 
       if (options.show_invoice && !isEditing) {
         const formData = new FormData();
@@ -974,14 +898,15 @@ export default function FinanceEntryForm({
           formData.append("employee_name", form.employee_name || "");
           formData.append("purpose", form.purpose || "");
           formData.append("vehicle_type", form.vehicle_type || "");
-          formData.append("generated_by", form.generated_by || ""); 
+          formData.append("generated_by", form.generated_by || "");
+          formData.append("client_name", form.client_name || "");
+          formData.append("gst_number", form.gst_number || "");
         }
         if (isPCM && showPCMFields) {
           formData.append("employee_name", form.employee_name || "");
           formData.append("purpose", form.purpose || "");
           formData.append("vehicle_type", form.vehicle_type || "");
         }
-        // ✅ NEW — Dental multipart fields
         if (isDental && showDentalFields) {
           formData.append("employee_name", form.employee_name || "");
           formData.append("purpose", form.purpose || "");
@@ -990,16 +915,22 @@ export default function FinanceEntryForm({
           formData.append("gst_number", form.gst_number || "");
           formData.append("generated_by", form.generated_by || "");
         }
-        if (options.show_items && !isGoodwill) {
+        if (isEverglades && showEvergladesFields) {
+          formData.append("employee_name", form.employee_name || "");
+          formData.append("purpose", form.purpose || "");
+          formData.append("vehicle_type", form.vehicle_type || "");
+          formData.append("client_name", form.client_name || "");
+          formData.append("gst_number", form.gst_number || "");
+          formData.append("generated_by", form.generated_by || "");
+        }
+        if (requireItemsForCategory && !isGoodwill) {
           formData.append("items", JSON.stringify(cleanItems || []));
-          formData.append("amount", itemsTotal);
+          formData.append("amount", itemsTotalCalc);
         } else {
           formData.append("amount", parseFloat(form.amount) || 0);
         }
         if (invoiceFile) formData.append("invoice", invoiceFile);
-        if (isITSales) {
-          formData.append("team", form.team || "");
-        }
+        if (isITSales) formData.append("team", form.team || "");
         body = formData;
         config = { headers: { "Content-Type": "multipart/form-data" } };
       } else {
@@ -1023,7 +954,7 @@ export default function FinanceEntryForm({
         if (isMedTech && showMedTechFields) {
           body.employee_name = form.employee_name || null;
           body.purpose = form.purpose || null;
-          body.generated_by = form.generated_by || null;   
+          body.generated_by = form.generated_by || null;
           body.vehicle_type = form.vehicle_type || null;
         }
         if (isPCM && showPCMFields) {
@@ -1031,15 +962,18 @@ export default function FinanceEntryForm({
           body.purpose = form.purpose || null;
           body.vehicle_type = form.vehicle_type || null;
         }
-        // ✅ NEW — Dental JSON fields
         if (isDental && showDentalFields) {
           body.employee_name = form.employee_name || null;
           body.purpose = form.purpose || null;
           body.vehicle_type = form.vehicle_type || null;
         }
-        if (isITSales) {
-          body.team = form.team || null;
+        if (isEverglades && showEvergladesFields) {
+          body.employee_name = form.employee_name || null;
+          body.purpose = form.purpose || null;
+          body.vehicle_type = form.vehicle_type || null;
+          body.generated_by = form.generated_by || null;
         }
+        if (isITSales) body.team = form.team || null;
         if (!options.show_generated_by) delete body.generated_by;
         if (!options.show_revenue_type) delete body.revenue_type;
         if (!options.show_patient_fields) {
@@ -1050,16 +984,14 @@ export default function FinanceEntryForm({
         if (!options.show_gst_number) delete body.gst_number;
         if (!options.show_gst_tax) delete body.gst_tax_percent;
         if (!options.show_tax_invoice_number) delete body.tax_invoice_number;
-        if (options.show_items && requireItems && !isGoodwill) {
+        if (requireItemsForCategory && !isGoodwill) {
           body.items = cleanItems || [];
-          body.amount = itemsTotal;
+          body.amount = itemsTotalCalc;
         } else {
           delete body.items;
           body.amount = parseFloat(form.amount) || 0;
         }
-        if (removeInvoice && isEditing) {
-          body.remove_invoice = "true";
-        }
+        if (removeInvoice && isEditing) body.remove_invoice = "true";
       }
 
       const url = `/${apiBase}/entries`;
@@ -1082,11 +1014,8 @@ export default function FinanceEntryForm({
         } else if (responseData.message) {
           errorMessage = responseData.message;
         } else {
-          try {
-            errorMessage = JSON.stringify(responseData);
-          } catch {
-            errorMessage = "An unknown error occurred.";
-          }
+          try { errorMessage = JSON.stringify(responseData); }
+          catch { errorMessage = "An unknown error occurred."; }
         }
       }
       toast.error(errorMessage);
@@ -1148,101 +1077,97 @@ export default function FinanceEntryForm({
   };
 
   /* ---------------- Standard fields renderer ---------------- */
-  const renderStandardFields = () => {
-    return (
-      <>
-        {options.show_client_name && (
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Client Name</label>
-              <input name="client_name" value={form.client_name} onChange={handleChange} placeholder="Enter the client name" className="form-control" />
-            </div>
-            {options.show_gst_number && (
-              <div className="form-group">
-                <label className="form-label">GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}</label>
-                <input name="gst_number" value={form.gst_number} onChange={handleChange} placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
-              </div>
-            )}
-          </div>
-        )}
-
-        {(options.show_gst_tax || options.show_tax_invoice_number) && (
-          <div className="form-row">
-            {options.show_gst_tax && (
-              <div className="form-group">
-                <label className="form-label">GST Tax (%)</label>
-                <input type="number" min="0" max="100" step="0.01" name="gst_tax_percent" value={form.gst_tax_percent} onChange={handleChange} placeholder="e.g. 18" className="form-control" />
-              </div>
-            )}
-            {options.show_tax_invoice_number && (
-              <div className="form-group">
-                <label className="form-label">Tax Invoice Number</label>
-                <input name="tax_invoice_number" value={form.tax_invoice_number} onChange={handleChange} placeholder="e.g. INV-2026-0142" className="form-control" />
-              </div>
-            )}
-          </div>
-        )}
-
-        {options.show_patient_fields && (
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Patient Name</label>
-              <input name="patient_name" value={form.patient_name} onChange={handleChange} placeholder="e.g. Ramesh Kumar" className="form-control" />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Patient Place</label>
-              <input name="patient_place" value={form.patient_place} onChange={handleChange} placeholder="e.g. Guntur" className="form-control" />
-            </div>
-          </div>
-        )}
-
-        {(options.show_generated_by || options.show_revenue_type) && (
-          <div className="form-row">
-            {options.show_generated_by && (
-              <div className="form-group">
-                <label className="form-label">Generated By</label>
-                <input name="generated_by" value={form.generated_by} onChange={handleChange} placeholder="e.g. John Mathew" className="form-control" />
-              </div>
-            )}
-            {options.show_revenue_type && (
-              <div className="form-group">
-                <label className="form-label">Revenue Type</label>
-                <select name="revenue_type" value={form.revenue_type} onChange={handleChange} className="form-control">
-                  {revenueTypes.map((rt) => (
-                    <option key={rt} value={rt}>{rt}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-        )}
-
-        {options.show_invoice && (
+  const renderStandardFields = () => (
+    <>
+      {options.show_client_name && (
+        <div className="form-row">
           <div className="form-group">
-            <label className="form-label">Invoice</label>
-            {editingEntry && editingEntry.invoice_url && !removeInvoice && (
-              <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
-                <a href={invoiceHref(editingEntry)} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <FileText size={15} /> <span>View current invoice</span>
-                </a>
-                <button type="button" className="btn-icon btn-icon--danger" onClick={() => setRemoveInvoice(true)} title="Remove invoice">
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            )}
-            {removeInvoice && <p className="text-muted" style={{ marginBottom: 8, fontSize: 13 }}>Current invoice will be removed when you save.</p>}
-            <input type="file" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx" onChange={handleInvoiceChange} className="form-control" />
-            <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>Accepted: PDF, JPG, PNG, GIF, WEBP, DOC, DOCX, XLS, XLSX.</p>
+            <label className="form-label">Client Name</label>
+            <input name="client_name" value={form.client_name} onChange={handleChange} placeholder="Enter the client name" className="form-control" />
           </div>
-        )}
-
-        <div className="form-group">
-          <label className="form-label">Remarks</label>
-          <textarea name="remarks" value={form.remarks} onChange={handleChange} rows={3} placeholder="Optional notes about this entry" className="form-control" />
+          {options.show_gst_number && (
+            <div className="form-group">
+              <label className="form-label">GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}</label>
+              <input name="gst_number" value={form.gst_number} onChange={handleChange} placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
+            </div>
+          )}
         </div>
-      </>
-    );
-  };
+      )}
+
+      {(options.show_gst_tax || options.show_tax_invoice_number) && (
+        <div className="form-row">
+          {options.show_gst_tax && (
+            <div className="form-group">
+              <label className="form-label">GST Tax (%)</label>
+              <input type="number" min="0" max="100" step="0.01" name="gst_tax_percent" value={form.gst_tax_percent} onChange={handleChange} placeholder="e.g. 18" className="form-control" />
+            </div>
+          )}
+          {options.show_tax_invoice_number && (
+            <div className="form-group">
+              <label className="form-label">Tax Invoice Number</label>
+              <input name="tax_invoice_number" value={form.tax_invoice_number} onChange={handleChange} placeholder="e.g. INV-2026-0142" className="form-control" />
+            </div>
+          )}
+        </div>
+      )}
+
+      {options.show_patient_fields && (
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">Patient Name</label>
+            <input name="patient_name" value={form.patient_name} onChange={handleChange} placeholder="e.g. Ramesh Kumar" className="form-control" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Patient Place</label>
+            <input name="patient_place" value={form.patient_place} onChange={handleChange} placeholder="e.g. Guntur" className="form-control" />
+          </div>
+        </div>
+      )}
+
+      {(options.show_generated_by || options.show_revenue_type) && (
+        <div className="form-row">
+          {options.show_generated_by && (
+            <div className="form-group">
+              <label className="form-label">Generated By</label>
+              <input name="generated_by" value={form.generated_by} onChange={handleChange} placeholder="e.g. John Mathew" className="form-control" />
+            </div>
+          )}
+          {options.show_revenue_type && (
+            <div className="form-group">
+              <label className="form-label">Revenue Type</label>
+              <select name="revenue_type" value={form.revenue_type} onChange={handleChange} className="form-control">
+                {revenueTypes.map((rt) => (<option key={rt} value={rt}>{rt}</option>))}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
+
+      {options.show_invoice && (
+        <div className="form-group">
+          <label className="form-label">Invoice</label>
+          {editingEntry && editingEntry.invoice_url && !removeInvoice && (
+            <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
+              <a href={invoiceHref(editingEntry)} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <FileText size={15} /> <span>View current invoice</span>
+              </a>
+              <button type="button" className="btn-icon btn-icon--danger" onClick={() => setRemoveInvoice(true)} title="Remove invoice">
+                <Trash2 size={15} />
+              </button>
+            </div>
+          )}
+          {removeInvoice && <p className="text-muted" style={{ marginBottom: 8, fontSize: 13 }}>Current invoice will be removed when you save.</p>}
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx" onChange={handleInvoiceChange} className="form-control" />
+          <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>Accepted: PDF, JPG, PNG, GIF, WEBP, DOC, DOCX, XLS, XLSX.</p>
+        </div>
+      )}
+
+      <div className="form-group">
+        <label className="form-label">Remarks</label>
+        <textarea name="remarks" value={form.remarks} onChange={handleChange} rows={3} placeholder="Optional notes about this entry" className="form-control" />
+      </div>
+    </>
+  );
 
   const renderOfficeAdminFields = () => {
     if (!showOfficeFields) return null;
@@ -1358,53 +1283,54 @@ export default function FinanceEntryForm({
   };
 
   const renderMedTechFields = () => {
-  if (!showMedTechFields) return null;
-  const config = medTechFieldConfig;
-  return (
-    <>
-      {config.showEmployeeName && (
-        <div className="form-group">
-          <label className="form-label">{config.labelName || "Name"}</label>
-          <input name="employee_name" value={form.employee_name || ""} onChange={handleChange} placeholder={`Enter ${config.labelName || "name"}`} className="form-control" />
-        </div>
-      )}
-      {config.showVehicleType && (
-        <div className="form-group">
-          <label className="form-label">{config.labelVehicle || "Vehicle Type"}</label>
-          <input name="vehicle_type" value={form.vehicle_type || ""} onChange={handleChange} placeholder="e.g. Car, Bike, Cab" className="form-control" />
-        </div>
-      )}
-      <div className="form-group">
-        <label className="form-label">Generated By {form.entry_type === "Income" && <span style={{ color: "red" }}>*</span>}</label>
-        <input name="generated_by" value={form.generated_by || ""} onChange={handleChange} placeholder="Enter employee name" className="form-control" />
-      </div>
-      <div className="form-row">
-        {options.show_client_name && (
+    if (!showMedTechFields) return null;
+    const config = medTechFieldConfig;
+    return (
+      <>
+        {config.showEmployeeName && (
           <div className="form-group">
-            <label className="form-label">Client Name</label>
-            <input name="client_name" value={form.client_name || ""} onChange={handleChange} placeholder="Enter the client name" className="form-control" />
+            <label className="form-label">{config.labelName || "Name"}</label>
+            <input name="employee_name" value={form.employee_name || ""} onChange={handleChange} placeholder={`Enter ${config.labelName || "name"}`} className="form-control" />
           </div>
         )}
-        {options.show_gst_number && (
+        {config.showVehicleType && (
           <div className="form-group">
-            <label className="form-label">GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}</label>
-            <input name="gst_number" value={form.gst_number || ""} onChange={handleChange} placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
+            <label className="form-label">{config.labelVehicle || "Vehicle Type"}</label>
+            <input name="vehicle_type" value={form.vehicle_type || ""} onChange={handleChange} placeholder="e.g. Car, Bike, Cab" className="form-control" />
           </div>
         )}
-      </div>
-      {config.showPurpose && (
         <div className="form-group">
-          <label className="form-label">Purpose</label>
-          <input name="purpose" value={form.purpose || ""} onChange={handleChange} placeholder="Brief purpose" className="form-control" />
+          <label className="form-label">Generated By {form.entry_type === "Income" && <span style={{ color: "red" }}>*</span>}</label>
+          <input name="generated_by" value={form.generated_by || ""} onChange={handleChange} placeholder="Enter employee name" className="form-control" />
         </div>
-      )}
-      <div className="form-group">
-        <label className="form-label">Remarks <span style={{ color: "red" }}>*</span></label>
-        <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Detailed remarks (required)" className="form-control" required />
-      </div>
-    </>
-  );
-};
+        <div className="form-row">
+          {options.show_client_name && (
+            <div className="form-group">
+              <label className="form-label">Client Name</label>
+              <input name="client_name" value={form.client_name || ""} onChange={handleChange} placeholder="Enter the client name" className="form-control" />
+            </div>
+          )}
+          {options.show_gst_number && (
+            <div className="form-group">
+              <label className="form-label">GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}</label>
+              <input name="gst_number" value={form.gst_number || ""} onChange={handleChange} placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
+            </div>
+          )}
+        </div>
+        {config.showPurpose && (
+          <div className="form-group">
+            <label className="form-label">Purpose</label>
+            <input name="purpose" value={form.purpose || ""} onChange={handleChange} placeholder="Brief purpose" className="form-control" />
+          </div>
+        )}
+        <div className="form-group">
+          <label className="form-label">Remarks <span style={{ color: "red" }}>*</span></label>
+          <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Detailed remarks (required)" className="form-control" required />
+        </div>
+      </>
+    );
+  };
+
   const renderPCMFields = () => {
     if (!showPCMFields) return null;
     const config = pcmFieldConfig;
@@ -1436,7 +1362,6 @@ export default function FinanceEntryForm({
     );
   };
 
-  // ✅ NEW — Dental fields renderer (mirrors IT Sales style)
   const renderDentalFields = () => {
     if (!showDentalFields) return null;
     const config = dentalFieldConfig;
@@ -1486,7 +1411,55 @@ export default function FinanceEntryForm({
     );
   };
 
-  /* ---------------- Ledger fields ---------------- */
+  const renderEvergladesFields = () => {
+    if (!showEvergladesFields) return null;
+    const config = evergladesFieldConfig;
+    return (
+      <>
+        {config.showEmployeeName && (
+          <div className="form-group">
+            <label className="form-label">{config.labelName || "Name"}</label>
+            <input name="employee_name" value={form.employee_name || ""} onChange={handleChange} placeholder={`Enter ${config.labelName || "name"}`} className="form-control" />
+          </div>
+        )}
+        {config.showVehicleType && (
+          <div className="form-group">
+            <label className="form-label">{config.labelVehicle || "Vehicle Type"}</label>
+            <input name="vehicle_type" value={form.vehicle_type || ""} onChange={handleChange} placeholder="e.g. Car, Bike, Cab" className="form-control" />
+          </div>
+        )}
+        <div className="form-group">
+          <label className="form-label">Generated By {form.entry_type === "Income" && <span style={{ color: "red" }}>*</span>}</label>
+          <input name="generated_by" value={form.generated_by || ""} onChange={handleChange} placeholder="Enter employee name" className="form-control" />
+        </div>
+        <div className="form-row">
+          {options.show_client_name && (
+            <div className="form-group">
+              <label className="form-label">Client Name</label>
+              <input name="client_name" value={form.client_name || ""} onChange={handleChange} placeholder="Enter the client name" className="form-control" />
+            </div>
+          )}
+          {options.show_gst_number && (
+            <div className="form-group">
+              <label className="form-label">GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}</label>
+              <input name="gst_number" value={form.gst_number || ""} onChange={handleChange} placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
+            </div>
+          )}
+        </div>
+        {config.showPurpose && (
+          <div className="form-group">
+            <label className="form-label">Purpose</label>
+            <input name="purpose" value={form.purpose || ""} onChange={handleChange} placeholder="Brief purpose" className="form-control" />
+          </div>
+        )}
+        <div className="form-group">
+          <label className="form-label">Remarks <span style={{ color: "red" }}>*</span></label>
+          <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Detailed remarks (required)" className="form-control" required />
+        </div>
+      </>
+    );
+  };
+
   const renderLedgerFields = () => {
     const isEditingLedger = editingEntry && editingEntry._type === "ledger";
 
@@ -1677,43 +1650,115 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {/* ===== ITEMS SECTION ===== */}
-          {options.show_items && !isGoodwill && (
-            (department !== "MedTech" || (department === "MedTech" && MEDTECH_ITEM_CATEGORIES.includes(form.category))) ? (
-              <div className="form-group">
-                <label className="form-label">Items</label>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {items.map((item) => (
-                    <div key={item._key} style={{ display: "grid", gridTemplateColumns: "1fr 90px 120px 32px", gap: 8, alignItems: "center" }}>
+          {/* ===== ITEMS SECTION (only when required for this category) ===== */}
+          {requireItemsForCategory && !isGoodwill && (
+            <div className="form-group">
+              <label className="form-label">Items</label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {items.map((item) => {
+                  const lineTotal =
+                    (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
+                  return (
+                    <div
+                      key={item._key}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 90px 120px 100px 32px",
+                        gap: 8,
+                        alignItems: "center",
+                      }}
+                    >
                       <input value={item.item_name} onChange={(e) => handleItemChange(item._key, "item_name", e.target.value)} placeholder="Item name" className="form-control" />
                       <input type="number" min="0" step="0.01" value={item.quantity} onChange={(e) => handleItemChange(item._key, "quantity", e.target.value)} placeholder="Qty" className="form-control" />
                       <input type="number" min="0" step="0.01" value={item.unit_price} onChange={(e) => handleItemChange(item._key, "unit_price", e.target.value)} placeholder="Unit price" className="form-control" />
+                      <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>
+                        {formatCurrency(lineTotal)}
+                      </span>
                       <button type="button" className="btn-icon btn-icon--danger" onClick={() => handleRemoveItem(item._key)} title="Remove item" disabled={items.length === 1}>
                         <Trash2 size={15} />
                       </button>
                     </div>
-                  ))}
-                </div>
-                <button type="button" onClick={handleAddItem} className="btn btn-secondary" style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <Plus size={15} /> Add New Item
-                </button>
-                <div style={{ marginTop: 12, textAlign: "right" }}>
-                  {options.show_gst_tax ? (
-                    <>
-                      <div style={{ fontSize: 13, color: "var(--color-ink-500)" }}>Subtotal: {formatCurrency(baseAmount)}</div>
-                      <div style={{ fontSize: 13, color: "var(--color-ink-500)" }}>GST Tax ({gstTaxPercentValue || 0}%): {formatCurrency(gstTaxAmount)}</div>
-                      <div style={{ fontWeight: 700, marginTop: 4 }}>Total Amount: {formatCurrency(grandTotal)}</div>
-                    </>
-                  ) : (
-                    <div style={{ fontWeight: 600 }}>Total Amount: {formatCurrency(itemsTotal)}</div>
+                  );
+                })}
+              </div>
+              <button type="button" onClick={handleAddItem} className="btn btn-secondary" style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <Plus size={15} /> Add New Item
+              </button>
+
+              {/* ✅ GST inputs alongside items */}
+              {options.show_gst_tax && (
+                <div className="form-row" style={{ marginTop: 12 }}>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label className="form-label">
+                      GST Tax (%) <span style={{ color: "#9ca3af", fontWeight: 400 }}>— applies to subtotal</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      name="gst_tax_percent"
+                      value={form.gst_tax_percent}
+                      onChange={handleChange}
+                      placeholder="e.g. 18"
+                      className="form-control"
+                    />
+                  </div>
+                  {options.show_tax_invoice_number && (
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Tax Invoice Number</label>
+                      <input
+                        name="tax_invoice_number"
+                        value={form.tax_invoice_number}
+                        onChange={handleChange}
+                        placeholder="e.g. INV-2026-0142"
+                        className="form-control"
+                      />
+                    </div>
                   )}
                 </div>
+              )}
+
+              {options.show_gst_number && (
+                <div className="form-group">
+                  <label className="form-label">
+                    GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}
+                  </label>
+                  <input
+                    name="gst_number"
+                    value={form.gst_number}
+                    onChange={handleChange}
+                    placeholder="e.g. 22AAAAA0000A1Z5"
+                    className="form-control"
+                  />
+                </div>
+              )}
+
+              {/* Subtotal + GST + Total summary */}
+              <div style={{ marginTop: 12, textAlign: "right" }}>
+                {options.show_gst_tax ? (
+                  <>
+                    <div style={{ fontSize: 13, color: "var(--color-ink-500)" }}>
+                      Subtotal: {formatCurrency(itemsTotal)}
+                    </div>
+                    <div style={{ fontSize: 13, color: "var(--color-ink-500)" }}>
+                      GST Tax ({gstTaxPercentValue || 0}%): {formatCurrency(gstTaxAmount)}
+                    </div>
+                    <div style={{ fontWeight: 700, marginTop: 4 }}>
+                      Total Amount: {formatCurrency(grandTotal)}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontWeight: 600 }}>
+                    Total Amount: {formatCurrency(itemsTotal)}
+                  </div>
+                )}
               </div>
-            ) : null
+            </div>
           )}
 
-          {/* ===== AMOUNT FIELD ===== */}
-          {(!options.show_items || (department === "MedTech" && !MEDTECH_ITEM_CATEGORIES.includes(form.category))) && !isLedger && !isGoodwill && !isSalaryCategory && (
+          {/* ===== AMOUNT FIELD (only when NOT using items) ===== */}
+          {!requireItemsForCategory && !isLedger && !isGoodwill && !isSalaryCategory && (
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Amount (₹)</label>
@@ -1726,7 +1771,7 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {(!options.show_items || (department === "MedTech" && !MEDTECH_ITEM_CATEGORIES.includes(form.category))) && options.show_gst_tax && !isLedger && !isGoodwill && !isSalaryCategory && (
+          {!requireItemsForCategory && options.show_gst_tax && !isLedger && !isGoodwill && !isSalaryCategory && (
             <p className="text-muted" style={{ textAlign: "right", fontSize: 13, marginTop: -8 }}>
               GST Tax ({gstTaxPercentValue || 0}%): {formatCurrency(gstTaxAmount)}
               {" · "}
@@ -1734,7 +1779,7 @@ export default function FinanceEntryForm({
             </p>
           )}
 
-          {/* ===== Salary warnings ===== */}
+          {/* ===== SALARY WARNINGS ===== */}
           {isOfficeAdmin && form.category === salaryCategoryName && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salary must be entered by Corporate Management only.</strong>
@@ -1755,33 +1800,34 @@ export default function FinanceEntryForm({
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for IT Development employees.</p>
             </div>
           )}
-
           {isITSalesSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for IT Sales employees.</p>
             </div>
           )}
-
           {isMedTechSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for MedTech employees.</p>
             </div>
           )}
-
           {isPCMSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for PCM employees.</p>
             </div>
           )}
-
-          {/* ✅ NEW — Dental salary warning */}
           {isDentalSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for Dental employees.</p>
+            </div>
+          )}
+          {isEvergladesSalaryCategory && (
+            <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
+              <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
+              <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for Everglades employees.</p>
             </div>
           )}
 
@@ -1852,10 +1898,8 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {/* ===== LEDGER FIELDS ===== */}
           {isLedger && renderLedgerFields()}
 
-          {/* ===== GOODWILL FIELDS ===== */}
           {isGoodwill && (
             <>
               <div className="form-group">
@@ -1882,67 +1926,14 @@ export default function FinanceEntryForm({
             </>
           )}
 
-          {/* ===== OFFICE ADMIN FIELDS ===== */}
-          {isOfficeAdmin && !isOfficeAdminSalary && !isLedger && (
-            <>
-              {officeFieldConfig && (
-                <>
-                  {officeFieldConfig.showEmployeeName && (
-                    <div className="form-group">
-                      <label className="form-label">{officeFieldConfig.labelName || "Name"}</label>
-                      <input name="employee_name" value={form.employee_name || ""} onChange={handleChange} placeholder={`Enter ${officeFieldConfig.labelName || "name"}`} className="form-control" />
-                    </div>
-                  )}
-                  {officeFieldConfig.showVehicleType && (
-                    <div className="form-group">
-                      <label className="form-label">{officeFieldConfig.labelVehicle || "Vehicle Type"}</label>
-                      <input name="vehicle_type" value={form.vehicle_type || ""} onChange={handleChange} placeholder="e.g. Car, Bike, Cab" className="form-control" />
-                    </div>
-                  )}
-                  {officeFieldConfig.showPurpose && (
-                    <div className="form-group">
-                      <label className="form-label">Purpose / Remarks</label>
-                      <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Enter purpose or additional notes" className="form-control" />
-                    </div>
-                  )}
-                </>
-              )}
-              {!officeFieldConfig?.showPurpose && (
-                <div className="form-group">
-                  <label className="form-label">Remarks</label>
-                  <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Optional notes" className="form-control" />
-                </div>
-              )}
-            </>
-          )}
-
-          {/* ===== IT FIELDS ===== */}
-          {isIT && !isITSalaryCategory && !isLedger && (
-            showITFields ? renderITFields() : renderStandardFields()
-          )}
-
-          {/* ===== IT SALES FIELDS ===== */}
-          {isITSales && !isITSalesSalaryCategory && !isLedger && (
-            showITSalesFields ? renderITSalesFields() : renderStandardFields()
-          )}
-
-          {/* ===== MEDTECH FIELDS ===== */}
-          {isMedTech && !isMedTechSalaryCategory && !isLedger && !isGoodwill && (
-            showMedTechFields ? renderMedTechFields() : renderStandardFields()
-          )}
-
-          {/* ===== PCM FIELDS ===== */}
-          {isPCM && !isPCMSalaryCategory && !isLedger && (
-            showPCMFields ? renderPCMFields() : renderStandardFields()
-          )}
-
-          {/* ✅ NEW — DENTAL FIELDS */}
-          {isDental && !isDentalSalaryCategory && !isLedger && (
-            showDentalFields ? renderDentalFields() : renderStandardFields()
-          )}
-
-          {/* ===== STANDARD FIELDS ===== */}
-          {!isSalaryCategory && !isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isDental && !isLedger && !isGoodwill && renderStandardFields()}
+          {isOfficeAdmin && !isOfficeAdminSalary && !isLedger && renderOfficeAdminFields()}
+          {isIT && !isITSalaryCategory && !isLedger && (showITFields ? renderITFields() : renderStandardFields())}
+          {isITSales && !isITSalesSalaryCategory && !isLedger && (showITSalesFields ? renderITSalesFields() : renderStandardFields())}
+          {isMedTech && !isMedTechSalaryCategory && !isLedger && !isGoodwill && (showMedTechFields ? renderMedTechFields() : renderStandardFields())}
+          {isPCM && !isPCMSalaryCategory && !isLedger && (showPCMFields ? renderPCMFields() : renderStandardFields())}
+          {isDental && !isDentalSalaryCategory && !isLedger && (showDentalFields ? renderDentalFields() : renderStandardFields())}
+          {isEverglades && !isEvergladesSalaryCategory && !isLedger && !isGoodwill && (showEvergladesFields ? renderEvergladesFields() : renderStandardFields())}
+          {!isSalaryCategory && !isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isDental && !isEverglades && !isLedger && !isGoodwill && renderStandardFields()}
 
           <div className="modal-footer">
             <button type="button" onClick={onClose} className="btn btn-secondary" disabled={saving}>Cancel</button>
@@ -1954,7 +1945,8 @@ export default function FinanceEntryForm({
                 isITSalesSalaryCategory ||
                 isMedTechSalaryCategory ||
                 isPCMSalaryCategory ||
-                isDentalSalaryCategory ||   // ✅ NEW
+                isDentalSalaryCategory ||
+                isEvergladesSalaryCategory ||
                 isOfficeAdminSalary
               }
               className="btn btn-primary"

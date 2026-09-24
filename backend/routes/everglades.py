@@ -1,20 +1,23 @@
-# backend/routes/medtech.py
+# backend/routes/everglades.py
 import json
 from datetime import datetime, date
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import get_jwt_identity
 
-from models import db, FinanceEntry, FinanceEntryItem, ENTRY_TYPES, DEPARTMENT_CONFIG, MedTechLedger
+from models import (
+    db, FinanceEntry, FinanceEntryItem, ENTRY_TYPES,
+    DEPARTMENT_CONFIG, EvergladesLedger,
+)
 from utils import role_required
 from file_utils import save_invoice_file, delete_invoice_file
 
-DEPARTMENT = "MedTech"
+DEPARTMENT = "Everglades"
 CONFIG = DEPARTMENT_CONFIG[DEPARTMENT]
 
-# ✅ Categories that require item-level details
-MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "B2B Revenue", "B2C Revenue"]
+everglades_bp = Blueprint("everglades", __name__, url_prefix="/api/everglades")
 
-medtech_bp = Blueprint("medtech", __name__, url_prefix="/api/medtech")
+# Categories that require item-level details for Everglades
+EVERGLADES_ITEM_CATEGORIES = ["Pharmaceuticals & Inventory", "Supplies & Equipments"]
 
 
 # ==================== HELPERS ====================
@@ -88,10 +91,12 @@ def _parse_gst_tax_percent(raw_value):
 
 
 # ==================== OPTIONS ====================
-@medtech_bp.route("/options", methods=["GET"])
-@role_required("MedTech")
+@everglades_bp.route("/options", methods=["GET"])
+@role_required("Everglades")
 def options():
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
+    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
+        "is_salary_category", "Personnel & Payroll"
+    )
     return jsonify({
         "department": DEPARTMENT,
         "entry_types": ["Income", "Expenses", "Ledger"],
@@ -112,8 +117,8 @@ def options():
 
 
 # ==================== CLIENT SUGGESTIONS ====================
-@medtech_bp.route("/clients", methods=["GET"])
-@role_required("MedTech")
+@everglades_bp.route("/clients", methods=["GET"])
+@role_required("Everglades")
 def get_clients():
     clients = db.session.query(FinanceEntry.client_name) \
         .filter(FinanceEntry.department == DEPARTMENT, FinanceEntry.client_name.isnot(None)) \
@@ -123,8 +128,8 @@ def get_clients():
 
 
 # ==================== CREATE ENTRY ====================
-@medtech_bp.route("/entries", methods=["POST"])
-@role_required("MedTech")
+@everglades_bp.route("/entries", methods=["POST"])
+@role_required("Everglades")
 def create_entry():
     is_json = request.is_json
     if is_json:
@@ -159,7 +164,7 @@ def create_entry():
         if total_amount <= 0:
             return jsonify({"message": "Total amount must be greater than 0."}), 400
 
-        ledger = MedTechLedger(
+        ledger = EvergladesLedger(
             customer_name=customer_name,
             entry_date=entry_date,
             total_amount=total_amount,
@@ -172,7 +177,7 @@ def create_entry():
         db.session.commit()
         return jsonify({
             "message": "Ledger entry created.",
-            "entry": ledger.to_dict()
+            "entry": ledger.to_dict(),
         }), 201
 
     # ---- REGULAR FINANCE ENTRY (non-Ledger) ----
@@ -189,7 +194,9 @@ def create_entry():
     vehicle_type = (data.get("vehicle_type") or "").strip() or None
     amount = data.get("amount")
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
+    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
+        "is_salary_category", "Personnel & Payroll"
+    )
     is_salary = (entry_type == "Expenses" and category == salary_category)
 
     errors = []
@@ -205,9 +212,8 @@ def create_entry():
     if category == "Goodwill" and not client_name:
         errors.append("Client name is required for Goodwill entries.")
 
-    # ---- Category‑dependent item validation ----
     if not is_salary:
-        require_items = CONFIG["show_items"] and category in MEDTECH_ITEM_CATEGORIES
+        require_items = CONFIG["show_items"] and category in EVERGLADES_ITEM_CATEGORIES
 
         if entry_type == "Income" and not generated_by and category != "Goodwill":
             errors.append("generated_by (employee name) is required for Income entries.")
@@ -278,7 +284,9 @@ def create_entry():
         client_name=client_name,
         gst_number=gst_number if not is_salary else None,
         tax_invoice_number=tax_invoice_number if not is_salary else None,
-        amount=total_amount if not is_salary and category != "Goodwill" else (float(amount) if category == "Goodwill" else 0),
+        amount=total_amount if not is_salary and category != "Goodwill" else (
+            float(amount) if category == "Goodwill" else 0
+        ),
         base_amount=base_amount,
         gst_tax_percent=gst_tax_percent,
         gst_tax_amount=gst_tax_amount,
@@ -302,8 +310,8 @@ def create_entry():
 
 
 # ==================== LIST ENTRIES ====================
-@medtech_bp.route("/entries", methods=["GET"])
-@role_required("MedTech")
+@everglades_bp.route("/entries", methods=["GET"])
+@role_required("Everglades")
 def list_entries():
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
@@ -333,22 +341,26 @@ def list_entries():
             (FinanceEntry.tax_invoice_number.ilike(like)) |
             (FinanceEntry.remarks.ilike(like))
         )
-    finance_entries = finance_query.order_by(FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()).all()
+    finance_entries = finance_query.order_by(
+        FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()
+    ).all()
 
     ledger_entries = []
     if include_ledger:
-        ledger_query = MedTechLedger.query
+        ledger_query = EvergladesLedger.query
         if start_date:
-            ledger_query = ledger_query.filter(MedTechLedger.entry_date >= start_date)
+            ledger_query = ledger_query.filter(EvergladesLedger.entry_date >= start_date)
         if end_date:
-            ledger_query = ledger_query.filter(MedTechLedger.entry_date <= end_date)
+            ledger_query = ledger_query.filter(EvergladesLedger.entry_date <= end_date)
         if search:
             like = f"%{search}%"
             ledger_query = ledger_query.filter(
-                (MedTechLedger.customer_name.ilike(like)) |
-                (MedTechLedger.remarks.ilike(like))
+                (EvergladesLedger.customer_name.ilike(like)) |
+                (EvergladesLedger.remarks.ilike(like))
             )
-        ledger_entries = ledger_query.order_by(MedTechLedger.entry_date.desc(), MedTechLedger.id.desc()).all()
+        ledger_entries = ledger_query.order_by(
+            EvergladesLedger.entry_date.desc(), EvergladesLedger.id.desc()
+        ).all()
 
     combined = []
     for fe in finance_entries:
@@ -376,12 +388,12 @@ def list_entries():
 
 
 # ==================== UPDATE ENTRY ====================
-@medtech_bp.route("/entries/<int:entry_id>", methods=["PUT"])
-@role_required("MedTech")
+@everglades_bp.route("/entries/<int:entry_id>", methods=["PUT"])
+@role_required("Everglades")
 def update_entry(entry_id):
     entry = FinanceEntry.query.filter_by(id=entry_id, department=DEPARTMENT).first()
     if not entry:
-        ledger = MedTechLedger.query.get(entry_id)
+        ledger = EvergladesLedger.query.get(entry_id)
         if ledger:
             data = request.get_json() or {}
             if "customer_name" in data:
@@ -416,12 +428,15 @@ def update_entry(entry_id):
     data = request.get_json() or {}
     errors = []
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
+    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
+        "is_salary_category", "Personnel & Payroll"
+    )
     new_category = data.get("category", entry.category)
     new_entry_type = data.get("entry_type", entry.entry_type)
 
-    require_items = CONFIG["show_items"] and new_category in MEDTECH_ITEM_CATEGORIES
+    require_items = CONFIG["show_items"] and new_category in EVERGLADES_ITEM_CATEGORIES
 
+    # ---- Goodwill client_name validation ----
     if new_category == "Goodwill":
         client_name = (data.get("client_name") or "").strip()
         if not client_name:
@@ -429,6 +444,7 @@ def update_entry(entry_id):
         else:
             entry.client_name = client_name
 
+    # ---- Update simple fields ----
     if "entry_type" in data and data["entry_type"] in ENTRY_TYPES:
         entry.entry_type = data["entry_type"]
     if "category" in data:
@@ -474,6 +490,7 @@ def update_entry(entry_id):
             if parsed:
                 entry.entry_date = parsed
 
+    # ---- Amount and Items handling ----
     amount_from_request = data.get("amount")
     if new_category == "Goodwill":
         if amount_from_request is not None and amount_from_request != "":
@@ -530,6 +547,7 @@ def update_entry(entry_id):
             entry.gst_tax_amount = gst_tax_amount
             entry.amount = round(base_amount + gst_tax_amount, 2)
 
+    # ---- Invoice file (skip for Goodwill) ----
     if request.files and new_category != "Goodwill":
         invoice_file = request.files.get("invoice")
         if invoice_file and invoice_file.filename:
@@ -556,8 +574,8 @@ def update_entry(entry_id):
 
 
 # ==================== DELETE ENTRY ====================
-@medtech_bp.route("/entries/<int:entry_id>", methods=["DELETE"])
-@role_required("MedTech")
+@everglades_bp.route("/entries/<int:entry_id>", methods=["DELETE"])
+@role_required("Everglades")
 def delete_entry(entry_id):
     entry = FinanceEntry.query.filter_by(id=entry_id, department=DEPARTMENT).first()
     if entry:
@@ -566,7 +584,7 @@ def delete_entry(entry_id):
         db.session.commit()
         return jsonify({"message": "Entry deleted."}), 200
 
-    ledger = MedTechLedger.query.get(entry_id)
+    ledger = EvergladesLedger.query.get(entry_id)
     if ledger:
         db.session.delete(ledger)
         db.session.commit()
@@ -576,26 +594,28 @@ def delete_entry(entry_id):
 
 
 # ==================== LEDGER HISTORY ====================
-@medtech_bp.route("/ledger/history", methods=["GET"])
-@role_required("MedTech")
+@everglades_bp.route("/ledger/history", methods=["GET"])
+@role_required("Everglades")
 def get_ledger_history():
     customer = request.args.get("customer", "").strip()
     if not customer:
         return jsonify({"history": []}), 200
-    entries = MedTechLedger.query.filter_by(customer_name=customer).order_by(
-        MedTechLedger.entry_date.asc(), MedTechLedger.id.asc()
+    entries = EvergladesLedger.query.filter_by(customer_name=customer).order_by(
+        EvergladesLedger.entry_date.asc(), EvergladesLedger.id.asc()
     ).all()
     return jsonify({"history": [e.to_dict() for e in entries]}), 200
 
 
 # ==================== SUMMARY ====================
-@medtech_bp.route("/summary", methods=["GET"])
-@role_required("MedTech")
+@everglades_bp.route("/summary", methods=["GET"])
+@role_required("Everglades")
 def finance_summary():
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
 
-    query = FinanceEntry.query.filter_by(department=DEPARTMENT).filter(FinanceEntry.category != "Ledger")
+    query = FinanceEntry.query.filter_by(department=DEPARTMENT).filter(
+        FinanceEntry.category != "Ledger"
+    )
     if start_date:
         query = query.filter(FinanceEntry.entry_date >= start_date)
     if end_date:
@@ -605,17 +625,15 @@ def finance_summary():
     total_income = sum(float(e.amount) for e in finance_entries if e.entry_type == "Income")
     total_expenses = sum(float(e.amount) for e in finance_entries if e.entry_type == "Expenses")
 
-    ledger_query = MedTechLedger.query
+    ledger_query = EvergladesLedger.query
     if start_date:
-        ledger_query = ledger_query.filter(MedTechLedger.entry_date >= start_date)
+        ledger_query = ledger_query.filter(EvergladesLedger.entry_date >= start_date)
     if end_date:
-        ledger_query = ledger_query.filter(MedTechLedger.entry_date <= end_date)
+        ledger_query = ledger_query.filter(EvergladesLedger.entry_date <= end_date)
     ledger_entries = ledger_query.all()
     total_expenses += sum(float(e.total_amount) for e in ledger_entries)
 
-    all_items = []
-    for fe in finance_entries:
-        all_items.append(fe)
+    all_items = list(finance_entries)
     for le in ledger_entries:
         class Dummy:
             pass

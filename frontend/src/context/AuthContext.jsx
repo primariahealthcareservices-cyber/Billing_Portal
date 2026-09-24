@@ -15,7 +15,8 @@ export const ROLE_ROUTES = {
   Adminstrationfunctionalunit: "/dashboard/adminfunctionalunit",
   ResearchDevelopment: "/dashboard/researchdevelopment",
   SalesEnterprise: "/dashboard/salesenterprise",
-   Dental: "/dashboard/dental",
+  Dental: "/dashboard/dental",
+  Everglades: "/dashboard/everglades",   // ✅ NEW — fixes silent redirect failure
 };
 
 export function AuthProvider({ children }) {

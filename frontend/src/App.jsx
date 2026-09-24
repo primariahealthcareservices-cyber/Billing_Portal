@@ -1,3 +1,4 @@
+// frontend/src/App.jsx
 import React from "react";
 import { Routes, Route } from "react-router-dom";
 import Login from "./pages/Login.jsx";
@@ -13,6 +14,7 @@ import AdminFunctionalUnitDashboard from "./pages/dashboards/AdminFunctionalUnit
 import ResearchDevelopmentDashboard from "./pages/dashboards/ResearchDevelopmentDashboard.jsx";
 import SalesEnterpriseDashboard from "./pages/dashboards/SalesEnterpriseDashboard.jsx";
 import DentalDashboard from "./pages/dashboards/DentalDashboard.jsx";
+import EvergladesDashboard from "./pages/dashboards/EvergladesDashboard.jsx";
 
 export default function App() {
   return (
@@ -84,13 +86,13 @@ export default function App() {
         }
       />
       <Route
-  path="/dashboard/salesenterprise"
-  element={
-    <ProtectedRoute allowedRoles={["SalesEnterprise"]}>
-      <SalesEnterpriseDashboard />
-    </ProtectedRoute>
-  }
-/>
+        path="/dashboard/salesenterprise"
+        element={
+          <ProtectedRoute allowedRoles={["SalesEnterprise"]}>
+            <SalesEnterpriseDashboard />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/dashboard/admin"
         element={
@@ -100,7 +102,6 @@ export default function App() {
         }
       />
 
-      {/* NEW: Dental dashboard — path matches ROLE_ROUTES.Dental */}
       <Route
         path="/dashboard/dental"
         element={
@@ -108,7 +109,16 @@ export default function App() {
             <DentalDashboard />
           </ProtectedRoute>
         }
-        />
+      />
+
+      <Route
+        path="/dashboard/everglades"
+        element={
+          <ProtectedRoute allowedRoles={["Everglades"]}>
+            <EvergladesDashboard />
+          </ProtectedRoute>
+        }
+      />
 
       <Route path="*" element={<Login />} />
     </Routes>

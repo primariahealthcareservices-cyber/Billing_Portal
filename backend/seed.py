@@ -1,18 +1,22 @@
+# backend/seed.py
 from app import create_app
 from models import db, User
 
 DEMO_USERS = [
-    {"name": "Raj", "email": "superadmin@primaria.com", "password": "Primaria@123", "role": "SuperAdmin", "department": "Administration"},
-    {"name": "Subbu",           "email": "it@primaria.com",         "password": "Primaria@123",   "role": "IT",         "department": "IT"},
-    {"name": "Manideep",           "email": "itsales@primaria.com",         "password": "Primaria@123",   "role": "IT Sales",         "department": "IT Sales"},
-    {"name": "Swarupa",        "email": "pcm@primaria.com",        "password": "Primaria@123",  "role": "PCM",        "department": "PCM"},
-    {"name": "Injuma",     "email": "medtech@primaria.com",    "password": "Primaria@123",  "role": "MedTech",    "department": "MedTech"},
-    {"name": "Afroz Shaik",     "email": "financehub@primaria.com",    "password": "Primaria@123",  "role": "Corporate",    "department": "Corporate"},
-    {"name": "Kishore M",     "email": "adminstrationfunctionalunit@primaria.com",    "password": "Primaria@123",  "role": "Adminstrationfunctionalunit",    "department": "Adminstrationfunctionalunit"},
-    {"name": "Afreed",     "email": "rd@primaria.com",    "password": "Primaria@123",  "role": "ResearchDevelopment",    "department": "ResearchDevelopment"},
-    {"name": "Kumar M",      "email": "caredx@primaria.com",     "password": "Primaria@123",  "role": "Caredx",     "department": "Caredx"},
+    {"name": "Raj",                    "email": "superadmin@primaria.com",                     "password": "Primaria@123", "role": "SuperAdmin",                  "department": "Administration"},
+    {"name": "Subbu",                  "email": "it@primaria.com",                             "password": "Primaria@123", "role": "IT",                          "department": "IT"},
+    {"name": "Manideep",               "email": "itsales@primaria.com",                        "password": "Primaria@123", "role": "IT Sales",                    "department": "IT Sales"},
+    {"name": "Swarupa",                "email": "pcm@primaria.com",                            "password": "Primaria@123", "role": "PCM",                         "department": "PCM"},
+    {"name": "Injuma",                 "email": "medtech@primaria.com",                        "password": "Primaria@123", "role": "MedTech",                     "department": "MedTech"},
+    {"name": "Afroz Shaik",            "email": "financehub@primaria.com",                     "password": "Primaria@123", "role": "Corporate",                   "department": "Corporate"},
+    {"name": "Kishore M",              "email": "adminstrationfunctionalunit@primaria.com",    "password": "Primaria@123", "role": "Adminstrationfunctionalunit", "department": "Adminstrationfunctionalunit"},
+    {"name": "Afreed",                 "email": "rd@primaria.com",                             "password": "Primaria@123", "role": "ResearchDevelopment",         "department": "ResearchDevelopment"},
+    {"name": "Kumar M",                "email": "caredx@primaria.com",                         "password": "Primaria@123", "role": "Caredx",                      "department": "Caredx"},
+    {"name": "Dental User",            "email": "dental@primaria.com",                         "password": "Primaria@123", "role": "Dental",                      "department": "Dental"},
+    # ✅ NEW — Everglades (Pharmacy)
+    {"name": "Everglades Pharmacy",    "email": "everglades@primaria.com",                     "password": "Primaria@123", "role": "Everglades",                  "department": "Everglades"},
     # NEW ADMIN USER
-    {"name": "admin",      "email": "jnanesht@primariacare.com",     "password": "Primaria@123",  "role": "SuperAdmin",     "department": "Administration"},
+    {"name": "admin",                  "email": "jnanesht@primariacare.com",                   "password": "Primaria@123", "role": "SuperAdmin",                  "department": "Administration"},
 ]
 
 app = create_app()

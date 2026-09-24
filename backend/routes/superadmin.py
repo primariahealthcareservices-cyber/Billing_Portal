@@ -6,7 +6,7 @@ from flask_jwt_extended import get_jwt_identity
 
 from models import (
     db, User, FinanceEntry, CaredxLabEntry, CaredxExpense,
-    SalesEnterpriseKPI, MedTechLedger,   # <-- Added MedTechLedger
+    SalesEnterpriseKPI, MedTechLedger, EvergladesLedger,
     ROLES, VALID_DEPARTMENTS, ENTRY_TYPES, DEPARTMENT_CONFIG,
 )
 from utils import role_required
@@ -18,13 +18,28 @@ from excel_utils import (
 superadmin_bp = Blueprint("superadmin", __name__, url_prefix="/api/admin")
 
 
+# ----------------------------------------------------------------------
+# ✅ Robust date parser — accepts "YYYY-MM-DD" and ISO with time
+# ----------------------------------------------------------------------
 def _parse_date(value, default=None):
     if not value:
         return default
-    try:
-        return datetime.strptime(value, "%Y-%m-%d").date()
-    except ValueError:
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    s = str(value).strip()
+    if not s:
         return default
+    # Drop trailing 'Z' and any time component
+    if "T" in s:
+        s = s.split("T", 1)[0]
+    elif " " in s:
+        s = s.split(" ", 1)[0]
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return default
 
 
 def _parse_quarter_year(quarter, year):
@@ -55,7 +70,7 @@ def _parse_quarter_year(quarter, year):
 
 
 # ----------------------------------------------------------------------
-# User management (unchanged)
+# User management
 # ----------------------------------------------------------------------
 @superadmin_bp.route("/roles", methods=["GET"])
 @role_required("SuperAdmin")
@@ -81,14 +96,10 @@ def create_user():
     department = data.get("department", role)
 
     errors = []
-    if not name:
-        errors.append("Name is required.")
-    if not email:
-        errors.append("Email is required.")
-    if len(password) < 6:
-        errors.append("Password must be at least 6 characters.")
-    if role not in ROLES:
-        errors.append(f"Role must be one of: {', '.join(ROLES)}.")
+    if not name: errors.append("Name is required.")
+    if not email: errors.append("Email is required.")
+    if len(password) < 6: errors.append("Password must be at least 6 characters.")
+    if role not in ROLES: errors.append(f"Role must be one of: {', '.join(ROLES)}.")
     if email and User.query.filter_by(email=email).first():
         errors.append("A user with this email already exists.")
 
@@ -111,14 +122,10 @@ def update_user(user_id):
         return jsonify({"message": "User not found."}), 404
 
     data = request.get_json(silent=True) or {}
-    if "name" in data and data["name"].strip():
-        user.name = data["name"].strip()
-    if "role" in data and data["role"] in ROLES:
-        user.role = data["role"]
-    if "department" in data:
-        user.department = data["department"]
-    if "is_active" in data:
-        user.is_active = bool(data["is_active"])
+    if "name" in data and data["name"].strip(): user.name = data["name"].strip()
+    if "role" in data and data["role"] in ROLES: user.role = data["role"]
+    if "department" in data: user.department = data["department"]
+    if "is_active" in data: user.is_active = bool(data["is_active"])
     if "password" in data and data["password"]:
         if len(data["password"]) < 6:
             return jsonify({"message": "Password must be at least 6 characters."}), 400
@@ -143,17 +150,9 @@ def delete_user(user_id):
 @role_required("SuperAdmin")
 def team_stats():
     total_members = User.query.count()
-    rows = (
-        db.session.query(User.role, func.count(User.id))
-        .group_by(User.role)
-        .all()
-    )
+    rows = db.session.query(User.role, func.count(User.id)).group_by(User.role).all()
     by_role = [{"role": r, "count": c} for r, c in rows]
-
-    return jsonify({
-        "total_members": total_members,
-        "by_role": by_role,
-    }), 200
+    return jsonify({"total_members": total_members, "by_role": by_role}), 200
 
 
 # ----------------------------------------------------------------------
@@ -174,26 +173,20 @@ def overview():
         )
         if department is not None:
             query = query.filter(FinanceEntry.department == department)
-        if start_date:
-            query = query.filter(FinanceEntry.entry_date >= start_date)
-        if end_date:
-            query = query.filter(FinanceEntry.entry_date <= end_date)
+        if start_date: query = query.filter(FinanceEntry.entry_date >= start_date)
+        if end_date: query = query.filter(FinanceEntry.entry_date <= end_date)
         return float(query.scalar())
 
     def caredx_income(start_date, end_date):
         query = db.session.query(func.coalesce(func.sum(CaredxLabEntry.total_amount_paid), 0))
-        if start_date:
-            query = query.filter(CaredxLabEntry.entry_date >= start_date)
-        if end_date:
-            query = query.filter(CaredxLabEntry.entry_date <= end_date)
+        if start_date: query = query.filter(CaredxLabEntry.entry_date >= start_date)
+        if end_date: query = query.filter(CaredxLabEntry.entry_date <= end_date)
         return float(query.scalar())
 
     def caredx_expenses(start_date, end_date):
         exp_query = db.session.query(func.coalesce(func.sum(CaredxExpense.amount), 0))
-        if start_date:
-            exp_query = exp_query.filter(CaredxExpense.expense_date >= start_date)
-        if end_date:
-            exp_query = exp_query.filter(CaredxExpense.expense_date <= end_date)
+        if start_date: exp_query = exp_query.filter(CaredxExpense.expense_date >= start_date)
+        if end_date: exp_query = exp_query.filter(CaredxExpense.expense_date <= end_date)
         exp_total = float(exp_query.scalar())
 
         salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
@@ -204,54 +197,53 @@ def overview():
                 (FinanceEntry.department == "Corporate") & (FinanceEntry.exec_department == "Caredx")
             )
         )
-        if start_date:
-            salary_query = salary_query.filter(FinanceEntry.entry_date >= start_date)
-        if end_date:
-            salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
+        if start_date: salary_query = salary_query.filter(FinanceEntry.entry_date >= start_date)
+        if end_date: salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
         salary_total = float(salary_query.scalar())
-
         return exp_total + salary_total
+
+    def medtech_ledger_expenses(start_date, end_date):
+        ledger_query = db.session.query(func.coalesce(func.sum(MedTechLedger.total_amount), 0))
+        if start_date: ledger_query = ledger_query.filter(MedTechLedger.entry_date >= start_date)
+        if end_date: ledger_query = ledger_query.filter(MedTechLedger.entry_date <= end_date)
+        return float(ledger_query.scalar())
+
+    def everglades_ledger_expenses(start_date, end_date):
+        ledger_query = db.session.query(func.coalesce(func.sum(EvergladesLedger.total_amount), 0))
+        if start_date: ledger_query = ledger_query.filter(EvergladesLedger.entry_date >= start_date)
+        if end_date: ledger_query = ledger_query.filter(EvergladesLedger.entry_date <= end_date)
+        return float(ledger_query.scalar())
 
     by_department = []
     for dept in VALID_DEPARTMENTS:
-        # Skip SalesEnterprise entirely
-        if dept == "SalesEnterprise":
-            continue
+        if dept == "SalesEnterprise": continue
         if dept == "Caredx":
             income = caredx_income(start_date, end_date)
             expenses = caredx_expenses(start_date, end_date)
+        elif dept == "MedTech":
+            fin_exp = sum_for(dept, "Expenses", start_date, end_date)
+            ledger_exp = medtech_ledger_expenses(start_date, end_date)
+            expenses = fin_exp + ledger_exp
+            income = sum_for(dept, "Income", start_date, end_date)
+        elif dept == "Everglades":
+            fin_exp = sum_for(dept, "Expenses", start_date, end_date)
+            ledger_exp = everglades_ledger_expenses(start_date, end_date)
+            expenses = fin_exp + ledger_exp
+            income = sum_for(dept, "Income", start_date, end_date)
         else:
-            # For MedTech, we need to include Ledger expenses in the overview
-            if dept == "MedTech":
-                # Finance expenses (excluding Ledger)
-                fin_exp = sum_for(dept, "Expenses", start_date, end_date)
-                # Ledger expenses
-                ledger_query = db.session.query(func.coalesce(func.sum(MedTechLedger.total_amount), 0))
-                if start_date:
-                    ledger_query = ledger_query.filter(MedTechLedger.entry_date >= start_date)
-                if end_date:
-                    ledger_query = ledger_query.filter(MedTechLedger.entry_date <= end_date)
-                ledger_exp = float(ledger_query.scalar())
-                expenses = fin_exp + ledger_exp
-                income = sum_for(dept, "Income", start_date, end_date)
-            else:
-                income = sum_for(dept, "Income", start_date, end_date)
-                expenses = sum_for(dept, "Expenses", start_date, end_date)
+            income = sum_for(dept, "Income", start_date, end_date)
+            expenses = sum_for(dept, "Expenses", start_date, end_date)
         by_department.append({
-            "department": dept,
-            "income": income,
-            "expenses": expenses,
-            "profit": income - expenses,
+            "department": dept, "income": income,
+            "expenses": expenses, "profit": income - expenses,
         })
 
     total_income = sum(d["income"] for d in by_department)
     total_expenses = sum(d["expenses"] for d in by_department)
 
     return jsonify({
-        "total_members": total_members,
-        "active_members": active_members,
-        "total_income": total_income,
-        "total_expenses": total_expenses,
+        "total_members": total_members, "active_members": active_members,
+        "total_income": total_income, "total_expenses": total_expenses,
         "total_profit": total_income - total_expenses,
         "by_department": by_department,
     }), 200
@@ -263,26 +255,20 @@ def overview():
 def _apply_finance_filters(query, args):
     start_date = _parse_date(args.get("start_date"))
     end_date = _parse_date(args.get("end_date"))
-    if start_date:
-        query = query.filter(FinanceEntry.entry_date >= start_date)
-    if end_date:
-        query = query.filter(FinanceEntry.entry_date <= end_date)
+    if start_date: query = query.filter(FinanceEntry.entry_date >= start_date)
+    if end_date: query = query.filter(FinanceEntry.entry_date <= end_date)
 
     entry_type = args.get("entry_type")
-    if entry_type in ENTRY_TYPES:
-        query = query.filter(FinanceEntry.entry_type == entry_type)
+    if entry_type in ENTRY_TYPES: query = query.filter(FinanceEntry.entry_type == entry_type)
 
     category = args.get("category")
-    if category:
-        query = query.filter(FinanceEntry.category == category)
+    if category: query = query.filter(FinanceEntry.category == category)
 
     revenue_type = args.get("revenue_type")
-    if revenue_type:
-        query = query.filter(FinanceEntry.revenue_type == revenue_type)
+    if revenue_type: query = query.filter(FinanceEntry.revenue_type == revenue_type)
 
     sub_category = args.get("sub_category")
-    if sub_category:
-        query = query.filter(FinanceEntry.sub_category == sub_category)
+    if sub_category: query = query.filter(FinanceEntry.sub_category == sub_category)
 
     search = args.get("search")
     if search:
@@ -302,34 +288,25 @@ def _apply_finance_filters(query, args):
 
 
 # ----------------------------------------------------------------------
-# MedTech helpers – combine finance and ledger entries
+# MedTech helpers
 # ----------------------------------------------------------------------
 def _get_medtech_entries_with_ledger():
-    """Fetch MedTech finance entries (excluding Ledger) + MedTechLedger entries, combined and paginated."""
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
     search = request.args.get("search")
     category = request.args.get("category")
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 30, type=int)
-    if page < 1:
-        page = 1
-    if per_page < 1:
-        per_page = 1
-    if per_page > 100:
-        per_page = 100
+    if page < 1: page = 1
+    if per_page < 1: per_page = 1
+    if per_page > 100: per_page = 100
 
-    # 1. Finance entries (exclude Ledger category)
     finance_query = FinanceEntry.query.filter(
-        FinanceEntry.department == "MedTech",
-        FinanceEntry.category != "Ledger"
+        FinanceEntry.department == "MedTech", FinanceEntry.category != "Ledger"
     )
-    if start_date:
-        finance_query = finance_query.filter(FinanceEntry.entry_date >= start_date)
-    if end_date:
-        finance_query = finance_query.filter(FinanceEntry.entry_date <= end_date)
-    if category:
-        finance_query = finance_query.filter(FinanceEntry.category == category)
+    if start_date: finance_query = finance_query.filter(FinanceEntry.entry_date >= start_date)
+    if end_date: finance_query = finance_query.filter(FinanceEntry.entry_date <= end_date)
+    if category: finance_query = finance_query.filter(FinanceEntry.category == category)
     if search:
         like = f"%{search}%"
         finance_query = finance_query.filter(
@@ -345,49 +322,30 @@ def _get_medtech_entries_with_ledger():
         )
     finance_entries = finance_query.order_by(FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()).all()
 
-    # 2. Ledger entries
     ledger_query = MedTechLedger.query
-    if start_date:
-        ledger_query = ledger_query.filter(MedTechLedger.entry_date >= start_date)
-    if end_date:
-        ledger_query = ledger_query.filter(MedTechLedger.entry_date <= end_date)
+    if start_date: ledger_query = ledger_query.filter(MedTechLedger.entry_date >= start_date)
+    if end_date: ledger_query = ledger_query.filter(MedTechLedger.entry_date <= end_date)
     if search:
         like = f"%{search}%"
         ledger_query = ledger_query.filter(
-            or_(
-                MedTechLedger.customer_name.ilike(like),
-                MedTechLedger.remarks.ilike(like)
-            )
+            or_(MedTechLedger.customer_name.ilike(like), MedTechLedger.remarks.ilike(like))
         )
-    # category filter does not apply to ledger (it's always Ledger)
     ledger_entries = ledger_query.order_by(MedTechLedger.entry_date.desc(), MedTechLedger.id.desc()).all()
 
-    # 3. Convert to dict and combine
     combined = []
     for fe in finance_entries:
-        d = fe.to_dict()
-        d["_type"] = "finance"
-        combined.append(d)
+        d = fe.to_dict(); d["_type"] = "finance"; combined.append(d)
     for le in ledger_entries:
         combined.append({
-            "id": le.id,
-            "department": "MedTech",
-            "entry_type": "Expenses",
-            "category": "Ledger",
-            "amount": float(le.total_amount or 0),
-            "entry_date": le.entry_date.isoformat(),
-            "remarks": le.remarks,
-            "customer_name": le.customer_name,
-            "paid": float(le.paid or 0),
-            "balance": float(le.balance or 0),
-            "_type": "ledger",
+            "id": le.id, "department": "MedTech", "entry_type": "Expenses",
+            "category": "Ledger", "amount": float(le.total_amount or 0),
+            "entry_date": le.entry_date.isoformat(), "remarks": le.remarks,
+            "customer_name": le.customer_name, "paid": float(le.paid or 0),
+            "balance": float(le.balance or 0), "_type": "ledger",
             "created_at": le.created_at.isoformat() if le.created_at else None,
         })
 
-    # 4. Sort by date descending
     combined.sort(key=lambda x: (x["entry_date"], x["id"]), reverse=True)
-
-    # 5. Paginate the combined list in memory
     total = len(combined)
     total_pages = (total + per_page - 1) // per_page if total > 0 else 0
     start_idx = (page - 1) * per_page
@@ -396,74 +354,50 @@ def _get_medtech_entries_with_ledger():
 
     return jsonify({
         "entries": paginated_entries,
-        "pagination": {
-            "page": page,
-            "per_page": per_page,
-            "total": total,
-            "pages": total_pages,
-        }
+        "pagination": {"page": page, "per_page": per_page, "total": total, "pages": total_pages},
     }), 200
 
 
 def _get_medtech_summary_with_ledger():
-    """Return summary for MedTech including Ledger entries."""
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
-    category = request.args.get("category")  # only used for finance entries
+    category = request.args.get("category")
 
-    # Finance entries (exclude Ledger)
     finance_query = FinanceEntry.query.filter(
-        FinanceEntry.department == "MedTech",
-        FinanceEntry.category != "Ledger"
+        FinanceEntry.department == "MedTech", FinanceEntry.category != "Ledger"
     )
-    if start_date:
-        finance_query = finance_query.filter(FinanceEntry.entry_date >= start_date)
-    if end_date:
-        finance_query = finance_query.filter(FinanceEntry.entry_date <= end_date)
-    if category:
-        finance_query = finance_query.filter(FinanceEntry.category == category)
+    if start_date: finance_query = finance_query.filter(FinanceEntry.entry_date >= start_date)
+    if end_date: finance_query = finance_query.filter(FinanceEntry.entry_date <= end_date)
+    if category: finance_query = finance_query.filter(FinanceEntry.category == category)
     finance_entries = finance_query.all()
 
-    # Ledger entries
     ledger_query = MedTechLedger.query
-    if start_date:
-        ledger_query = ledger_query.filter(MedTechLedger.entry_date >= start_date)
-    if end_date:
-        ledger_query = ledger_query.filter(MedTechLedger.entry_date <= end_date)
+    if start_date: ledger_query = ledger_query.filter(MedTechLedger.entry_date >= start_date)
+    if end_date: ledger_query = ledger_query.filter(MedTechLedger.entry_date <= end_date)
     ledger_entries = ledger_query.all()
 
-    # Combine all items
     all_items = []
     for fe in finance_entries:
         all_items.append({
-            "entry_date": fe.entry_date,
-            "entry_type": fe.entry_type,
-            "category": fe.category,
-            "amount": float(fe.amount),
+            "entry_date": fe.entry_date, "entry_type": fe.entry_type,
+            "category": fe.category, "amount": float(fe.amount),
         })
     for le in ledger_entries:
         all_items.append({
-            "entry_date": le.entry_date,
-            "entry_type": "Expenses",
-            "category": "Ledger",
-            "amount": float(le.total_amount or 0),
+            "entry_date": le.entry_date, "entry_type": "Expenses",
+            "category": "Ledger", "amount": float(le.total_amount or 0),
         })
 
-    total_income = sum(item["amount"] for item in all_items if item["entry_type"] == "Income")
-    total_expenses = sum(item["amount"] for item in all_items if item["entry_type"] == "Expenses")
+    total_income = sum(i["amount"] for i in all_items if i["entry_type"] == "Income")
+    total_expenses = sum(i["amount"] for i in all_items if i["entry_type"] == "Expenses")
 
-    # Trend by date
     by_date = {}
     for item in all_items:
         key = item["entry_date"].isoformat()
         by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0})
-        if item["entry_type"] == "Income":
-            by_date[key]["income"] += item["amount"]
-        else:
-            by_date[key]["expenses"] += item["amount"]
+        by_date[key]["income" if item["entry_type"] == "Income" else "expenses"] += item["amount"]
     trend = sorted(by_date.values(), key=lambda x: x["date"])
 
-    # Category breakdown
     by_category = {}
     for item in all_items:
         cat = item["category"] or "Uncategorized"
@@ -471,12 +405,134 @@ def _get_medtech_summary_with_ledger():
         by_category[cat]["amount"] += item["amount"]
 
     return jsonify({
-        "department": "MedTech",
-        "total_income": total_income,
-        "total_expenses": total_expenses,
-        "profit": total_income - total_expenses,
-        "entry_count": len(all_items),
-        "trend": trend,
+        "department": "MedTech", "total_income": total_income,
+        "total_expenses": total_expenses, "profit": total_income - total_expenses,
+        "entry_count": len(all_items), "trend": trend,
+        "category_breakdown": list(by_category.values()),
+    }), 200
+
+
+# ----------------------------------------------------------------------
+# Everglades helpers
+# ----------------------------------------------------------------------
+def _get_everglades_entries_with_ledger():
+    start_date = _parse_date(request.args.get("start_date"))
+    end_date = _parse_date(request.args.get("end_date"))
+    search = request.args.get("search")
+    category = request.args.get("category")
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 30, type=int)
+    if page < 1: page = 1
+    if per_page < 1: per_page = 1
+    if per_page > 100: per_page = 100
+
+    finance_query = FinanceEntry.query.filter(
+        FinanceEntry.department == "Everglades", FinanceEntry.category != "Ledger"
+    )
+    if start_date: finance_query = finance_query.filter(FinanceEntry.entry_date >= start_date)
+    if end_date: finance_query = finance_query.filter(FinanceEntry.entry_date <= end_date)
+    if category: finance_query = finance_query.filter(FinanceEntry.category == category)
+    if search:
+        like = f"%{search}%"
+        finance_query = finance_query.filter(
+            or_(
+                FinanceEntry.remarks.ilike(like),
+                FinanceEntry.generated_by.ilike(like),
+                FinanceEntry.client_name.ilike(like),
+                FinanceEntry.patient_name.ilike(like),
+                FinanceEntry.patient_place.ilike(like),
+                FinanceEntry.gst_number.ilike(like),
+                FinanceEntry.category.ilike(like),
+            )
+        )
+    finance_entries = finance_query.order_by(FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()).all()
+
+    ledger_query = EvergladesLedger.query
+    if start_date: ledger_query = ledger_query.filter(EvergladesLedger.entry_date >= start_date)
+    if end_date: ledger_query = ledger_query.filter(EvergladesLedger.entry_date <= end_date)
+    if search:
+        like = f"%{search}%"
+        ledger_query = ledger_query.filter(
+            or_(EvergladesLedger.customer_name.ilike(like), EvergladesLedger.remarks.ilike(like))
+        )
+    ledger_entries = ledger_query.order_by(EvergladesLedger.entry_date.desc(), EvergladesLedger.id.desc()).all()
+
+    combined = []
+    for fe in finance_entries:
+        d = fe.to_dict(); d["_type"] = "finance"; combined.append(d)
+    for le in ledger_entries:
+        combined.append({
+            "id": le.id, "department": "Everglades", "entry_type": "Expenses",
+            "category": "Ledger", "amount": float(le.total_amount or 0),
+            "entry_date": le.entry_date.isoformat(), "remarks": le.remarks,
+            "customer_name": le.customer_name, "paid": float(le.paid or 0),
+            "balance": float(le.balance or 0), "_type": "ledger",
+            "created_at": le.created_at.isoformat() if le.created_at else None,
+        })
+
+    combined.sort(key=lambda x: (x["entry_date"], x["id"]), reverse=True)
+    total = len(combined)
+    total_pages = (total + per_page - 1) // per_page if total > 0 else 0
+    start_idx = (page - 1) * per_page
+    end_idx = min(start_idx + per_page, total)
+    paginated_entries = combined[start_idx:end_idx]
+
+    return jsonify({
+        "entries": paginated_entries,
+        "pagination": {"page": page, "per_page": per_page, "total": total, "pages": total_pages},
+    }), 200
+
+
+def _get_everglades_summary_with_ledger():
+    start_date = _parse_date(request.args.get("start_date"))
+    end_date = _parse_date(request.args.get("end_date"))
+    category = request.args.get("category")
+
+    finance_query = FinanceEntry.query.filter(
+        FinanceEntry.department == "Everglades", FinanceEntry.category != "Ledger"
+    )
+    if start_date: finance_query = finance_query.filter(FinanceEntry.entry_date >= start_date)
+    if end_date: finance_query = finance_query.filter(FinanceEntry.entry_date <= end_date)
+    if category: finance_query = finance_query.filter(FinanceEntry.category == category)
+    finance_entries = finance_query.all()
+
+    ledger_query = EvergladesLedger.query
+    if start_date: ledger_query = ledger_query.filter(EvergladesLedger.entry_date >= start_date)
+    if end_date: ledger_query = ledger_query.filter(EvergladesLedger.entry_date <= end_date)
+    ledger_entries = ledger_query.all()
+
+    all_items = []
+    for fe in finance_entries:
+        all_items.append({
+            "entry_date": fe.entry_date, "entry_type": fe.entry_type,
+            "category": fe.category, "amount": float(fe.amount),
+        })
+    for le in ledger_entries:
+        all_items.append({
+            "entry_date": le.entry_date, "entry_type": "Expenses",
+            "category": "Ledger", "amount": float(le.total_amount or 0),
+        })
+
+    total_income = sum(i["amount"] for i in all_items if i["entry_type"] == "Income")
+    total_expenses = sum(i["amount"] for i in all_items if i["entry_type"] == "Expenses")
+
+    by_date = {}
+    for item in all_items:
+        key = item["entry_date"].isoformat()
+        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0})
+        by_date[key]["income" if item["entry_type"] == "Income" else "expenses"] += item["amount"]
+    trend = sorted(by_date.values(), key=lambda x: x["date"])
+
+    by_category = {}
+    for item in all_items:
+        cat = item["category"] or "Uncategorized"
+        by_category.setdefault(cat, {"category": cat, "amount": 0})
+        by_category[cat]["amount"] += item["amount"]
+
+    return jsonify({
+        "department": "Everglades", "total_income": total_income,
+        "total_expenses": total_expenses, "profit": total_income - total_expenses,
+        "entry_count": len(all_items), "trend": trend,
         "category_breakdown": list(by_category.values()),
     }), 200
 
@@ -492,18 +548,15 @@ def department_options(department):
 
     config = DEPARTMENT_CONFIG[department]
     response = {
-        "department": department,
-        "entry_types": ENTRY_TYPES,
-        "categories": config["categories"],
-        "revenue_types": config["revenue_types"],
+        "department": department, "entry_types": ENTRY_TYPES,
+        "categories": config["categories"], "revenue_types": config["revenue_types"],
         "show_generated_by": config["show_generated_by"],
         "show_revenue_type": config["show_revenue_type"],
         "show_patient_fields": config["show_patient_fields"],
         "show_client_name": config["show_client_name"],
         "show_gst_number": config["show_gst_number"],
         "gst_required_categories": config["gst_required_categories"],
-        "show_items": config["show_items"],
-        "show_invoice": config["show_invoice"],
+        "show_items": config["show_items"], "show_invoice": config["show_invoice"],
     }
     if department == "Caredx":
         response["uses_lab_entries"] = True
@@ -512,7 +565,7 @@ def department_options(department):
 
 
 # ----------------------------------------------------------------------
-# Caredx helper – dynamic salary category
+# Caredx helper
 # ----------------------------------------------------------------------
 def _get_caredx_entries_and_summary(for_summary=False):
     start_date = _parse_date(request.args.get("start_date"))
@@ -524,13 +577,10 @@ def _get_caredx_entries_and_summary(for_summary=False):
     lab_entries = []
     expenses = []
 
-    # -------------------- Lab entries --------------------
     if section is None or section == "lab":
         lab_query = CaredxLabEntry.query
-        if start_date:
-            lab_query = lab_query.filter(CaredxLabEntry.entry_date >= start_date)
-        if end_date:
-            lab_query = lab_query.filter(CaredxLabEntry.entry_date <= end_date)
+        if start_date: lab_query = lab_query.filter(CaredxLabEntry.entry_date >= start_date)
+        if end_date: lab_query = lab_query.filter(CaredxLabEntry.entry_date <= end_date)
         if search:
             like = f"%{search}%"
             lab_query = lab_query.filter(
@@ -542,30 +592,23 @@ def _get_caredx_entries_and_summary(for_summary=False):
                 )
             )
         lab_entries = lab_query.order_by(
-            CaredxLabEntry.entry_date.desc(),
-            CaredxLabEntry.id.desc()
+            CaredxLabEntry.entry_date.desc(), CaredxLabEntry.id.desc()
         ).all()
 
-    # -------------------- Expenses --------------------
     if section is None or section == "expenses":
         exp_query = CaredxExpense.query
-        if start_date:
-            exp_query = exp_query.filter(CaredxExpense.expense_date >= start_date)
-        if end_date:
-            exp_query = exp_query.filter(CaredxExpense.expense_date <= end_date)
+        if start_date: exp_query = exp_query.filter(CaredxExpense.expense_date >= start_date)
+        if end_date: exp_query = exp_query.filter(CaredxExpense.expense_date <= end_date)
         if search:
             like = f"%{search}%"
             exp_query = exp_query.filter(
                 or_(CaredxExpense.category.ilike(like), CaredxExpense.remarks.ilike(like))
             )
-        if category:
-            exp_query = exp_query.filter(CaredxExpense.category == category)
+        if category: exp_query = exp_query.filter(CaredxExpense.category == category)
         caredx_expenses = exp_query.order_by(
-            CaredxExpense.expense_date.desc(),
-            CaredxExpense.id.desc()
+            CaredxExpense.expense_date.desc(), CaredxExpense.id.desc()
         ).all()
 
-        # Salary entries from Corporate
         salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
         salary_items = []
         if category is None or category == salary_category:
@@ -576,45 +619,33 @@ def _get_caredx_entries_and_summary(for_summary=False):
                     (FinanceEntry.department == "Corporate") & (FinanceEntry.exec_department == "Caredx")
                 )
             )
-            if start_date:
-                salary_query = salary_query.filter(FinanceEntry.entry_date >= start_date)
-            if end_date:
-                salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
+            if start_date: salary_query = salary_query.filter(FinanceEntry.entry_date >= start_date)
+            if end_date: salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
             if search:
                 like = f"%{search}%"
                 salary_query = salary_query.filter(
                     or_(FinanceEntry.employee_name.ilike(like), FinanceEntry.remarks.ilike(like))
                 )
             salary_entries = salary_query.order_by(
-                FinanceEntry.entry_date.desc(),
-                FinanceEntry.id.desc()
+                FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()
             ).all()
 
             for s in salary_entries:
                 salary_items.append({
-                    "id": -s.id,
-                    "expense_date": s.entry_date.isoformat(),
-                    "category": salary_category,
-                    "amount": float(s.amount),
+                    "id": -s.id, "expense_date": s.entry_date.isoformat(),
+                    "category": salary_category, "amount": float(s.amount),
                     "remarks": f"Salary for {s.employee_name} ({s.exec_department}) - {s.remarks or ''}",
-                    "employee_name": s.employee_name,
-                    "purpose": s.remarks,
-                    "vehicle_type": s.vehicle_type,
-                    "_isSalary": True,
+                    "employee_name": s.employee_name, "purpose": s.remarks,
+                    "vehicle_type": s.vehicle_type, "_isSalary": True,
                 })
 
         all_expenses = [e.to_dict() for e in caredx_expenses] + salary_items
         all_expenses.sort(key=lambda x: x["expense_date"], reverse=True)
         expenses = all_expenses
 
-    # ---- Return for entries (not summary) ----
     if not for_summary:
-        return {
-            "lab_entries": [e.to_dict() for e in lab_entries],
-            "expenses": expenses
-        }
+        return {"lab_entries": [e.to_dict() for e in lab_entries], "expenses": expenses}
 
-    # ---- Build summary helpers ----
     def build_lab_summary(entries):
         total_income = sum(float(e.total_amount_paid) for e in entries)
         total_paid_other = sum(float(e.paid_to_other_labs or 0) for e in entries)
@@ -630,10 +661,8 @@ def _get_caredx_entries_and_summary(for_summary=False):
             by_category.setdefault(cat, {"category": cat, "amount": 0})
             by_category[cat]["amount"] += float(e.total_amount_paid)
         return {
-            "total_income": total_income,
-            "total_paid_to_other_labs": total_paid_other,
-            "entry_count": len(entries),
-            "trend": trend,
+            "total_income": total_income, "total_paid_to_other_labs": total_paid_other,
+            "entry_count": len(entries), "trend": trend,
             "category_breakdown": list(by_category.values()),
         }
 
@@ -651,42 +680,30 @@ def _get_caredx_entries_and_summary(for_summary=False):
             by_category.setdefault(cat, {"category": cat, "amount": 0})
             by_category[cat]["amount"] += float(e["amount"])
         return {
-            "total_expenses": total_expenses,
-            "entry_count": len(exp_list),
-            "trend": trend,
-            "category_breakdown": list(by_category.values()),
+            "total_expenses": total_expenses, "entry_count": len(exp_list),
+            "trend": trend, "category_breakdown": list(by_category.values()),
         }
 
-    # ---- Return based on section ----
     if section == "lab":
         lab_summary = build_lab_summary(lab_entries)
         return {
-            "department": "Caredx",
-            "section": "lab",
-            "total_income": lab_summary["total_income"],
-            "total_expenses": 0,
+            "department": "Caredx", "section": "lab",
+            "total_income": lab_summary["total_income"], "total_expenses": 0,
             "total_paid_to_other_labs": lab_summary["total_paid_to_other_labs"],
-            "profit": lab_summary["total_income"],
-            "entry_count": lab_summary["entry_count"],
-            "trend": lab_summary["trend"],
-            "category_breakdown": lab_summary["category_breakdown"],
+            "profit": lab_summary["total_income"], "entry_count": lab_summary["entry_count"],
+            "trend": lab_summary["trend"], "category_breakdown": lab_summary["category_breakdown"],
         }
 
     if section == "expenses":
         exp_summary = build_expenses_summary(expenses)
         return {
-            "department": "Caredx",
-            "section": "expenses",
-            "total_income": 0,
-            "total_expenses": exp_summary["total_expenses"],
-            "total_paid_to_other_labs": 0,
-            "profit": -exp_summary["total_expenses"],
-            "entry_count": exp_summary["entry_count"],
-            "trend": exp_summary["trend"],
+            "department": "Caredx", "section": "expenses",
+            "total_income": 0, "total_expenses": exp_summary["total_expenses"],
+            "total_paid_to_other_labs": 0, "profit": -exp_summary["total_expenses"],
+            "entry_count": exp_summary["entry_count"], "trend": exp_summary["trend"],
             "category_breakdown": exp_summary["category_breakdown"],
         }
 
-    # ---- Combined summary (section is None or "all") ----
     lab_summary = build_lab_summary(lab_entries)
     exp_summary = build_expenses_summary(expenses)
 
@@ -694,7 +711,6 @@ def _get_caredx_entries_and_summary(for_summary=False):
     total_expenses = exp_summary["total_expenses"]
     total_paid_other = lab_summary["total_paid_to_other_labs"]
 
-    # Merge trends
     trend_map = {}
     for item in lab_summary["trend"]:
         trend_map[item["date"]] = {"date": item["date"], "income": item["income"], "expenses": 0}
@@ -705,7 +721,6 @@ def _get_caredx_entries_and_summary(for_summary=False):
             trend_map[item["date"]] = {"date": item["date"], "income": 0, "expenses": item["expenses"]}
     combined_trend = sorted(trend_map.values(), key=lambda x: x["date"])
 
-    # Merge categories
     combined_categories = {}
     for item in lab_summary["category_breakdown"]:
         combined_categories[item["category"]] = {"category": item["category"], "amount": item["amount"]}
@@ -716,19 +731,16 @@ def _get_caredx_entries_and_summary(for_summary=False):
             combined_categories[item["category"]] = {"category": item["category"], "amount": item["amount"]}
 
     return {
-        "department": "Caredx",
-        "total_income": total_income,
-        "total_expenses": total_expenses,
-        "total_paid_to_other_labs": total_paid_other,
+        "department": "Caredx", "total_income": total_income,
+        "total_expenses": total_expenses, "total_paid_to_other_labs": total_paid_other,
         "profit": total_income - total_expenses,
         "entry_count": lab_summary["entry_count"] + exp_summary["entry_count"],
-        "trend": combined_trend,
-        "category_breakdown": list(combined_categories.values()),
+        "trend": combined_trend, "category_breakdown": list(combined_categories.values()),
     }
 
 
 # ----------------------------------------------------------------------
-# Department entries – with PAGINATION (for all non-SalesEnterprise depts)
+# Department entries
 # ----------------------------------------------------------------------
 @superadmin_bp.route("/departments/<string:dept>/entries", methods=["GET"])
 @role_required("SuperAdmin")
@@ -736,15 +748,13 @@ def dept_entries(dept):
     if dept not in VALID_DEPARTMENTS:
         return jsonify({"message": "Unknown department."}), 404
 
-    # Special case: Caredx
     if dept == "Caredx":
         return jsonify(_get_caredx_entries_and_summary(for_summary=False)), 200
-
-    # Special case: MedTech – include Ledger entries from MedTechLedger
     if dept == "MedTech":
         return _get_medtech_entries_with_ledger()
+    if dept == "Everglades":
+        return _get_everglades_entries_with_ledger()
 
-    # Other departments (regular FinanceEntry only)
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
 
@@ -765,22 +775,17 @@ def dept_entries(dept):
             )
         )
 
-    if start_date:
-        query = query.filter(FinanceEntry.entry_date >= start_date)
-    if end_date:
-        query = query.filter(FinanceEntry.entry_date <= end_date)
+    if start_date: query = query.filter(FinanceEntry.entry_date >= start_date)
+    if end_date: query = query.filter(FinanceEntry.entry_date <= end_date)
 
     entry_type = request.args.get("entry_type")
-    if entry_type in ENTRY_TYPES:
-        query = query.filter(FinanceEntry.entry_type == entry_type)
+    if entry_type in ENTRY_TYPES: query = query.filter(FinanceEntry.entry_type == entry_type)
 
     category = request.args.get("category")
-    if category:
-        query = query.filter(FinanceEntry.category == category)
+    if category: query = query.filter(FinanceEntry.category == category)
 
     revenue_type = request.args.get("revenue_type")
-    if revenue_type:
-        query = query.filter(FinanceEntry.revenue_type == revenue_type)
+    if revenue_type: query = query.filter(FinanceEntry.revenue_type == revenue_type)
 
     search = request.args.get("search")
     if search:
@@ -799,12 +804,9 @@ def dept_entries(dept):
 
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 30, type=int)
-    if page < 1:
-        page = 1
-    if per_page < 1:
-        per_page = 1
-    if per_page > 100:
-        per_page = 100
+    if page < 1: page = 1
+    if per_page < 1: per_page = 1
+    if per_page > 100: per_page = 100
 
     total = query.count()
     query = query.order_by(FinanceEntry.entry_date.desc(), FinanceEntry.id.desc())
@@ -813,17 +815,12 @@ def dept_entries(dept):
 
     return jsonify({
         "entries": [e.to_dict() for e in entries],
-        "pagination": {
-            "page": page,
-            "per_page": per_page,
-            "total": total,
-            "pages": paginated.pages,
-        }
+        "pagination": {"page": page, "per_page": per_page, "total": total, "pages": paginated.pages},
     }), 200
 
 
 # ----------------------------------------------------------------------
-# Department summary (for all non-SalesEnterprise depts)
+# Department summary
 # ----------------------------------------------------------------------
 @superadmin_bp.route("/departments/<string:dept>/summary", methods=["GET"])
 @role_required("SuperAdmin")
@@ -833,10 +830,10 @@ def dept_summary(dept):
 
     if dept == "Caredx":
         return jsonify(_get_caredx_entries_and_summary(for_summary=True)), 200
-
-    # Special case: MedTech – include Ledger
     if dept == "MedTech":
         return _get_medtech_summary_with_ledger()
+    if dept == "Everglades":
+        return _get_everglades_summary_with_ledger()
 
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
@@ -858,14 +855,11 @@ def dept_summary(dept):
             )
         )
 
-    if start_date:
-        query = query.filter(FinanceEntry.entry_date >= start_date)
-    if end_date:
-        query = query.filter(FinanceEntry.entry_date <= end_date)
+    if start_date: query = query.filter(FinanceEntry.entry_date >= start_date)
+    if end_date: query = query.filter(FinanceEntry.entry_date <= end_date)
 
     category = request.args.get("category")
-    if category:
-        query = query.filter(FinanceEntry.category == category)
+    if category: query = query.filter(FinanceEntry.category == category)
 
     entries = query.all()
 
@@ -885,18 +879,15 @@ def dept_summary(dept):
         by_category[e.category]["amount"] += float(e.amount)
 
     return jsonify({
-        "department": dept,
-        "total_income": total_income,
-        "total_expenses": total_expenses,
-        "profit": total_income - total_expenses,
-        "entry_count": len(entries),
-        "trend": trend,
+        "department": dept, "total_income": total_income,
+        "total_expenses": total_expenses, "profit": total_income - total_expenses,
+        "entry_count": len(entries), "trend": trend,
         "category_breakdown": list(by_category.values()),
     }), 200
 
 
 # ----------------------------------------------------------------------
-# Excel export and import (unchanged)
+# Excel export and import
 # ----------------------------------------------------------------------
 @superadmin_bp.route("/departments/<department>/export", methods=["GET"])
 @role_required("SuperAdmin")
@@ -908,29 +899,22 @@ def department_export(department):
         start_date = _parse_date(request.args.get("start_date"))
         end_date = _parse_date(request.args.get("end_date"))
         query = CaredxLabEntry.query
-        if start_date:
-            query = query.filter(CaredxLabEntry.entry_date >= start_date)
-        if end_date:
-            query = query.filter(CaredxLabEntry.entry_date <= end_date)
+        if start_date: query = query.filter(CaredxLabEntry.entry_date >= start_date)
+        if end_date: query = query.filter(CaredxLabEntry.entry_date <= end_date)
         entries = query.order_by(CaredxLabEntry.entry_date.asc(), CaredxLabEntry.id.asc()).all()
         buffer = build_lab_entries_workbook(entries)
         filename = f"Caredx_Lab_Entries_{date.today().isoformat()}.xlsx"
     else:
         config = DEPARTMENT_CONFIG[department]
         query = FinanceEntry.query.filter_by(department=department)
-        # Apply filters
         start_date = _parse_date(request.args.get("start_date"))
         end_date = _parse_date(request.args.get("end_date"))
-        if start_date:
-            query = query.filter(FinanceEntry.entry_date >= start_date)
-        if end_date:
-            query = query.filter(FinanceEntry.entry_date <= end_date)
+        if start_date: query = query.filter(FinanceEntry.entry_date >= start_date)
+        if end_date: query = query.filter(FinanceEntry.entry_date <= end_date)
         category = request.args.get("category")
-        if category:
-            query = query.filter(FinanceEntry.category == category)
+        if category: query = query.filter(FinanceEntry.category == category)
         revenue_type = request.args.get("revenue_type")
-        if revenue_type:
-            query = query.filter(FinanceEntry.revenue_type == revenue_type)
+        if revenue_type: query = query.filter(FinanceEntry.revenue_type == revenue_type)
         search = request.args.get("search")
         if search:
             like = f"%{search}%"
@@ -950,9 +934,7 @@ def department_export(department):
         filename = f"{department}_Finance_Entries_{date.today().isoformat()}.xlsx"
 
     return send_file(
-        buffer,
-        as_attachment=True,
-        download_name=filename,
+        buffer, as_attachment=True, download_name=filename,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
@@ -976,22 +958,14 @@ def department_import(department):
             rows, errors = parse_lab_entries_workbook(file.stream)
         except Exception:
             return jsonify({"message": "Could not read the uploaded file. Make sure it's a valid .xlsx."}), 400
-
         if not rows:
-            return jsonify({
-                "message": "No valid rows found in the uploaded sheet.",
-                "imported": 0,
-                "errors": errors,
-            }), 400
-
+            return jsonify({"message": "No valid rows found in the uploaded sheet.", "imported": 0, "errors": errors}), 400
         for row in rows:
             db.session.add(CaredxLabEntry(created_by_id=created_by_id, **row))
         db.session.commit()
-
         return jsonify({
             "message": f"Imported {len(rows)} lab entr{'y' if len(rows) == 1 else 'ies'}.",
-            "imported": len(rows),
-            "errors": errors,
+            "imported": len(rows), "errors": errors,
         }), 201
 
     config = DEPARTMENT_CONFIG[department]
@@ -1003,11 +977,7 @@ def department_import(department):
         return jsonify({"message": "Could not read the uploaded file. Make sure it's a valid .xlsx."}), 400
 
     if not rows:
-        return jsonify({
-            "message": "No valid rows found in the uploaded sheet.",
-            "imported": 0,
-            "errors": errors,
-        }), 400
+        return jsonify({"message": "No valid rows found in the uploaded sheet.", "imported": 0, "errors": errors}), 400
 
     for row in rows:
         db.session.add(FinanceEntry(
@@ -1029,22 +999,18 @@ def department_import(department):
 
     return jsonify({
         "message": f"Imported {len(rows)} entr{'y' if len(rows) == 1 else 'ies'}.",
-        "imported": len(rows),
-        "errors": errors,
+        "imported": len(rows), "errors": errors,
     }), 201
 
 
-# ===================== NEW: SalesEnterprise KPI endpoint =====================
+# ===================== SalesEnterprise KPI endpoint =====================
 @superadmin_bp.route("/salesenterprise/kpis", methods=["GET"])
 @role_required("SuperAdmin")
 def get_salesenterprise_kpis():
-    """Return KPIs for SalesEnterprise, filtered by year and/or quarter."""
     year = request.args.get("year", type=int)
-    quarter = request.args.get("quarter")  # "Q1" etc.
+    quarter = request.args.get("quarter")
     query = SalesEnterpriseKPI.query
-    if year:
-        query = query.filter_by(year=year)
-    if quarter:
-        query = query.filter_by(quarter=quarter)
+    if year: query = query.filter_by(year=year)
+    if quarter: query = query.filter_by(quarter=quarter)
     kpis = query.order_by(SalesEnterpriseKPI.year.desc(), SalesEnterpriseKPI.quarter.desc()).all()
     return jsonify({"kpis": [k.to_dict() for k in kpis]}), 200

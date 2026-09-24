@@ -1,3 +1,4 @@
+// frontend/src/components/FinanceDashboard.jsx
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import toast from "react-hot-toast";
 import Navbar from "./Navbar.jsx";
@@ -10,13 +11,20 @@ import api from "../api/axios.js";
 
 const PAGE_SIZE = 25;
 
+// ✅ Timezone-safe date formatter
+const fmtLocalDate = (d) => {
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+};
+
 const firstOfMonth = () => {
   const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split("T")[0];
+  return fmtLocalDate(new Date(d.getFullYear(), d.getMonth(), 1));
 };
-const todayStr = () => new Date().toISOString().split("T")[0];
+const todayStr = () => fmtLocalDate(new Date());
 
-// Build a compact page-number array (with "…" ellipsis markers).
 const buildPageNumbers = (current, total) => {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
   const pages = [];
@@ -40,19 +48,49 @@ export default function FinanceDashboard({ department, title, roleColor }) {
   const [endDate, setEndDate] = useState(todayStr());
   const [searchTerm, setSearchTerm] = useState("");
 
+  // ✅ NEW — quarter / year for FilterBar
+  const [quarter, setQuarter] = useState("");
+  const [year, setYear] = useState(String(new Date().getFullYear()));
+
   const [entries, setEntries] = useState([]);
   const [summary, setSummary] = useState(null);
   const [options, setOptions] = useState(null);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
 
-  // NEW: pagination
   const [currentPage, setCurrentPage] = useState(1);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
 
   const fileInputRef = useRef(null);
+
+  // ✅ Effect: quarter / year → start / end dates
+  useEffect(() => {
+    const y = parseInt(year, 10);
+    if (isNaN(y)) return;
+
+    const q = quarter === "" ? null : parseInt(quarter, 10);
+    let start, end;
+
+    if (q === null) {
+      start = new Date(y, 0, 1);
+      end = new Date(y, 11, 31);
+    } else if (q === 1) {
+      start = new Date(y, 0, 1); end = new Date(y, 2, 31);
+    } else if (q === 2) {
+      start = new Date(y, 3, 1); end = new Date(y, 5, 30);
+    } else if (q === 3) {
+      start = new Date(y, 6, 1); end = new Date(y, 8, 30);
+    } else if (q === 4) {
+      start = new Date(y, 9, 1); end = new Date(y, 11, 31);
+    } else {
+      return;
+    }
+
+    setStartDate(fmtLocalDate(start));
+    setEndDate(fmtLocalDate(end));
+  }, [quarter, year]);
 
   const fetchOptions = useCallback(async () => {
     try {
@@ -82,20 +120,13 @@ export default function FinanceDashboard({ department, title, roleColor }) {
     }
   }, [apiBase, startDate, endDate, searchTerm]);
 
-  useEffect(() => {
-    fetchOptions();
-  }, [fetchOptions]);
+  useEffect(() => { fetchOptions(); }, [fetchOptions]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  // NEW: reset page to 1 whenever any filter changes
   useEffect(() => {
     setCurrentPage(1);
   }, [startDate, endDate, searchTerm, department]);
 
-  // NEW: paginated slice
   const totalEntries = entries.length;
   const totalPages = Math.max(1, Math.ceil(totalEntries / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
@@ -108,7 +139,6 @@ export default function FinanceDashboard({ department, title, roleColor }) {
     [entries, safePage]
   );
 
-  // Guard against out-of-range page when data shrinks
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
@@ -117,7 +147,9 @@ export default function FinanceDashboard({ department, title, roleColor }) {
     setStartDate(firstOfMonth());
     setEndDate(todayStr());
     setSearchTerm("");
-    setCurrentPage(1); // NEW
+    setQuarter("");
+    setYear(String(new Date().getFullYear()));
+    setCurrentPage(1);
   };
 
   const handleDelete = async (entry) => {
@@ -173,16 +205,11 @@ export default function FinanceDashboard({ department, title, roleColor }) {
   };
 
   const handleExport = () => {
-    if (supportsExcelImportExport) {
-      handleExportExcel();
-    } else {
-      handleExportCsv();
-    }
+    if (supportsExcelImportExport) handleExportExcel();
+    else handleExportCsv();
   };
 
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
-  };
+  const handleImportClick = () => fileInputRef.current?.click();
 
   const handleImportFileChange = async (e) => {
     const file = e.target.files?.[0];
@@ -198,12 +225,8 @@ export default function FinanceDashboard({ department, title, roleColor }) {
         headers: { "Content-Type": "multipart/form-data" },
       });
       const { imported, errors } = res.data;
-      if (imported > 0) {
-        toast.success(`Imported ${imported} entr${imported === 1 ? "y" : "ies"}.`);
-      }
-      if (errors && errors.length) {
-        toast.error(`${errors.length} row(s) skipped — check the sheet formatting.`);
-      }
+      if (imported > 0) toast.success(`Imported ${imported} entr${imported === 1 ? "y" : "ies"}.`);
+      if (errors && errors.length) toast.error(`${errors.length} row(s) skipped — check the sheet formatting.`);
       fetchData();
     } catch (err) {
       const msg = err.response?.data?.message || "Failed to import the Excel file.";
@@ -239,6 +262,12 @@ export default function FinanceDashboard({ department, title, roleColor }) {
           onAddNew={openNewEntry}
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
+
+          // ✅ NEW — quarter / year controls
+          quarter={quarter}
+          year={year}
+          onQuarterChange={setQuarter}
+          onYearChange={setYear}
         />
 
         {supportsExcelImportExport && (
@@ -250,12 +279,7 @@ export default function FinanceDashboard({ department, title, roleColor }) {
               style={{ display: "none" }}
               onChange={handleImportFileChange}
             />
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={handleImportClick}
-              disabled={importing}
-            >
+            <button type="button" className="btn btn-secondary" onClick={handleImportClick} disabled={importing}>
               {importing ? "Importing..." : "Import Excel"}
             </button>
           </div>
@@ -286,17 +310,12 @@ export default function FinanceDashboard({ department, title, roleColor }) {
                 onDelete={handleDelete}
               />
 
-              {/* NEW: Pagination controls */}
               {totalEntries > 0 && (
                 <div
                   className="card"
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 12,
-                    flexWrap: "wrap",
-                    marginTop: 12,
+                    display: "flex", justifyContent: "space-between",
+                    alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 12,
                   }}
                 >
                   <span style={{ fontSize: 13, color: "#6b7280" }}>
