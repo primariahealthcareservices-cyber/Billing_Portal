@@ -597,14 +597,12 @@ export default function FinanceEntryForm({
 
   const salaryTotal = employees.reduce((sum, emp) => sum + (emp.total || 0), 0);
 
-  // ✅ Items total is always computed from the items grid
   const itemsTotal = items.reduce((sum, item) => {
     const qty = Number(item.quantity) || 0;
     const price = Number(item.unit_price) || 0;
     return sum + qty * price;
   }, 0);
 
-  // ✅ When items are required for this category, baseAmount = itemsTotal
   const baseAmount = isSalaryCategory
     ? salaryTotal
     : (requireItemsForCategory ? itemsTotal : (Number(form.amount) || 0));
@@ -1685,9 +1683,20 @@ export default function FinanceEntryForm({
                 <Plus size={15} /> Add New Item
               </button>
 
-              {/* ✅ GST inputs alongside items */}
-              {options.show_gst_tax && (
-                <div className="form-row" style={{ marginTop: 12 }}>
+              {/* ✅ Date + GST inputs alongside items */}
+              <div className="form-row" style={{ marginTop: 12 }}>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
+                  <input
+                    type="date"
+                    name="entry_date"
+                    value={form.entry_date}
+                    onChange={handleChange}
+                    className="form-control"
+                    required
+                  />
+                </div>
+                {options.show_gst_tax && (
                   <div className="form-group" style={{ flex: 1 }}>
                     <label className="form-label">
                       GST Tax (%) <span style={{ color: "#9ca3af", fontWeight: 400 }}>— applies to subtotal</span>
@@ -1704,20 +1713,20 @@ export default function FinanceEntryForm({
                       className="form-control"
                     />
                   </div>
-                  {options.show_tax_invoice_number && (
-                    <div className="form-group" style={{ flex: 1 }}>
-                      <label className="form-label">Tax Invoice Number</label>
-                      <input
-                        name="tax_invoice_number"
-                        value={form.tax_invoice_number}
-                        onChange={handleChange}
-                        placeholder="e.g. INV-2026-0142"
-                        className="form-control"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
+                )}
+                {options.show_tax_invoice_number && (
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label className="form-label">Tax Invoice Number</label>
+                    <input
+                      name="tax_invoice_number"
+                      value={form.tax_invoice_number}
+                      onChange={handleChange}
+                      placeholder="e.g. INV-2026-0142"
+                      className="form-control"
+                    />
+                  </div>
+                )}
+              </div>
 
               {options.show_gst_number && (
                 <div className="form-group">
