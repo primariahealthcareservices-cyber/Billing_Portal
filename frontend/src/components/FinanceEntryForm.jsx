@@ -71,6 +71,9 @@ const DEPARTMENTS_CONFIG = [
   { label: "Everglades", value: "Everglades" },
 ];
 
+// ✅ NEW — Funds categories
+const FUND_CATEGORIES = ["Restricted Fund", "Unrestricted Fund"];
+
 /* ---------------- CATEGORY FIELD MAPS ---------------- */
 
 const OFFICE_ADMIN_CATEGORY_FIELDS = {
@@ -183,7 +186,6 @@ const DENTAL_CATEGORY_FIELDS = {
   "Consulting":                         { showEmployeeName: true, showVehicleType: false, labelName: "Consultant/Company Name",                                      showPurpose: true },
   "Management Fees":                    { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name",                                          showPurpose: true },
   "Personnel & Payroll":                { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                         showPurpose: true },
-
   "Dental Operations":                  { showEmployeeName: true, showVehicleType: false, labelName: "Doctor/Staff Name",    showPurpose: true },
   "Doctor Consultation":                { showEmployeeName: true, showVehicleType: false, labelName: "Doctor Name",          showPurpose: true },
   "Clinical Procedures":                { showEmployeeName: true, showVehicleType: false, labelName: "Doctor/Staff Name",    showPurpose: true },
@@ -207,7 +209,6 @@ const EVERGLADES_CATEGORY_FIELDS = {
   "Consulting":                       { showEmployeeName: true, showVehicleType: false, labelName: "Consultant/Company Name",                                     showPurpose: true },
   "Management Fees":                  { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name",                                         showPurpose: true },
   "Personnel & Payroll":              { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                        showPurpose: true },
-
   "Prescription Sales":               { showEmployeeName: true, showVehicleType: false, labelName: "Pharmacist/Staff Name",   showPurpose: true },
   "OTC Sales":                        { showEmployeeName: true, showVehicleType: false, labelName: "Cashier/Staff Name",      showPurpose: true },
   "Insurance Claims":                 { showEmployeeName: true, showVehicleType: false, labelName: "Insurance Provider",      showPurpose: true },
@@ -217,7 +218,6 @@ const EVERGLADES_CATEGORY_FIELDS = {
   "Home Delivery":                    { showEmployeeName: true, showVehicleType: true,  labelName: "Delivery Person",         labelVehicle: "Vehicle Type", showPurpose: true },
   "Loyalty & Subscription Revenue":   { showEmployeeName: true, showVehicleType: false, labelName: "Customer/Client Name",    showPurpose: false },
   "B2B Wholesale":                    { showEmployeeName: true, showVehicleType: false, labelName: "Client/Business Name",    showPurpose: true },
-
   "Other":                            { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item",               showPurpose: true },
 };
 
@@ -238,19 +238,19 @@ export default function FinanceEntryForm({
   const isPCM = department === "PCM";
   const isDental = department === "Dental";
   const isEverglades = department === "Everglades";
+  const isCorporate = department === "Corporate";
 
   const salaryCategoryName = options?.is_salary_category || "Payroll Salaries";
   const ledgerCategoryName = "Ledger";
 
-  // ✅ MedTech: add B2B Revenue + B2C Revenue → item-based
   const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "B2B Revenue", "B2C Revenue"];
-  // ✅ Everglades: Pharma + Supplies → item-based
   const EVERGLADES_ITEM_CATEGORIES = ["Pharmaceuticals & Inventory", "Supplies & Equipments"];
 
   const createEmptyForm = () => ({
     entry_type: "Income",
     category: options?.categories?.Income?.[0] || "",
     sub_category: "",
+    fund_category: "",                 // ✅ NEW
     generated_by: "",
     revenue_type: options?.revenue_types?.[0] || "",
     patient_name: "",
@@ -289,6 +289,12 @@ export default function FinanceEntryForm({
   const [ledgerTotalAmount, setLedgerTotalAmount] = useState(0);
 
   const [clientSuggestions, setClientSuggestions] = useState([]);
+
+  // ===== Capital type detection =====
+  const isCapital = isCorporate && form.entry_type === "Capital";
+
+  // ✅ NEW — Funds type detection (all non-corporate depts)
+  const isFunds = form.entry_type === "Funds";
 
   const isSalaryCategory =
     !isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isDental && !isEverglades &&
@@ -335,7 +341,6 @@ export default function FinanceEntryForm({
     form.category !== "Goodwill";
   const isEvergladesSalaryCategory = isEverglades && form.category === salaryCategoryName;
 
-  // ✅ Does the current dept + category require items?
   const requireItemsForCategory =
     (isMedTech && MEDTECH_ITEM_CATEGORIES.includes(form.category)) ||
     (isEverglades && EVERGLADES_ITEM_CATEGORIES.includes(form.category)) ||
@@ -364,6 +369,73 @@ export default function FinanceEntryForm({
     if (!open) return;
 
     const populateForm = (entry) => {
+      // ✅ NEW — Funds entry population
+      if (entry.entry_type === "Funds") {
+        setForm({
+          entry_type: "Funds",
+          category: entry.category || "",
+          sub_category: entry.sub_category || "Capital",
+          fund_category: entry.fund_category || entry.category || "Restricted Fund",
+          generated_by: "",
+          revenue_type: "",
+          patient_name: "",
+          patient_place: "",
+          client_name: entry.client_name || "",
+          gst_number: "",
+          gst_tax_percent: "",
+          tax_invoice_number: "",
+          amount: entry.amount !== undefined && entry.amount !== null ? String(entry.amount) : "",
+          remarks: entry.remarks || "",
+          entry_date: entry.entry_date || today(),
+          exec_department: "",
+          employee_name: "",
+          salary_amount: "",
+          allowance_amount: "",
+          vehicle_type: "",
+          team: "",
+          purpose: entry.purpose || "",
+        });
+        setOtherCategory("");
+        setItems([emptyItem()]);
+        setEmployees([emptyEmployee()]);
+        setInvoiceFile(null);
+        setRemoveInvoice(false);
+        return;
+      }
+
+      if (entry.entry_type === "Capital") {
+        setForm({
+          entry_type: "Capital",
+          category: entry.category || "",
+          sub_category: "",
+          fund_category: "",
+          generated_by: "",
+          revenue_type: "",
+          patient_name: "",
+          patient_place: "",
+          client_name: entry.client_name || "",
+          gst_number: "",
+          gst_tax_percent: "",
+          tax_invoice_number: "",
+          amount: entry.amount !== undefined && entry.amount !== null ? String(entry.amount) : "",
+          remarks: entry.remarks || "",
+          entry_date: entry.entry_date || today(),
+          exec_department: "",
+          employee_name: "",
+          salary_amount: "",
+          allowance_amount: "",
+          vehicle_type: "",
+          team: "",
+          purpose: entry.purpose || "",
+        });
+        setOtherCategory("");
+        setItems([emptyItem()]);
+        setEmployees([emptyEmployee()]);
+        setInvoiceFile(null);
+        setRemoveInvoice(false);
+        return;
+      }
+
       const categoryList = options?.categories?.[entry.entry_type] || [];
       const isCustomCategory = categoryList.includes("Others") && !categoryList.includes(entry.category);
 
@@ -371,6 +443,7 @@ export default function FinanceEntryForm({
         entry_type: entry.entry_type || "Income",
         category: isCustomCategory ? "Others" : entry.category || "",
         sub_category: entry.sub_category || "",
+        fund_category: entry.fund_category || "",
         generated_by: entry.generated_by || "",
         revenue_type: entry.revenue_type || options?.revenue_types?.[0] || "",
         patient_name: entry.patient_name || "",
@@ -516,11 +589,35 @@ export default function FinanceEntryForm({
 
   const handleTypeChange = (event) => {
     const newType = event.target.value;
-    let firstCategory = options?.categories?.[newType]?.[0] || "";
-    if (newType === "Ledger") {
-      firstCategory = "Ledger";
+
+    // ✅ NEW — switching to Funds: seed fund_category and clear unrelated fields
+    if (newType === "Funds") {
+      setForm((prev) => ({
+        ...prev,
+        entry_type: "Funds",
+        category: "",
+        sub_category: "Capital",
+        fund_category: "Restricted Fund",
+        client_name: "",
+        amount: "",
+        purpose: "",
+        remarks: "",
+        entry_date: prev.entry_date || today(),
+      }));
+      setOtherCategory("");
+      setEmployees([emptyEmployee()]);
+      setItems([emptyItem()]);
+      return;
     }
-    setForm((prev) => ({ ...prev, entry_type: newType, category: firstCategory }));
+
+    let firstCategory = options?.categories?.[newType]?.[0] || "";
+    setForm((prev) => ({
+      ...prev,
+      entry_type: newType,
+      category: firstCategory,
+      sub_category: "",
+      fund_category: "",
+    }));
     setOtherCategory("");
     if (!isSalaryCategory) setEmployees([emptyEmployee()]);
   };
@@ -619,9 +716,145 @@ export default function FinanceEntryForm({
     setRemoveInvoice(false);
   };
 
+  /* ---------------- FUNDS SUBMIT ---------------- */
+  const submitFundsEntry = async () => {
+    if (!["Restricted Fund", "Unrestricted Fund"].includes(form.fund_category)) {
+      toast.error("Please select a Fund Category.");
+      return;
+    }
+    if (!form.client_name.trim()) {
+      toast.error("Name is required for Funds entries.");
+      return;
+    }
+    const amount = Number(form.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Please enter a valid amount.");
+      return;
+    }
+    if (!form.purpose.trim()) {
+      toast.error("Purpose is required for Funds entries.");
+      return;
+    }
+    if (!form.entry_date) {
+      toast.error("Please select the entry date.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const url = `/${apiBase}/entries`;
+
+      const payload = {
+        entry_type: "Funds",
+        category: form.fund_category,      // Restricted / Unrestricted
+        sub_category: "Capital",
+        fund_category: form.fund_category,
+        client_name: form.client_name.trim(),
+        amount,
+        purpose: form.purpose.trim(),
+        remarks: form.remarks || "",
+        entry_date: form.entry_date,
+      };
+
+      if (options.show_invoice) {
+        // multipart for IT / IT Sales / MedTech / Everglades
+        const fd = new FormData();
+        Object.entries(payload).forEach(([k, v]) => {
+          if (v !== null && v !== undefined) fd.append(k, v);
+        });
+        if (editingEntry && editingEntry.id) {
+          await api.put(`${url}/${editingEntry.id}`, fd, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+          toast.success("Funds entry updated.");
+        } else {
+          await api.post(url, fd, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+          toast.success("Funds entry added.");
+        }
+      } else {
+        if (editingEntry && editingEntry.id) {
+          await api.put(`${url}/${editingEntry.id}`, payload);
+          toast.success("Funds entry updated.");
+        } else {
+          await api.post(url, payload);
+          toast.success("Funds entry added.");
+        }
+      }
+
+      if (typeof onSaved === "function") await onSaved();
+      onClose();
+    } catch (error) {
+      const msg = error.response?.data?.message || "Failed to save Funds entry.";
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /* ---------------- CAPITAL SUBMIT ---------------- */
+  const submitCapitalEntry = async () => {
+    if (!form.client_name.trim()) {
+      toast.error("Name is required for Capital entries.");
+      return;
+    }
+    if (!form.purpose.trim()) {
+      toast.error("Purpose is required for Capital entries.");
+      return;
+    }
+    const amount = Number(form.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Please enter a valid amount.");
+      return;
+    }
+    if (!form.entry_date) {
+      toast.error("Please select the entry date.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const body = {
+        entry_type: "Capital",
+        category: form.category || "Other Capital",
+        client_name: form.client_name.trim(),
+        amount,
+        purpose: form.purpose.trim(),
+        remarks: form.remarks || "",
+        entry_date: form.entry_date,
+      };
+
+      const url = `/${apiBase}/entries`;
+      if (editingEntry && editingEntry.id) {
+        await api.put(`${url}/${editingEntry.id}`, body);
+        toast.success("Capital entry updated.");
+      } else {
+        await api.post(url, body);
+        toast.success("Capital entry added.");
+      }
+      if (typeof onSaved === "function") await onSaved();
+      onClose();
+    } catch (error) {
+      const msg = error.response?.data?.message || "Failed to save Capital entry.";
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   /* ---------------- SUBMIT HANDLER ---------------- */
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    // ✅ NEW — Funds short-circuit
+    if (isFunds) {
+      return submitFundsEntry();
+    }
+
+    if (isCapital) {
+      return submitCapitalEntry();
+    }
 
     if (!form.entry_date) {
       toast.error("Please select the entry date.");
@@ -862,19 +1095,28 @@ export default function FinanceEntryForm({
 
       let itemsTotalCalc = 0;
       if (cleanItems && cleanItems.length > 0) {
-        itemsTotalCalc = cleanItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+        itemsTotalCalc = cleanItems.reduce(
+          (sum, item) => sum + item.quantity * item.unit_price,
+          0
+        );
       }
 
-      const isEditing = editingEntry && editingEntry.id !== undefined && editingEntry.id !== null;
+      const isEditing =
+        editingEntry && editingEntry.id !== undefined && editingEntry.id !== null;
 
-      if (options.show_invoice && !isEditing) {
+      if (options.show_invoice) {
         const formData = new FormData();
+
         Object.keys(form).forEach((key) => {
           if (form[key] !== null && form[key] !== undefined) {
             formData.append(key, form[key]);
           }
         });
-        if (isOthersCategory) formData.append("other_category", otherCategory.trim());
+
+        if (isOthersCategory) {
+          formData.append("other_category", otherCategory.trim());
+        }
+
         if (isOfficeAdmin) {
           formData.append("employee_name", form.employee_name || "");
           formData.append("vehicle_type", form.vehicle_type || "");
@@ -921,20 +1163,26 @@ export default function FinanceEntryForm({
           formData.append("gst_number", form.gst_number || "");
           formData.append("generated_by", form.generated_by || "");
         }
+
         if (requireItemsForCategory && !isGoodwill) {
           formData.append("items", JSON.stringify(cleanItems || []));
           formData.append("amount", itemsTotalCalc);
         } else {
           formData.append("amount", parseFloat(form.amount) || 0);
         }
+
         if (invoiceFile) formData.append("invoice", invoiceFile);
         if (isITSales) formData.append("team", form.team || "");
+        if (removeInvoice && isEditing) formData.append("remove_invoice", "true");
+
         body = formData;
         config = { headers: { "Content-Type": "multipart/form-data" } };
       } else {
         body = { ...form };
         body.amount = parseFloat(form.amount) || 0;
+
         if (isOthersCategory) body.other_category = otherCategory.trim();
+
         if (isOfficeAdmin) {
           body.employee_name = form.employee_name || null;
           body.vehicle_type = form.vehicle_type || null;
@@ -972,6 +1220,7 @@ export default function FinanceEntryForm({
           body.generated_by = form.generated_by || null;
         }
         if (isITSales) body.team = form.team || null;
+
         if (!options.show_generated_by) delete body.generated_by;
         if (!options.show_revenue_type) delete body.revenue_type;
         if (!options.show_patient_fields) {
@@ -982,6 +1231,7 @@ export default function FinanceEntryForm({
         if (!options.show_gst_number) delete body.gst_number;
         if (!options.show_gst_tax) delete body.gst_tax_percent;
         if (!options.show_tax_invoice_number) delete body.tax_invoice_number;
+
         if (requireItemsForCategory && !isGoodwill) {
           body.items = cleanItems || [];
           body.amount = itemsTotalCalc;
@@ -1012,8 +1262,11 @@ export default function FinanceEntryForm({
         } else if (responseData.message) {
           errorMessage = responseData.message;
         } else {
-          try { errorMessage = JSON.stringify(responseData); }
-          catch { errorMessage = "An unknown error occurred."; }
+          try {
+            errorMessage = JSON.stringify(responseData);
+          } catch {
+            errorMessage = "An unknown error occurred.";
+          }
         }
       }
       toast.error(errorMessage);
@@ -1073,6 +1326,195 @@ export default function FinanceEntryForm({
       setSaving(false);
     }
   };
+
+  /* ---------------- FUNDS FIELDS RENDERER ---------------- */
+  const renderFundsFields = () => (
+    <>
+      <div className="form-group">
+        <label className="form-label">
+          Fund Category <span style={{ color: "red" }}>*</span>
+        </label>
+        <select
+          name="fund_category"
+          value={form.fund_category || "Restricted Fund"}
+          onChange={handleChange}
+          className="form-control"
+          required
+        >
+          {FUND_CATEGORIES.map((fc) => (
+            <option key={fc} value={fc}>{fc}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">
+          Name <span style={{ color: "red" }}>*</span>
+        </label>
+        <input
+          name="client_name"
+          value={form.client_name || ""}
+          onChange={handleChange}
+          placeholder="Name of person, organization, or source"
+          className="form-control"
+          required
+        />
+      </div>
+
+      <div className="form-row">
+        <div className="form-group">
+          <label className="form-label">
+            Amount (₹) <span style={{ color: "red" }}>*</span>
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            name="amount"
+            value={form.amount}
+            onChange={handleChange}
+            placeholder="0.00"
+            className="form-control"
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label className="form-label">
+            Date <span style={{ color: "red" }}>*</span>
+          </label>
+          <input
+            type="date"
+            name="entry_date"
+            value={form.entry_date}
+            onChange={handleChange}
+            className="form-control"
+            required
+          />
+        </div>
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">
+          Purpose <span style={{ color: "red" }}>*</span>
+        </label>
+        <textarea
+          name="purpose"
+          value={form.purpose || ""}
+          onChange={handleChange}
+          rows={3}
+          placeholder="Reason or purpose for which the funds are being added"
+          className="form-control"
+          required
+        />
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">Remarks</label>
+        <textarea
+          name="remarks"
+          value={form.remarks}
+          onChange={handleChange}
+          rows={2}
+          placeholder="Optional notes"
+          className="form-control"
+        />
+      </div>
+    </>
+  );
+
+  /* ---------------- CAPITAL FIELDS RENDERER ---------------- */
+  const renderCapitalFields = () => (
+    <>
+      <div className="form-group">
+        <label className="form-label">
+          Name <span style={{ color: "red" }}>*</span>
+        </label>
+        <input
+          name="client_name"
+          value={form.client_name || ""}
+          onChange={handleChange}
+          placeholder="Enter name of person, organization, or source"
+          className="form-control"
+          required
+        />
+      </div>
+
+      <div className="form-row">
+        <div className="form-group">
+          <label className="form-label">
+            Amount (₹) <span style={{ color: "red" }}>*</span>
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            name="amount"
+            value={form.amount}
+            onChange={handleChange}
+            placeholder="0.00"
+            className="form-control"
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label className="form-label">
+            Date <span style={{ color: "red" }}>*</span>
+          </label>
+          <input
+            type="date"
+            name="entry_date"
+            value={form.entry_date}
+            onChange={handleChange}
+            className="form-control"
+            required
+          />
+        </div>
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">
+          Purpose <span style={{ color: "red" }}>*</span>
+        </label>
+        <textarea
+          name="purpose"
+          value={form.purpose || ""}
+          onChange={handleChange}
+          rows={3}
+          placeholder="Reason or purpose for which the capital is being added"
+          className="form-control"
+          required
+        />
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">Remarks</label>
+        <textarea
+          name="remarks"
+          value={form.remarks}
+          onChange={handleChange}
+          rows={2}
+          placeholder="Optional notes"
+          className="form-control"
+        />
+      </div>
+
+      {isCorporate && (
+        <div className="form-group">
+          <label className="form-label">Capital Category</label>
+          <select
+            name="category"
+            value={form.category}
+            onChange={handleChange}
+            className="form-control"
+          >
+            {(options?.categories?.Capital || []).map((cat) => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
+        </div>
+      )}
+    </>
+  );
 
   /* ---------------- Standard fields renderer ---------------- */
   const renderStandardFields = () => (
@@ -1495,13 +1937,7 @@ export default function FinanceEntryForm({
               <div style={{ maxHeight: "200px", overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: "4px", padding: "8px" }}>
                 <table style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
                   <thead>
-                    <tr style={{ borderBottom: "1px solid #d1d5db" }}>
-                      <th style={{ textAlign: "left", padding: "4px 8px" }}>Date</th>
-                      <th style={{ textAlign: "left", padding: "4px 8px" }}>Particulars</th>
-                      <th style={{ textAlign: "right", padding: "4px 8px" }}>Debit (₹)</th>
-                      <th style={{ textAlign: "right", padding: "4px 8px" }}>Credit (₹)</th>
-                      <th style={{ textAlign: "right", padding: "4px 8px" }}>Balance (₹)</th>
-                    </tr>
+                    <tr style={{ borderBottom: "1px solid #d1d5db" }}><th style={{ textAlign: "left", padding: "4px 8px" }}>Date</th><th style={{ textAlign: "left", padding: "4px 8px" }}>Particulars</th><th style={{ textAlign: "right", padding: "4px 8px" }}>Debit (₹)</th><th style={{ textAlign: "right", padding: "4px 8px" }}>Credit (₹)</th><th style={{ textAlign: "right", padding: "4px 8px" }}>Balance (₹)</th></tr>
                   </thead>
                   <tbody>
                     {enhancedHistory.map((entry) => (
@@ -1625,31 +2061,38 @@ export default function FinanceEntryForm({
                 ))}
               </select>
             </div>
-            <div className="form-group">
-              <label className="form-label">Category</label>
-              {form.entry_type === "Ledger" ? (
-                <input value="Ledger" disabled className="form-control" />
-              ) : (
-                <select name="category" value={form.category} onChange={handleCategoryChange} className="form-control">
-                  {categoryOptionsForType
-                    .filter((cat) => !(isOfficeAdmin && cat === salaryCategoryName))
-                    .map((cat) => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                </select>
-              )}
-            </div>
+            {/* ✅ hide Category when Capital or Funds is selected */}
+            {!isCapital && !isFunds && (
+              <div className="form-group">
+                <label className="form-label">Category</label>
+                {form.entry_type === "Ledger" ? (
+                  <input value="Ledger" disabled className="form-control" />
+                ) : (
+                  <select name="category" value={form.category} onChange={handleCategoryChange} className="form-control">
+                    {categoryOptionsForType
+                      .filter((cat) => !(isOfficeAdmin && cat === salaryCategoryName))
+                      .map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                  </select>
+                )}
+              </div>
+            )}
           </div>
 
-          {isOthersCategory && (
+          {isOthersCategory && !isCapital && !isFunds && (
             <div className="form-group">
               <label className="form-label">Other Category Name</label>
               <input value={otherCategory} onChange={(e) => setOtherCategory(e.target.value)} placeholder="Enter a category name" className="form-control" />
             </div>
           )}
 
-          {/* ===== ITEMS SECTION (only when required for this category) ===== */}
-          {requireItemsForCategory && !isGoodwill && (
+          {/* ✅ NEW — Funds fields */}
+          {isFunds && !isCapital && renderFundsFields()}
+
+          {isCapital && renderCapitalFields()}
+
+          {!isCapital && !isFunds && requireItemsForCategory && !isGoodwill && (
             <div className="form-group">
               <label className="form-label">Items</label>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1683,91 +2126,47 @@ export default function FinanceEntryForm({
                 <Plus size={15} /> Add New Item
               </button>
 
-              {/* ✅ Date + GST inputs alongside items */}
               <div className="form-row" style={{ marginTop: 12 }}>
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
-                  <input
-                    type="date"
-                    name="entry_date"
-                    value={form.entry_date}
-                    onChange={handleChange}
-                    className="form-control"
-                    required
-                  />
+                  <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange} className="form-control" required />
                 </div>
                 {options.show_gst_tax && (
                   <div className="form-group" style={{ flex: 1 }}>
-                    <label className="form-label">
-                      GST Tax (%) <span style={{ color: "#9ca3af", fontWeight: 400 }}>— applies to subtotal</span>
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      name="gst_tax_percent"
-                      value={form.gst_tax_percent}
-                      onChange={handleChange}
-                      placeholder="e.g. 18"
-                      className="form-control"
-                    />
+                    <label className="form-label">GST Tax (%) <span style={{ color: "#9ca3af", fontWeight: 400 }}>— applies to subtotal</span></label>
+                    <input type="number" min="0" max="100" step="0.01" name="gst_tax_percent" value={form.gst_tax_percent} onChange={handleChange} placeholder="e.g. 18" className="form-control" />
                   </div>
                 )}
                 {options.show_tax_invoice_number && (
                   <div className="form-group" style={{ flex: 1 }}>
                     <label className="form-label">Tax Invoice Number</label>
-                    <input
-                      name="tax_invoice_number"
-                      value={form.tax_invoice_number}
-                      onChange={handleChange}
-                      placeholder="e.g. INV-2026-0142"
-                      className="form-control"
-                    />
+                    <input name="tax_invoice_number" value={form.tax_invoice_number} onChange={handleChange} placeholder="e.g. INV-2026-0142" className="form-control" />
                   </div>
                 )}
               </div>
 
               {options.show_gst_number && (
                 <div className="form-group">
-                  <label className="form-label">
-                    GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}
-                  </label>
-                  <input
-                    name="gst_number"
-                    value={form.gst_number}
-                    onChange={handleChange}
-                    placeholder="e.g. 22AAAAA0000A1Z5"
-                    className="form-control"
-                  />
+                  <label className="form-label">GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}</label>
+                  <input name="gst_number" value={form.gst_number} onChange={handleChange} placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
                 </div>
               )}
 
-              {/* Subtotal + GST + Total summary */}
               <div style={{ marginTop: 12, textAlign: "right" }}>
                 {options.show_gst_tax ? (
                   <>
-                    <div style={{ fontSize: 13, color: "var(--color-ink-500)" }}>
-                      Subtotal: {formatCurrency(itemsTotal)}
-                    </div>
-                    <div style={{ fontSize: 13, color: "var(--color-ink-500)" }}>
-                      GST Tax ({gstTaxPercentValue || 0}%): {formatCurrency(gstTaxAmount)}
-                    </div>
-                    <div style={{ fontWeight: 700, marginTop: 4 }}>
-                      Total Amount: {formatCurrency(grandTotal)}
-                    </div>
+                    <div style={{ fontSize: 13, color: "var(--color-ink-500)" }}>Subtotal: {formatCurrency(itemsTotal)}</div>
+                    <div style={{ fontSize: 13, color: "var(--color-ink-500)" }}>GST Tax ({gstTaxPercentValue || 0}%): {formatCurrency(gstTaxAmount)}</div>
+                    <div style={{ fontWeight: 700, marginTop: 4 }}>Total Amount: {formatCurrency(grandTotal)}</div>
                   </>
                 ) : (
-                  <div style={{ fontWeight: 600 }}>
-                    Total Amount: {formatCurrency(itemsTotal)}
-                  </div>
+                  <div style={{ fontWeight: 600 }}>Total Amount: {formatCurrency(itemsTotal)}</div>
                 )}
               </div>
             </div>
           )}
 
-          {/* ===== AMOUNT FIELD (only when NOT using items) ===== */}
-          {!requireItemsForCategory && !isLedger && !isGoodwill && !isSalaryCategory && (
+          {!isCapital && !isFunds && !requireItemsForCategory && !isLedger && !isGoodwill && !isSalaryCategory && (
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Amount (₹)</label>
@@ -1780,7 +2179,7 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {!requireItemsForCategory && options.show_gst_tax && !isLedger && !isGoodwill && !isSalaryCategory && (
+          {!isCapital && !isFunds && !requireItemsForCategory && options.show_gst_tax && !isLedger && !isGoodwill && !isSalaryCategory && (
             <p className="text-muted" style={{ textAlign: "right", fontSize: 13, marginTop: -8 }}>
               GST Tax ({gstTaxPercentValue || 0}%): {formatCurrency(gstTaxAmount)}
               {" · "}
@@ -1788,60 +2187,58 @@ export default function FinanceEntryForm({
             </p>
           )}
 
-          {/* ===== SALARY WARNINGS ===== */}
-          {isOfficeAdmin && form.category === salaryCategoryName && (
+          {!isCapital && !isFunds && isOfficeAdmin && form.category === salaryCategoryName && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salary must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for Office Administration employees.</p>
             </div>
           )}
 
-          {isITSales && !isITSalesSalaryCategory && (
+          {!isCapital && !isFunds && isITSales && !isITSalesSalaryCategory && (
             <div className="form-group">
               <label className="form-label">Team</label>
               <input name="team" value={form.team || ""} onChange={handleChange} placeholder="e.g. Sales Team, Enterprise Sales, B2B Team" className="form-control" />
             </div>
           )}
 
-          {isITSalaryCategory && (
+          {!isCapital && !isFunds && isITSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for IT Development employees.</p>
             </div>
           )}
-          {isITSalesSalaryCategory && (
+          {!isCapital && !isFunds && isITSalesSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for IT Sales employees.</p>
             </div>
           )}
-          {isMedTechSalaryCategory && (
+          {!isCapital && !isFunds && isMedTechSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for MedTech employees.</p>
             </div>
           )}
-          {isPCMSalaryCategory && (
+          {!isCapital && !isFunds && isPCMSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for PCM employees.</p>
             </div>
           )}
-          {isDentalSalaryCategory && (
+          {!isCapital && !isFunds && isDentalSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for Dental employees.</p>
             </div>
           )}
-          {isEvergladesSalaryCategory && (
+          {!isCapital && !isFunds && isEvergladesSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for Everglades employees.</p>
             </div>
           )}
 
-          {/* ========== SALARY CATEGORY ========== */}
-          {isSalaryCategory && (
+          {!isCapital && !isFunds && isSalaryCategory && (
             <div className="form-group">
               <label className="form-label">Employees</label>
               {employees.map((emp) => (
@@ -1907,9 +2304,9 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {isLedger && renderLedgerFields()}
+          {!isCapital && !isFunds && isLedger && renderLedgerFields()}
 
-          {isGoodwill && (
+          {!isCapital && !isFunds && isGoodwill && (
             <>
               <div className="form-group">
                 <label className="form-label">Client Name <span style={{ color: "red" }}>*</span></label>
@@ -1935,14 +2332,14 @@ export default function FinanceEntryForm({
             </>
           )}
 
-          {isOfficeAdmin && !isOfficeAdminSalary && !isLedger && renderOfficeAdminFields()}
-          {isIT && !isITSalaryCategory && !isLedger && (showITFields ? renderITFields() : renderStandardFields())}
-          {isITSales && !isITSalesSalaryCategory && !isLedger && (showITSalesFields ? renderITSalesFields() : renderStandardFields())}
-          {isMedTech && !isMedTechSalaryCategory && !isLedger && !isGoodwill && (showMedTechFields ? renderMedTechFields() : renderStandardFields())}
-          {isPCM && !isPCMSalaryCategory && !isLedger && (showPCMFields ? renderPCMFields() : renderStandardFields())}
-          {isDental && !isDentalSalaryCategory && !isLedger && (showDentalFields ? renderDentalFields() : renderStandardFields())}
-          {isEverglades && !isEvergladesSalaryCategory && !isLedger && !isGoodwill && (showEvergladesFields ? renderEvergladesFields() : renderStandardFields())}
-          {!isSalaryCategory && !isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isDental && !isEverglades && !isLedger && !isGoodwill && renderStandardFields()}
+          {!isCapital && !isFunds && isOfficeAdmin && !isOfficeAdminSalary && !isLedger && renderOfficeAdminFields()}
+          {!isCapital && !isFunds && isIT && !isITSalaryCategory && !isLedger && (showITFields ? renderITFields() : renderStandardFields())}
+          {!isCapital && !isFunds && isITSales && !isITSalesSalaryCategory && !isLedger && (showITSalesFields ? renderITSalesFields() : renderStandardFields())}
+          {!isCapital && !isFunds && isMedTech && !isMedTechSalaryCategory && !isLedger && !isGoodwill && (showMedTechFields ? renderMedTechFields() : renderStandardFields())}
+          {!isCapital && !isFunds && isPCM && !isPCMSalaryCategory && !isLedger && (showPCMFields ? renderPCMFields() : renderStandardFields())}
+          {!isCapital && !isFunds && isDental && !isDentalSalaryCategory && !isLedger && (showDentalFields ? renderDentalFields() : renderStandardFields())}
+          {!isCapital && !isFunds && isEverglades && !isEvergladesSalaryCategory && !isLedger && !isGoodwill && (showEvergladesFields ? renderEvergladesFields() : renderStandardFields())}
+          {!isCapital && !isFunds && !isSalaryCategory && !isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isDental && !isEverglades && !isLedger && !isGoodwill && renderStandardFields()}
 
           <div className="modal-footer">
             <button type="button" onClick={onClose} className="btn btn-secondary" disabled={saving}>Cancel</button>

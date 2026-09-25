@@ -1,5 +1,5 @@
 # backend/routes/pcm.py
-"""PCM finance routes — Income/Expenses entries with new Home Health categories.
+"""PCM finance routes — Income/Expenses/Funds entries with new Home Health categories.
 Now includes salary entries from Corporate Management.
 """
 from datetime import datetime, date
@@ -13,6 +13,7 @@ from excel_utils import parse_finance_entries_workbook, build_finance_entries_wo
 
 DEPARTMENT = "PCM"
 CONFIG = DEPARTMENT_CONFIG[DEPARTMENT]
+FUND_CATEGORIES = ("Restricted Fund", "Unrestricted Fund")
 
 pcm_bp = Blueprint("pcm", __name__, url_prefix="/api/pcm")
 
@@ -39,17 +40,16 @@ def _apply_date_filters(query):
 @pcm_bp.route("/options", methods=["GET"])
 @role_required("PCM")
 def options():
-    # Get the salary category name from Corporate config
     salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     return jsonify({
         "department": DEPARTMENT,
-        "entry_types": ENTRY_TYPES,
+        "entry_types": CONFIG.get("entry_types", ENTRY_TYPES),
         "categories": CONFIG["categories"],
         "revenue_types": CONFIG["revenue_types"],
         "show_generated_by": CONFIG["show_generated_by"],
         "show_revenue_type": CONFIG["show_revenue_type"],
         "show_patient_fields": CONFIG["show_patient_fields"],
-        "is_salary_category": salary_category,   # for frontend to block salary
+        "is_salary_category": salary_category,
     }), 200
 
 
@@ -59,6 +59,51 @@ def create_entry():
     data = request.get_json(silent=True) or {}
 
     entry_type = data.get("entry_type")
+
+    # ====================== FUNDS ENTRY ======================
+    if entry_type == "Funds":
+        errors = []
+        fund_category = (data.get("fund_category") or "").strip()
+        client_name = (data.get("client_name") or "").strip()
+        purpose = (data.get("purpose") or "").strip()
+        remarks = (data.get("remarks") or "").strip()
+        entry_date = _parse_date(data.get("entry_date"), default=date.today())
+        amount_raw = data.get("amount")
+
+        if fund_category not in FUND_CATEGORIES:
+            errors.append("fund_category must be Restricted Fund or Unrestricted Fund.")
+        if not client_name:
+            errors.append("Name is required.")
+        if not purpose:
+            errors.append("Purpose is required.")
+        try:
+            amount = float(amount_raw)
+            if amount <= 0:
+                errors.append("Amount must be greater than 0.")
+        except (TypeError, ValueError):
+            errors.append("Amount must be a valid number.")
+
+        if errors:
+            return jsonify({"message": "Validation failed.", "errors": errors}), 400
+
+        entry = FinanceEntry(
+            department=DEPARTMENT,
+            entry_type="Funds",
+            category=fund_category,
+            sub_category="Capital",
+            fund_category=fund_category,
+            client_name=client_name,
+            amount=amount,
+            purpose=purpose,
+            remarks=remarks,
+            entry_date=entry_date,
+            created_by_id=get_jwt_identity(),
+        )
+        db.session.add(entry)
+        db.session.commit()
+        return jsonify({"message": "Funds entry created.", "entry": entry.to_dict()}), 201
+
+    # ====================== INCOME / EXPENSES ======================
     category = data.get("category")
     amount = data.get("amount")
     remarks = (data.get("remarks") or "").strip()
@@ -66,12 +111,10 @@ def create_entry():
     patient_place = (data.get("patient_place") or "").strip() or None
     entry_date = _parse_date(data.get("entry_date"), default=date.today())
 
-    # New fields for PCM categories
     employee_name = (data.get("employee_name") or "").strip() or None
     purpose = (data.get("purpose") or "").strip() or None
     vehicle_type = (data.get("vehicle_type") or "").strip() or None
 
-    # Get salary category from Corporate
     salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     is_salary = (entry_type == "Expenses" and category == salary_category)
 
@@ -95,7 +138,6 @@ def create_entry():
         errors.append("amount must be a number.")
         amount = 0
 
-    # For expense entries (excluding salary), remarks is mandatory
     if entry_type == "Expenses" and not is_salary and not remarks:
         errors.append("Remarks are required.")
 
@@ -125,11 +167,9 @@ def create_entry():
 @pcm_bp.route("/entries", methods=["GET"])
 @role_required("PCM")
 def list_entries():
-    # 1. Native PCM entries
     query = FinanceEntry.query.filter_by(department=DEPARTMENT)
     query = _apply_date_filters(query)
 
-    # 2. Salary entries from Corporate with exec_department = PCM
     salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     salary_query = FinanceEntry.query.filter(
         FinanceEntry.department == "Corporate",
@@ -144,7 +184,6 @@ def list_entries():
     if end_date:
         salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
 
-    # Combine both
     combined_query = query.union(salary_query)
 
     entry_type = request.args.get("entry_type")
@@ -165,6 +204,7 @@ def list_entries():
                 FinanceEntry.patient_place.ilike(like),
                 FinanceEntry.category.ilike(like),
                 FinanceEntry.employee_name.ilike(like),
+                FinanceEntry.client_name.ilike(like),
             )
         )
 
@@ -180,12 +220,54 @@ def update_entry(entry_id):
         return jsonify({"message": "Entry not found."}), 404
 
     data = request.get_json(silent=True) or {}
+
+    # ====================== FUNDS UPDATE ======================
+    if entry.entry_type == "Funds":
+        errors = []
+        fund_category = (data.get("fund_category") or entry.fund_category or "").strip()
+        client_name = (data.get("client_name") or "").strip()
+        purpose = (data.get("purpose") or "").strip()
+        remarks = (data.get("remarks") or "").strip()
+        amount_raw = data.get("amount")
+
+        if fund_category not in FUND_CATEGORIES:
+            errors.append("fund_category must be Restricted Fund or Unrestricted Fund.")
+        if not client_name:
+            errors.append("Name is required.")
+        if not purpose:
+            errors.append("Purpose is required.")
+        try:
+            amount = float(amount_raw)
+            if amount <= 0:
+                errors.append("Amount must be greater than 0.")
+        except (TypeError, ValueError):
+            errors.append("Amount must be a valid number.")
+
+        if errors:
+            return jsonify({"message": "Validation failed.", "errors": errors}), 400
+
+        entry.category = fund_category
+        entry.sub_category = "Capital"
+        entry.fund_category = fund_category
+        entry.client_name = client_name
+        entry.amount = amount
+        entry.purpose = purpose
+        entry.remarks = remarks
+
+        if "entry_date" in data:
+            parsed = _parse_date(data["entry_date"])
+            if parsed:
+                entry.entry_date = parsed
+
+        db.session.commit()
+        return jsonify({"message": "Funds entry updated.", "entry": entry.to_dict()}), 200
+
+    # ====================== INCOME / EXPENSES UPDATE ======================
     new_type = data.get("entry_type", entry.entry_type)
     allowed_categories = CONFIG["categories"].get(new_type, [])
 
     errors = []
 
-    # Block changing category to salary category
     salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     new_category = data.get("category", entry.category)
     if new_category == salary_category and entry.category != salary_category:
@@ -218,7 +300,6 @@ def update_entry(entry_id):
         if parsed:
             entry.entry_date = parsed
 
-    # New fields
     if "employee_name" in data:
         entry.employee_name = (data["employee_name"] or "").strip() or None
     if "purpose" in data:
@@ -226,7 +307,6 @@ def update_entry(entry_id):
     if "vehicle_type" in data:
         entry.vehicle_type = (data["vehicle_type"] or "").strip() or None
 
-    # Remarks mandatory for PCM expenses (except salary)
     if entry.entry_type == "Expenses" and entry.category != salary_category and not entry.remarks:
         errors.append("Remarks are required.")
 
@@ -251,11 +331,9 @@ def delete_entry(entry_id):
 @pcm_bp.route("/summary", methods=["GET"])
 @role_required("PCM")
 def finance_summary():
-    # 1. Native PCM entries
     query = FinanceEntry.query.filter_by(department=DEPARTMENT)
     query = _apply_date_filters(query)
 
-    # 2. Salary entries from Corporate with exec_department = PCM
     salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     salary_query = FinanceEntry.query.filter(
         FinanceEntry.department == "Corporate",
@@ -271,17 +349,22 @@ def finance_summary():
         salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
 
     combined_query = query.union(salary_query)
-
     entries = combined_query.all()
 
     total_income = sum(float(e.amount) for e in entries if e.entry_type == "Income")
     total_expenses = sum(float(e.amount) for e in entries if e.entry_type == "Expenses")
+    total_funds = sum(float(e.amount) for e in entries if e.entry_type == "Funds")
 
     by_date = {}
     for e in entries:
         key = e.entry_date.isoformat()
-        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0})
-        by_date[key]["income" if e.entry_type == "Income" else "expenses"] += float(e.amount)
+        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "funds": 0})
+        if e.entry_type == "Income":
+            by_date[key]["income"] += float(e.amount)
+        elif e.entry_type == "Expenses":
+            by_date[key]["expenses"] += float(e.amount)
+        elif e.entry_type == "Funds":
+            by_date[key]["funds"] += float(e.amount)
     trend = sorted(by_date.values(), key=lambda x: x["date"])
 
     by_category = {}
@@ -293,6 +376,7 @@ def finance_summary():
         "department": DEPARTMENT,
         "total_income": total_income,
         "total_expenses": total_expenses,
+        "total_funds": total_funds,
         "profit": total_income - total_expenses,
         "entry_count": len(entries),
         "trend": trend,
@@ -303,7 +387,6 @@ def finance_summary():
 @pcm_bp.route("/import", methods=["POST"])
 @role_required("PCM")
 def import_entries():
-    """Upload an .xlsx sheet; parsed rows are inserted as FinanceEntry rows for PCM."""
     file = request.files.get("file")
     if not file or file.filename == "":
         return jsonify({"message": "No file uploaded."}), 400

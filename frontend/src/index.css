@@ -444,7 +444,6 @@ textarea.form-control {
   color: #fff;
   flex-shrink: 0;
 }
-
 .stat-icon--income { background: var(--color-success); }
 .stat-icon--expense { background: var(--color-danger); }
 .stat-icon--profit { background: var(--color-primary); }
@@ -452,7 +451,7 @@ textarea.form-control {
 .stat-icon--entries { background: #6366f1; }
 .stat-icon--team { background: #8b5cf6; }
 .stat-icon--active { background: #4f46e5; }
-
+.stat-icon--capital { background: #0ea5e9; }   /* ✅ Capital – sky blue */
 .stat-label {
   font-size: 11px;
   font-weight: 700;

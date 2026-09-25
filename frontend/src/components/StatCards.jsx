@@ -6,7 +6,8 @@ import {
   Wallet,
   Users,
   FileText,
-  CreditCard,   // Used for "Paid to Other Labs"
+  CreditCard,
+  Landmark,     // Capital icon
 } from "lucide-react";
 
 const formatCurrency = (value) =>
@@ -34,15 +35,27 @@ function StatCard({ icon: Icon, label, value, iconClass, sub }) {
 export default function StatCards({
   totalIncome,
   totalExpenses,
+  totalCapital,
   profit,
   entryCount,
   teamMembers,
   paidToOtherLabs,
+  showCapital = false,
 }) {
   const isProfitNegative = profit < 0;
 
   return (
     <div className="stat-grid">
+      {/* ✅ Capital card renders FIRST when enabled (CEO Dashboard) */}
+      {showCapital && (
+        <StatCard
+          icon={Landmark}
+          label="Capital"
+          value={formatCurrency(totalCapital)}
+          iconClass="stat-icon--capital"
+        />
+      )}
+
       <StatCard
         icon={TrendingUp}
         label="Income"
@@ -80,7 +93,7 @@ export default function StatCards({
           icon={CreditCard}
           label="Paid to Other Labs"
           value={formatCurrency(paidToOtherLabs)}
-          iconClass="stat-icon--other-labs"   // ← custom class for styling
+          iconClass="stat-icon--other-labs"
         />
       )}
     </div>

@@ -11,6 +11,9 @@ from file_utils import save_invoice_file, delete_invoice_file
 DEPARTMENT = "MedTech"
 CONFIG = DEPARTMENT_CONFIG[DEPARTMENT]
 
+# ✅ Fund categories (Restricted / Unrestricted)
+FUND_CATEGORIES = ("Restricted Fund", "Unrestricted Fund")
+
 # ✅ Categories that require item-level details
 MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "B2B Revenue", "B2C Revenue"]
 
@@ -87,6 +90,20 @@ def _parse_gst_tax_percent(raw_value):
     return percent, None
 
 
+def _parse_items_field(raw_items):
+    """Accept items as a list (JSON body) or a JSON-encoded string (FormData)."""
+    if raw_items is None or raw_items == "":
+        return []
+    if isinstance(raw_items, list):
+        return raw_items
+    if isinstance(raw_items, str):
+        try:
+            return json.loads(raw_items)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 # ==================== OPTIONS ====================
 @medtech_bp.route("/options", methods=["GET"])
 @role_required("MedTech")
@@ -94,7 +111,7 @@ def options():
     salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     return jsonify({
         "department": DEPARTMENT,
-        "entry_types": ["Income", "Expenses", "Ledger"],
+        "entry_types": ["Income", "Expenses", "Funds", "Ledger"],
         "categories": CONFIG["categories"],
         "revenue_types": CONFIG["revenue_types"],
         "show_generated_by": CONFIG["show_generated_by"],
@@ -133,11 +150,61 @@ def create_entry():
         data = request.form
 
     entry_type = data.get("entry_type")
+
+    # ====================== FUNDS ENTRY ======================
+    if entry_type == "Funds":
+        errors = []
+        fund_category = (data.get("fund_category") or "").strip()
+        client_name = (data.get("client_name") or "").strip()
+        purpose = (data.get("purpose") or "").strip()
+        remarks_val = (data.get("remarks") or "").strip()
+        entry_date_val = _parse_date(data.get("entry_date"), default=date.today())
+        amount_raw = data.get("amount")
+
+        if fund_category not in FUND_CATEGORIES:
+            errors.append("fund_category must be Restricted Fund or Unrestricted Fund.")
+        if not client_name:
+            errors.append("Name is required.")
+        if not purpose:
+            errors.append("Purpose is required.")
+        try:
+            amount_val = float(amount_raw)
+            if amount_val <= 0:
+                errors.append("Amount must be greater than 0.")
+        except (TypeError, ValueError):
+            errors.append("Amount must be a valid number.")
+
+        if errors:
+            return jsonify({"message": "Validation failed.", "errors": errors}), 400
+
+        entry = FinanceEntry(
+            department=DEPARTMENT,
+            entry_type="Funds",
+            category=fund_category,
+            sub_category="Capital",
+            fund_category=fund_category,
+            client_name=client_name,
+            amount=amount_val,
+            purpose=purpose,
+            remarks=remarks_val,
+            entry_date=entry_date_val,
+            created_by_id=get_jwt_identity(),
+        )
+        try:
+            db.session.add(entry)
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            import traceback
+            traceback.print_exc()
+            return jsonify({"message": "Failed to create Funds entry.", "error": str(exc)}), 500
+        return jsonify({"message": "Funds entry created.", "entry": entry.to_dict()}), 201
+
+    # ---- LEDGER HANDLING ----
     category = data.get("category")
     remarks = data.get("remarks", "")
     entry_date = _parse_date(data.get("entry_date"), default=date.today())
 
-    # ---- LEDGER HANDLING ----
     if entry_type == "Ledger":
         category = "Ledger"
         if not is_json:
@@ -168,8 +235,14 @@ def create_entry():
             remarks=remarks,
             created_by_id=get_jwt_identity(),
         )
-        db.session.add(ledger)
-        db.session.commit()
+        try:
+            db.session.add(ledger)
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            import traceback
+            traceback.print_exc()
+            return jsonify({"message": "Failed to create Ledger entry.", "error": str(exc)}), 500
         return jsonify({
             "message": "Ledger entry created.",
             "entry": ledger.to_dict()
@@ -221,9 +294,8 @@ def create_entry():
             errors.append(gst_tax_error)
 
         if require_items:
-            try:
-                items_data = json.loads(data.get("items") or "[]")
-            except (TypeError, ValueError):
+            items_data = _parse_items_field(data.get("items"))
+            if items_data is None:
                 items_data = []
                 errors.append("Items data could not be read.")
             clean_items, items_total, item_errors = _validate_items(items_data)
@@ -296,8 +368,15 @@ def create_entry():
         for item in clean_items:
             entry.items.append(FinanceEntryItem(**item))
 
-    db.session.add(entry)
-    db.session.commit()
+    try:
+        db.session.add(entry)
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({"message": "Failed to create entry.", "error": str(exc)}), 500
+
     return jsonify({"message": "Entry created.", "entry": entry.to_dict()}), 201
 
 
@@ -380,10 +459,69 @@ def list_entries():
 @role_required("MedTech")
 def update_entry(entry_id):
     entry = FinanceEntry.query.filter_by(id=entry_id, department=DEPARTMENT).first()
+
+    # ====================== FUNDS UPDATE ======================
+    if entry and entry.entry_type == "Funds":
+        # Accept both JSON and multipart/form-data
+        if request.is_json:
+            data = request.get_json(silent=True) or {}
+        else:
+            data = request.form
+
+        errors = []
+        fund_category = (data.get("fund_category") or entry.fund_category or "").strip()
+        client_name = (data.get("client_name") or "").strip()
+        purpose = (data.get("purpose") or "").strip()
+        remarks_val = (data.get("remarks") or "").strip()
+        amount_raw = data.get("amount")
+
+        if fund_category not in FUND_CATEGORIES:
+            errors.append("fund_category must be Restricted Fund or Unrestricted Fund.")
+        if not client_name:
+            errors.append("Name is required.")
+        if not purpose:
+            errors.append("Purpose is required.")
+        try:
+            amount_val = float(amount_raw)
+            if amount_val <= 0:
+                errors.append("Amount must be greater than 0.")
+        except (TypeError, ValueError):
+            errors.append("Amount must be a valid number.")
+
+        if errors:
+            return jsonify({"message": "Validation failed.", "errors": errors}), 400
+
+        entry.category = fund_category
+        entry.sub_category = "Capital"
+        entry.fund_category = fund_category
+        entry.client_name = client_name
+        entry.amount = amount_val
+        entry.purpose = purpose
+        entry.remarks = remarks_val
+
+        if "entry_date" in data:
+            parsed = _parse_date(data["entry_date"])
+            if parsed:
+                entry.entry_date = parsed
+
+        try:
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            import traceback
+            traceback.print_exc()
+            return jsonify({"message": "Failed to update Funds entry.", "error": str(exc)}), 500
+        return jsonify({"message": "Funds entry updated.", "entry": entry.to_dict()}), 200
+
+    # ---- Ledger / not-found fallback ----
     if not entry:
         ledger = MedTechLedger.query.get(entry_id)
         if ledger:
-            data = request.get_json() or {}
+            if request.is_json:
+                data = request.get_json(silent=True) or {}
+            else:
+                data = request.form
+
             if "customer_name" in data:
                 ledger.customer_name = data["customer_name"].strip()
             if "entry_date" in data:
@@ -407,18 +545,30 @@ def update_entry(entry_id):
             ledger.balance = ledger.total_amount - ledger.paid
             if "remarks" in data:
                 ledger.remarks = data["remarks"]
-            db.session.commit()
+
+            try:
+                db.session.commit()
+            except Exception as exc:
+                db.session.rollback()
+                import traceback
+                traceback.print_exc()
+                return jsonify({"message": "Failed to update Ledger entry.", "error": str(exc)}), 500
             return jsonify({"message": "Ledger entry updated.", "entry": ledger.to_dict()}), 200
         else:
             return jsonify({"message": "Entry not found."}), 404
 
     # ---- Regular finance entry update ----
-    data = request.get_json() or {}
+    # ✅ THE FIX: read from request.form when the request is multipart.
+    if request.is_json:
+        data = request.get_json(silent=True) or {}
+    else:
+        data = request.form
+
     errors = []
 
     salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
-    new_category = data.get("category", entry.category)
-    new_entry_type = data.get("entry_type", entry.entry_type)
+    new_category = data.get("category", entry.category) or entry.category
+    new_entry_type = data.get("entry_type", entry.entry_type) or entry.entry_type
 
     require_items = CONFIG["show_items"] and new_category in MEDTECH_ITEM_CATEGORIES
 
@@ -443,9 +593,9 @@ def update_entry(entry_id):
                 entry.gst_tax_amount = 0.0
                 entry.employee_name = None
                 entry.vehicle_type = None
-                entry.items = []
                 for old_item in list(entry.items):
                     db.session.delete(old_item)
+                entry.items = []
         else:
             errors.append(f"category must be one of: {', '.join(allowed_categories)}")
 
@@ -502,11 +652,15 @@ def update_entry(entry_id):
         if require_items:
             items_changed = "items" in data
             if items_changed:
-                items_data = data.get("items") or []
+                # ✅ Handle items sent as JSON string (FormData) OR as a list (JSON body)
+                items_data = _parse_items_field(data.get("items"))
+                if items_data is None:
+                    items_data = []
+                    errors.append("Items data could not be read.")
                 clean_items, items_total, item_errors = _validate_items(items_data)
                 errors.extend(item_errors)
                 if not item_errors:
-                    for old_item in entry.items:
+                    for old_item in list(entry.items):
                         db.session.delete(old_item)
                     entry.items = [FinanceEntryItem(**item) for item in clean_items]
                     base_amount = items_total
@@ -551,7 +705,14 @@ def update_entry(entry_id):
     if errors:
         return jsonify({"message": "Validation failed.", "errors": errors}), 400
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({"message": "Failed to update entry.", "error": str(exc)}), 500
+
     return jsonify({"message": "Entry updated.", "entry": entry.to_dict()}), 200
 
 
@@ -604,6 +765,7 @@ def finance_summary():
 
     total_income = sum(float(e.amount) for e in finance_entries if e.entry_type == "Income")
     total_expenses = sum(float(e.amount) for e in finance_entries if e.entry_type == "Expenses")
+    total_funds = sum(float(e.amount) for e in finance_entries if e.entry_type == "Funds")
 
     ledger_query = MedTechLedger.query
     if start_date:
@@ -629,11 +791,13 @@ def finance_summary():
     by_date = {}
     for item in all_items:
         key = item.entry_date.isoformat()
-        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0})
+        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "funds": 0})
         if item.entry_type == "Income":
             by_date[key]["income"] += float(item.amount)
-        else:
+        elif item.entry_type == "Expenses":
             by_date[key]["expenses"] += float(item.amount)
+        elif item.entry_type == "Funds":
+            by_date[key]["funds"] += float(item.amount)
     trend = sorted(by_date.values(), key=lambda x: x["date"])
 
     by_category = {}
@@ -646,6 +810,7 @@ def finance_summary():
         "department": DEPARTMENT,
         "total_income": total_income,
         "total_expenses": total_expenses,
+        "total_funds": total_funds,
         "profit": total_income - total_expenses,
         "entry_count": len(all_items),
         "trend": trend,

@@ -29,7 +29,6 @@ def _parse_date(value, default=None):
     s = str(value).strip()
     if not s:
         return default
-    # Drop trailing 'Z' and any time component
     if "T" in s:
         s = s.split("T", 1)[0]
     elif " " in s:
@@ -43,7 +42,6 @@ def _parse_date(value, default=None):
 
 
 def _parse_quarter_year(quarter, year):
-    """Return (start_date, end_date) for a given quarter (1-4) and year (YYYY)."""
     if not year:
         return None, None
     year = int(year)
@@ -53,24 +51,20 @@ def _parse_quarter_year(quarter, year):
     else:
         quarter = int(quarter)
         if quarter == 1:
-            start = datetime(year, 1, 1).date()
-            end = datetime(year, 3, 31).date()
+            start = datetime(year, 1, 1).date(); end = datetime(year, 3, 31).date()
         elif quarter == 2:
-            start = datetime(year, 4, 1).date()
-            end = datetime(year, 6, 30).date()
+            start = datetime(year, 4, 1).date(); end = datetime(year, 6, 30).date()
         elif quarter == 3:
-            start = datetime(year, 7, 1).date()
-            end = datetime(year, 9, 30).date()
+            start = datetime(year, 7, 1).date(); end = datetime(year, 9, 30).date()
         elif quarter == 4:
-            start = datetime(year, 10, 1).date()
-            end = datetime(year, 12, 31).date()
+            start = datetime(year, 10, 1).date(); end = datetime(year, 12, 31).date()
         else:
             return None, None
     return start, end
 
 
 # ----------------------------------------------------------------------
-# User management
+# User management (unchanged)
 # ----------------------------------------------------------------------
 @superadmin_bp.route("/roles", methods=["GET"])
 @role_required("SuperAdmin")
@@ -110,7 +104,6 @@ def create_user():
     user.set_password(password)
     db.session.add(user)
     db.session.commit()
-
     return jsonify({"message": "User created.", "user": user.to_dict()}), 201
 
 
@@ -120,7 +113,6 @@ def update_user(user_id):
     user = User.query.get(user_id)
     if not user:
         return jsonify({"message": "User not found."}), 404
-
     data = request.get_json(silent=True) or {}
     if "name" in data and data["name"].strip(): user.name = data["name"].strip()
     if "role" in data and data["role"] in ROLES: user.role = data["role"]
@@ -130,7 +122,6 @@ def update_user(user_id):
         if len(data["password"]) < 6:
             return jsonify({"message": "Password must be at least 6 characters."}), 400
         user.set_password(data["password"])
-
     db.session.commit()
     return jsonify({"message": "User updated.", "user": user.to_dict()}), 200
 
@@ -156,7 +147,7 @@ def team_stats():
 
 
 # ----------------------------------------------------------------------
-# Overview – EXCLUDES SalesEnterprise
+# Overview – EXCLUDES SalesEnterprise, ADDS total_capital
 # ----------------------------------------------------------------------
 @superadmin_bp.route("/overview", methods=["GET"])
 @role_required("SuperAdmin")
@@ -173,6 +164,16 @@ def overview():
         )
         if department is not None:
             query = query.filter(FinanceEntry.department == department)
+        if start_date: query = query.filter(FinanceEntry.entry_date >= start_date)
+        if end_date: query = query.filter(FinanceEntry.entry_date <= end_date)
+        return float(query.scalar())
+
+    # ✅ NEW: total Capital from Corporate Management only
+    def sum_capital(start_date, end_date):
+        query = db.session.query(func.coalesce(func.sum(FinanceEntry.amount), 0)).filter(
+            FinanceEntry.entry_type == "Capital",
+            FinanceEntry.department == "Corporate",
+        )
         if start_date: query = query.filter(FinanceEntry.entry_date >= start_date)
         if end_date: query = query.filter(FinanceEntry.entry_date <= end_date)
         return float(query.scalar())
@@ -199,20 +200,19 @@ def overview():
         )
         if start_date: salary_query = salary_query.filter(FinanceEntry.entry_date >= start_date)
         if end_date: salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
-        salary_total = float(salary_query.scalar())
-        return exp_total + salary_total
+        return exp_total + float(salary_query.scalar())
 
     def medtech_ledger_expenses(start_date, end_date):
-        ledger_query = db.session.query(func.coalesce(func.sum(MedTechLedger.total_amount), 0))
-        if start_date: ledger_query = ledger_query.filter(MedTechLedger.entry_date >= start_date)
-        if end_date: ledger_query = ledger_query.filter(MedTechLedger.entry_date <= end_date)
-        return float(ledger_query.scalar())
+        q = db.session.query(func.coalesce(func.sum(MedTechLedger.total_amount), 0))
+        if start_date: q = q.filter(MedTechLedger.entry_date >= start_date)
+        if end_date: q = q.filter(MedTechLedger.entry_date <= end_date)
+        return float(q.scalar())
 
     def everglades_ledger_expenses(start_date, end_date):
-        ledger_query = db.session.query(func.coalesce(func.sum(EvergladesLedger.total_amount), 0))
-        if start_date: ledger_query = ledger_query.filter(EvergladesLedger.entry_date >= start_date)
-        if end_date: ledger_query = ledger_query.filter(EvergladesLedger.entry_date <= end_date)
-        return float(ledger_query.scalar())
+        q = db.session.query(func.coalesce(func.sum(EvergladesLedger.total_amount), 0))
+        if start_date: q = q.filter(EvergladesLedger.entry_date >= start_date)
+        if end_date: q = q.filter(EvergladesLedger.entry_date <= end_date)
+        return float(q.scalar())
 
     by_department = []
     for dept in VALID_DEPARTMENTS:
@@ -240,14 +240,17 @@ def overview():
 
     total_income = sum(d["income"] for d in by_department)
     total_expenses = sum(d["expenses"] for d in by_department)
+    total_capital = sum_capital(start_date, end_date)
 
     return jsonify({
-        "total_members": total_members, "active_members": active_members,
-        "total_income": total_income, "total_expenses": total_expenses,
+        "total_members": total_members,
+        "active_members": active_members,
+        "total_income": total_income,
+        "total_expenses": total_expenses,
+        "total_capital": total_capital,       # ✅ NEW
         "total_profit": total_income - total_expenses,
         "by_department": by_department,
     }), 200
-
 
 # ----------------------------------------------------------------------
 # Helpers for filtering finance entries

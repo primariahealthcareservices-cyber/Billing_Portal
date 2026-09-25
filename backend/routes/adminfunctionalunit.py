@@ -35,13 +35,12 @@ def _apply_date_filters(query):
         query = query.filter(FinanceEntry.entry_date <= end_date)
     return query
 
-
 @adminfunctionalunit_bp.route("/options", methods=["GET"])
 @role_required("Adminstrationfunctionalunit")
 def options():
     return jsonify({
         "department": DEPARTMENT,
-        "entry_types": ENTRY_TYPES,
+        "entry_types": CONFIG.get("entry_types", ENTRY_TYPES),
         "categories": CONFIG["categories"],
         "revenue_types": CONFIG["revenue_types"],
         "show_generated_by": CONFIG["show_generated_by"],
@@ -51,10 +50,8 @@ def options():
         "show_gst_number": CONFIG["show_gst_number"],
         "show_items": CONFIG["show_items"],
         "show_invoice": CONFIG["show_invoice"],
-        "is_salary_category": CONFIG.get("is_salary_category"),  # <-- added for frontend
+        "is_salary_category": CONFIG.get("is_salary_category"),
     }), 200
-
-
 @adminfunctionalunit_bp.route("/entries", methods=["POST"])
 @role_required("Adminstrationfunctionalunit")
 def create_entry():

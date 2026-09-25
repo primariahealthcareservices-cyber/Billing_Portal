@@ -12,12 +12,14 @@ ROLES = [
     "ResearchDevelopment", "Dental", "SalesEnterprise", "Everglades",
 ]
 
-ENTRY_TYPES = ["Income", "Expenses"]
+# Master list — used by superadmin/validation code that doesn't care about dept-level filtering
+ENTRY_TYPES = ["Income", "Expenses", "Capital", "Funds"]
 
 # ---------- DEPARTMENT_CONFIG ----------
 DEPARTMENT_CONFIG = {
     # =================== IT ===================
     "IT": {
+        "entry_types": ["Income", "Expenses", "Funds"],
         "categories": {
             "Income": ["Web Services", "Portal Services", "Corpus Fund", "Others"],
             "Expenses": [
@@ -35,7 +37,8 @@ DEPARTMENT_CONFIG = {
                 "Events-Conferences-Training",
                 "Corpus Fund",
                 "Other"
-            ]
+            ],
+            "Funds": ["Restricted Fund", "Unrestricted Fund"],
         },
         "revenue_types": ["Subscription", "One-Time", "Renewal", "Maintenance", "Other"],
         "show_generated_by": True,
@@ -52,6 +55,7 @@ DEPARTMENT_CONFIG = {
 
     # =================== IT Sales ===================
     "IT Sales": {
+        "entry_types": ["Income", "Expenses", "Funds"],
         "categories": {
             "Income": [
                 "Professional Services & Implementation",
@@ -85,7 +89,8 @@ DEPARTMENT_CONFIG = {
                 "Management Fees",
                 "Corpus Fund",
                 "Other"
-            ]
+            ],
+            "Funds": ["Restricted Fund", "Unrestricted Fund"],
         },
         "revenue_types": ["Direct", "Recurring", "Project-based"],
         "show_generated_by": True,
@@ -102,6 +107,7 @@ DEPARTMENT_CONFIG = {
 
     # =================== Dental ===================
     "Dental": {
+        "entry_types": ["Income", "Expenses", "Funds"],
         "categories": {
             "Income": [
                 "Dental Operations",
@@ -132,6 +138,7 @@ DEPARTMENT_CONFIG = {
                 "Corpus Fund",
                 "Other",
             ],
+            "Funds": ["Restricted Fund", "Unrestricted Fund"],
         },
         "revenue_types": [],
         "show_generated_by": True,
@@ -150,6 +157,7 @@ DEPARTMENT_CONFIG = {
 
     # =================== Caredx ===================
     "Caredx": {
+        "entry_types": ["Income", "Expenses", "Funds"],
         "categories": {
             "Income": ["Lab", "Camp", "Walkin/Person", "Referral", "Corpus Fund"],
             "Expenses": [
@@ -169,9 +177,10 @@ DEPARTMENT_CONFIG = {
                 "Specimen Collection",
                 "Equipment Maintenance",
                 "Waste Management",
-                "Billing Administration"
+                "Billing Administration",
                 "Corpus Fund",
             ],
+            "Funds": ["Restricted Fund", "Unrestricted Fund"],
         },
         "revenue_types": ["Direct", "Recurring"],
         "show_generated_by": False,
@@ -188,6 +197,7 @@ DEPARTMENT_CONFIG = {
 
     # =================== PCM ===================
     "PCM": {
+        "entry_types": ["Income", "Expenses", "Funds"],
         "categories": {
             "Income": [
                 "Field Labour and Nursing Care",
@@ -210,7 +220,8 @@ DEPARTMENT_CONFIG = {
                 "Supplies & Equipment",
                 "Corpus Fund",
                 "Other"
-            ]
+            ],
+            "Funds": ["Restricted Fund", "Unrestricted Fund"],
         },
         "revenue_types": [],
         "show_generated_by": False,
@@ -227,6 +238,7 @@ DEPARTMENT_CONFIG = {
 
     # =================== MedTech ===================
     "MedTech": {
+        "entry_types": ["Income", "Expenses", "Funds"],
         "categories": {
             "Income": ["B2B Revenue", "B2C Revenue", "Business Services Revenue", "Goodwill", "Corpus Fund"],
             "Expenses": [
@@ -246,7 +258,8 @@ DEPARTMENT_CONFIG = {
                 "Goodwill",
                 "Corpus Fund",
                 "Other"
-            ]
+            ],
+            "Funds": ["Restricted Fund", "Unrestricted Fund"],
         },
         "revenue_types": ["Direct", "Recurring"],
         "show_generated_by": True,
@@ -263,6 +276,7 @@ DEPARTMENT_CONFIG = {
 
     # =================== Everglades (Pharmacy) ===================
     "Everglades": {
+        "entry_types": ["Income", "Expenses", "Funds"],
         "categories": {
             "Income": [
                 "Prescription Sales",
@@ -300,6 +314,7 @@ DEPARTMENT_CONFIG = {
                 "Corpus Fund",
                 "Other",
             ],
+            "Funds": ["Restricted Fund", "Unrestricted Fund"],
         },
         "revenue_types": ["Direct", "Recurring", "Insurance"],
         "show_generated_by": True,
@@ -314,8 +329,9 @@ DEPARTMENT_CONFIG = {
         "show_tax_invoice_number": True,
     },
 
-    # =================== Corporate ===================
+    # =================== Corporate (ONLY dept with Capital) ===================
     "Corporate": {
+        "entry_types": ["Income", "Expenses", "Capital"],
         "categories": {
             "Income": [
                 "Consulting",
@@ -338,6 +354,13 @@ DEPARTMENT_CONFIG = {
                 "Outsourced Services",
                 "Events-Conferences-Training",
                 "Corpus Fund"
+            ],
+            "Capital": [
+                "Equity Infusion",
+                "Partner Contribution",
+                "Asset Capitalization",
+                "Reserve Fund Transfer",
+                "Other Capital"
             ]
         },
         "revenue_types": [],
@@ -360,6 +383,7 @@ DEPARTMENT_CONFIG = {
 
     # =================== Office Administration ===================
     "Adminstrationfunctionalunit": {
+        "entry_types": ["Income", "Expenses"],
         "categories": {
             "Income": ["Other"],
             "Expenses": [
@@ -396,6 +420,7 @@ DEPARTMENT_CONFIG = {
 
     # =================== Research & Development ===================
     "ResearchDevelopment": {
+        "entry_types": ["Income", "Expenses"],
         "categories": {
             "Income": ["Grants", "Funding", "Other"],
             "Expenses": [
@@ -422,6 +447,7 @@ DEPARTMENT_CONFIG = {
 }
 
 VALID_DEPARTMENTS = list(DEPARTMENT_CONFIG.keys())
+
 
 # ---------- User model ----------
 class User(db.Model):
@@ -453,6 +479,7 @@ class User(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+
 # ---------- FinanceEntry model ----------
 class FinanceEntry(db.Model):
     __tablename__ = "finance_entries"
@@ -461,6 +488,7 @@ class FinanceEntry(db.Model):
     entry_type = db.Column(db.String(20), nullable=False)
     category = db.Column(db.String(60), nullable=False)
     sub_category = db.Column(db.String(60), nullable=True)
+    fund_category = db.Column(db.String(50), nullable=True)   # ✅ NEW — Restricted / Unrestricted
     generated_by = db.Column(db.String(120), nullable=True)
     revenue_type = db.Column(db.String(50), nullable=True)
     patient_name = db.Column(db.String(150), nullable=True)
@@ -513,6 +541,7 @@ class FinanceEntry(db.Model):
             "entry_type": self.entry_type,
             "category": self.category,
             "sub_category": self.sub_category,
+            "fund_category": self.fund_category,   # ✅ NEW
             "generated_by": self.generated_by,
             "revenue_type": self.revenue_type,
             "patient_name": self.patient_name,
@@ -542,6 +571,7 @@ class FinanceEntry(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+
 # ---------- FinanceEntryItem model ----------
 class FinanceEntryItem(db.Model):
     __tablename__ = "finance_entry_items"
@@ -561,6 +591,7 @@ class FinanceEntryItem(db.Model):
             "unit_price": float(self.unit_price),
             "amount": float(self.amount),
         }
+
 
 # ---------- MedTechLedger model ----------
 class MedTechLedger(db.Model):
@@ -589,6 +620,7 @@ class MedTechLedger(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+
 # ---------- EvergladesLedger model ----------
 class EvergladesLedger(db.Model):
     __tablename__ = "everglades_ledger"
@@ -615,6 +647,7 @@ class EvergladesLedger(db.Model):
             "remarks": self.remarks,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
 
 # ---------- CaredxLabEntry model ----------
 class CaredxLabEntry(db.Model):
@@ -658,6 +691,7 @@ class CaredxLabEntry(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+
 # ---------- CaredxExpense model ----------
 class CaredxExpense(db.Model):
     __tablename__ = "caredx_expenses"
@@ -687,6 +721,7 @@ class CaredxExpense(db.Model):
             "vehicle_type": self.vehicle_type,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
 
 # ---------- SalesEnterpriseKPI model ----------
 class SalesEnterpriseKPI(db.Model):
@@ -736,6 +771,7 @@ class SalesEnterpriseKPI(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+
 # ---------- Migration functions ----------
 def migrate_corporate_categories():
     """Rename existing Corporate entries from old category names to new ones."""
@@ -769,6 +805,7 @@ def migrate_corporate_categories():
     else:
         print("ℹ️ No Corporate category migration needed.")
 
+
 def migrate_office_admin_categories():
     """Rename existing Office Admin entries from old category names to new ones."""
     from sqlalchemy import update
@@ -801,6 +838,7 @@ def migrate_office_admin_categories():
         print(f"✅ Office Admin category migration complete ({migrated} entries updated).")
     else:
         print("ℹ️ No Office Admin category migration needed.")
+
 
 def migrate_caredx_expense_categories():
     """Rename existing Caredx Expense entries from old category names to new ones."""
@@ -840,6 +878,7 @@ def migrate_caredx_expense_categories():
     else:
         print("ℹ️ No Caredx expense category migration needed.")
 
+
 def migrate_it_categories():
     """Rename existing IT entries from old category names to new ones."""
     from sqlalchemy import update
@@ -874,6 +913,7 @@ def migrate_it_categories():
     else:
         print("ℹ️ No IT category migration needed.")
 
+
 def migrate_itsales_categories():
     """Rename existing IT Sales entries from old category names to new ones."""
     from sqlalchemy import update
@@ -907,6 +947,7 @@ def migrate_itsales_categories():
     else:
         print("ℹ️ No IT Sales category migration needed.")
 
+
 def migrate_medtech_categories():
     """Rename existing MedTech entries from old category names to new ones."""
     from sqlalchemy import update
@@ -939,6 +980,7 @@ def migrate_medtech_categories():
         print(f"✅ MedTech category migration complete ({migrated} entries updated).")
     else:
         print("ℹ️ No MedTech category migration needed.")
+
 
 def migrate_pcm_categories():
     """Rename existing PCM entries from old category names to new ones."""
@@ -980,6 +1022,7 @@ def migrate_pcm_categories():
         print(f"✅ PCM category migration complete ({migrated} entries updated).")
     else:
         print("ℹ️ No PCM category migration needed.")
+
 
 def migrate_everglades_categories():
     """Rename existing Everglades entries from old category names to new ones."""

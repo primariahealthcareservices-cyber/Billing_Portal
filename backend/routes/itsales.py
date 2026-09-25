@@ -1,5 +1,5 @@
 # backend/routes/itsales.py
-"""IT Sales department finance routes — Income/Expenses entries with categories.
+"""IT Sales department finance routes — Income/Expenses/Funds entries with categories.
 Now includes salary entries from Corporate Management.
 """
 from datetime import datetime, date
@@ -13,6 +13,7 @@ from file_utils import save_invoice_file, delete_invoice_file
 
 DEPARTMENT = "IT Sales"
 CONFIG = DEPARTMENT_CONFIG[DEPARTMENT]
+FUND_CATEGORIES = ("Restricted Fund", "Unrestricted Fund")
 
 itsales_bp = Blueprint("itsales", __name__, url_prefix="/api/itsales")
 
@@ -41,7 +42,7 @@ def _apply_date_filters(query):
 def options():
     return jsonify({
         "department": DEPARTMENT,
-        "entry_types": ENTRY_TYPES,
+        "entry_types": CONFIG.get("entry_types", ENTRY_TYPES),
         "categories": CONFIG["categories"],
         "revenue_types": CONFIG["revenue_types"],
         "show_generated_by": CONFIG["show_generated_by"],
@@ -52,7 +53,7 @@ def options():
         "show_invoice": CONFIG["show_invoice"],
         "show_gst_tax": CONFIG["show_gst_tax"],
         "show_tax_invoice_number": CONFIG["show_tax_invoice_number"],
-        "is_salary_category": CONFIG.get("is_salary_category"),   # for frontend
+        "is_salary_category": CONFIG.get("is_salary_category"),
     }), 200
 
 
@@ -62,6 +63,51 @@ def create_entry():
     data = request.form
 
     entry_type = data.get("entry_type")
+
+    # ====================== FUNDS ENTRY ======================
+    if entry_type == "Funds":
+        errors = []
+        fund_category = (data.get("fund_category") or "").strip()
+        client_name = (data.get("client_name") or "").strip()
+        purpose = (data.get("purpose") or "").strip()
+        remarks = (data.get("remarks") or "").strip()
+        entry_date = _parse_date(data.get("entry_date"), default=date.today())
+        amount_raw = data.get("amount")
+
+        if fund_category not in FUND_CATEGORIES:
+            errors.append("fund_category must be Restricted Fund or Unrestricted Fund.")
+        if not client_name:
+            errors.append("Name is required.")
+        if not purpose:
+            errors.append("Purpose is required.")
+        try:
+            amount = float(amount_raw)
+            if amount <= 0:
+                errors.append("Amount must be greater than 0.")
+        except (TypeError, ValueError):
+            errors.append("Amount must be a valid number.")
+
+        if errors:
+            return jsonify({"message": "Validation failed.", "errors": errors}), 400
+
+        entry = FinanceEntry(
+            department=DEPARTMENT,
+            entry_type="Funds",
+            category=fund_category,
+            sub_category="Capital",
+            fund_category=fund_category,
+            client_name=client_name,
+            amount=amount,
+            purpose=purpose,
+            remarks=remarks,
+            entry_date=entry_date,
+            created_by_id=get_jwt_identity(),
+        )
+        db.session.add(entry)
+        db.session.commit()
+        return jsonify({"message": "Funds entry created.", "entry": entry.to_dict()}), 201
+
+    # ====================== INCOME / EXPENSES ======================
     category = data.get("category")
     generated_by = (data.get("generated_by") or "").strip()
     revenue_type = data.get("revenue_type")
@@ -80,7 +126,6 @@ def create_entry():
 
     errors = []
 
-    # Block salary category creation – use dynamic salary category
     salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     if category == salary_category:
         errors.append("Salaries must be entered by Corporate Management only.")
@@ -125,7 +170,6 @@ def create_entry():
         except ValueError:
             errors.append("GST tax percent must be number.")
 
-    # Remarks mandatory for all IT Sales expense entries (except salary, which is blocked)
     if entry_type == "Expenses" and category != salary_category and not remarks:
         errors.append("Remarks are required.")
 
@@ -173,11 +217,9 @@ def create_entry():
 @itsales_bp.route("/entries", methods=["GET"])
 @role_required("IT Sales")
 def list_entries():
-    # 1. Native IT Sales entries
     query = FinanceEntry.query.filter_by(department=DEPARTMENT)
     query = _apply_date_filters(query)
 
-    # 2. Salary entries from Corporate with exec_department = IT Sales
     salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     salary_query = FinanceEntry.query.filter(
         FinanceEntry.department == "Corporate",
@@ -227,12 +269,54 @@ def update_entry(entry_id):
         return jsonify({"message": "Entry not found."}), 404
 
     data = request.form
+
+    # ====================== FUNDS UPDATE ======================
+    if entry.entry_type == "Funds":
+        errors = []
+        fund_category = (data.get("fund_category") or entry.fund_category or "").strip()
+        client_name = (data.get("client_name") or "").strip()
+        purpose = (data.get("purpose") or "").strip()
+        remarks = (data.get("remarks") or "").strip()
+        amount_raw = data.get("amount")
+
+        if fund_category not in FUND_CATEGORIES:
+            errors.append("fund_category must be Restricted Fund or Unrestricted Fund.")
+        if not client_name:
+            errors.append("Name is required.")
+        if not purpose:
+            errors.append("Purpose is required.")
+        try:
+            amount = float(amount_raw)
+            if amount <= 0:
+                errors.append("Amount must be greater than 0.")
+        except (TypeError, ValueError):
+            errors.append("Amount must be a valid number.")
+
+        if errors:
+            return jsonify({"message": "Validation failed.", "errors": errors}), 400
+
+        entry.category = fund_category
+        entry.sub_category = "Capital"
+        entry.fund_category = fund_category
+        entry.client_name = client_name
+        entry.amount = amount
+        entry.purpose = purpose
+        entry.remarks = remarks
+
+        if "entry_date" in data:
+            parsed = _parse_date(data["entry_date"])
+            if parsed:
+                entry.entry_date = parsed
+
+        db.session.commit()
+        return jsonify({"message": "Funds entry updated.", "entry": entry.to_dict()}), 200
+
+    # ====================== INCOME / EXPENSES UPDATE ======================
     new_type = data.get("entry_type", entry.entry_type)
     allowed_categories = CONFIG["categories"].get(new_type, [])
 
     errors = []
 
-    # Block changing category to salary category – use dynamic salary category
     salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     new_category = data.get("category", entry.category)
     if new_category == salary_category and entry.category != salary_category:
@@ -311,7 +395,6 @@ def update_entry(entry_id):
         entry.invoice_original_name = None
         entry.invoice_mimetype = None
 
-    # Remarks mandatory for IT Sales expenses (except salary)
     if entry.entry_type == "Expenses" and entry.category != salary_category and not entry.remarks:
         errors.append("Remarks are required.")
 
@@ -337,11 +420,9 @@ def delete_entry(entry_id):
 @itsales_bp.route("/summary", methods=["GET"])
 @role_required("IT Sales")
 def finance_summary():
-    # 1. Native IT Sales entries
     query = FinanceEntry.query.filter_by(department=DEPARTMENT)
     query = _apply_date_filters(query)
 
-    # 2. Salary entries from Corporate with exec_department = IT Sales
     salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     salary_query = FinanceEntry.query.filter(
         FinanceEntry.department == "Corporate",
@@ -357,17 +438,22 @@ def finance_summary():
         salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
 
     combined_query = query.union(salary_query)
-
     entries = combined_query.all()
 
     total_income = sum(float(e.amount) for e in entries if e.entry_type == "Income")
     total_expenses = sum(float(e.amount) for e in entries if e.entry_type == "Expenses")
+    total_funds = sum(float(e.amount) for e in entries if e.entry_type == "Funds")
 
     by_date = {}
     for e in entries:
         key = e.entry_date.isoformat()
-        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0})
-        by_date[key]["income" if e.entry_type == "Income" else "expenses"] += float(e.amount)
+        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "funds": 0})
+        if e.entry_type == "Income":
+            by_date[key]["income"] += float(e.amount)
+        elif e.entry_type == "Expenses":
+            by_date[key]["expenses"] += float(e.amount)
+        elif e.entry_type == "Funds":
+            by_date[key]["funds"] += float(e.amount)
     trend = sorted(by_date.values(), key=lambda x: x["date"])
 
     by_category = {}
@@ -379,6 +465,7 @@ def finance_summary():
         "department": DEPARTMENT,
         "total_income": total_income,
         "total_expenses": total_expenses,
+        "total_funds": total_funds,
         "profit": total_income - total_expenses,
         "entry_count": len(entries),
         "trend": trend,

@@ -1,4 +1,5 @@
-from datetime import datetime
+# backend/routes/dental.py
+from datetime import datetime, date
 from flask import Blueprint, request, jsonify
 from sqlalchemy import or_, and_
 from flask_jwt_extended import get_jwt_identity
@@ -9,11 +10,9 @@ from utils import role_required
 dental_bp = Blueprint("dental", __name__, url_prefix="/api/dental")
 
 DEPARTMENT = "Dental"
+CONFIG = DEPARTMENT_CONFIG[DEPARTMENT]
+FUND_CATEGORIES = ("Restricted Fund", "Unrestricted Fund")
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _parse_date(value, default=None):
     if not value:
@@ -44,15 +43,6 @@ def _resolve_category(data):
         return other_category
     return category
 
-
-# ---------------------------------------------------------------------------
-# Department attribution
-#
-# A Dental employee's salary is recorded by Corporate with:
-#     department = "Corporate", exec_department = "Dental"
-# When the Dental user views their own dashboard, we must include those
-# entries as well, otherwise the salary never shows up here.
-# ---------------------------------------------------------------------------
 
 def _dept_clause():
     return or_(
@@ -103,35 +93,26 @@ def _apply_filters(query):
     return query
 
 
-# ---------------------------------------------------------------------------
-# Options
-# ---------------------------------------------------------------------------
-
 @dental_bp.route("/options", methods=["GET"])
 @role_required("Dental")
 def options():
-    config = _config()
     return jsonify({
         "department": DEPARTMENT,
-        "entry_types": ENTRY_TYPES,
-        "categories": config["categories"],
-        "revenue_types": config["revenue_types"],
-        "show_generated_by": config["show_generated_by"],
-        "show_revenue_type": config["show_revenue_type"],
-        "show_patient_fields": config["show_patient_fields"],
-        "show_client_name": config["show_client_name"],
-        "show_gst_number": config["show_gst_number"],
-        "gst_required_categories": config["gst_required_categories"],
-        "show_items": config["show_items"],
-        "show_invoice": config["show_invoice"],
-        "show_gst_tax": config.get("show_gst_tax", False),
-        "show_tax_invoice_number": config.get("show_tax_invoice_number", False),
+        "entry_types": CONFIG.get("entry_types", ENTRY_TYPES),
+        "categories": CONFIG["categories"],
+        "revenue_types": CONFIG["revenue_types"],
+        "show_generated_by": CONFIG["show_generated_by"],
+        "show_revenue_type": CONFIG["show_revenue_type"],
+        "show_patient_fields": CONFIG["show_patient_fields"],
+        "show_client_name": CONFIG["show_client_name"],
+        "show_gst_number": CONFIG["show_gst_number"],
+        "gst_required_categories": CONFIG["gst_required_categories"],
+        "show_items": CONFIG["show_items"],
+        "show_invoice": CONFIG["show_invoice"],
+        "show_gst_tax": CONFIG.get("show_gst_tax", False),
+        "show_tax_invoice_number": CONFIG.get("show_tax_invoice_number", False),
     }), 200
 
-
-# ---------------------------------------------------------------------------
-# Entries list (includes Corporate salary entries for Dental employees)
-# ---------------------------------------------------------------------------
 
 @dental_bp.route("/entries", methods=["GET"])
 @role_required("Dental")
@@ -142,10 +123,6 @@ def list_entries():
     return jsonify({"entries": [e.to_dict() for e in query.all()]}), 200
 
 
-# ---------------------------------------------------------------------------
-# Summary (includes Corporate salary entries for Dental employees)
-# ---------------------------------------------------------------------------
-
 @dental_bp.route("/summary", methods=["GET"])
 @role_required("Dental")
 def summary():
@@ -155,12 +132,18 @@ def summary():
 
     total_income = sum(float(e.amount) for e in entries if e.entry_type == "Income")
     total_expenses = sum(float(e.amount) for e in entries if e.entry_type == "Expenses")
+    total_funds = sum(float(e.amount) for e in entries if e.entry_type == "Funds")
 
     by_date = {}
     for e in entries:
         key = e.entry_date.isoformat()
-        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0})
-        by_date[key]["income" if e.entry_type == "Income" else "expenses"] += float(e.amount)
+        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "funds": 0})
+        if e.entry_type == "Income":
+            by_date[key]["income"] += float(e.amount)
+        elif e.entry_type == "Expenses":
+            by_date[key]["expenses"] += float(e.amount)
+        elif e.entry_type == "Funds":
+            by_date[key]["funds"] += float(e.amount)
     trend = sorted(by_date.values(), key=lambda x: x["date"])
 
     by_category = {}
@@ -172,16 +155,13 @@ def summary():
         "department": DEPARTMENT,
         "total_income": total_income,
         "total_expenses": total_expenses,
+        "total_funds": total_funds,
         "profit": total_income - total_expenses,
         "entry_count": len(entries),
         "trend": trend,
         "category_breakdown": list(by_category.values()),
     }), 200
 
-
-# ---------------------------------------------------------------------------
-# Create entry
-# ---------------------------------------------------------------------------
 
 @dental_bp.route("/entries", methods=["POST"])
 @role_required("Dental")
@@ -190,6 +170,51 @@ def create_entry():
     config = _config()
 
     entry_type = data.get("entry_type")
+
+    # ====================== FUNDS ENTRY ======================
+    if entry_type == "Funds":
+        errors = []
+        fund_category = (data.get("fund_category") or "").strip()
+        client_name = (data.get("client_name") or "").strip()
+        purpose = (data.get("purpose") or "").strip()
+        remarks = (data.get("remarks") or "").strip()
+        entry_date = _parse_date(data.get("entry_date"), default=date.today())
+        amount_raw = data.get("amount")
+
+        if fund_category not in FUND_CATEGORIES:
+            errors.append("fund_category must be Restricted Fund or Unrestricted Fund.")
+        if not client_name:
+            errors.append("Name is required.")
+        if not purpose:
+            errors.append("Purpose is required.")
+        try:
+            amount = float(amount_raw)
+            if amount <= 0:
+                errors.append("Amount must be greater than 0.")
+        except (TypeError, ValueError):
+            errors.append("Amount must be a valid number.")
+
+        if errors:
+            return jsonify({"message": "Validation failed.", "errors": errors}), 400
+
+        entry = FinanceEntry(
+            department=DEPARTMENT,
+            entry_type="Funds",
+            category=fund_category,
+            sub_category="Capital",
+            fund_category=fund_category,
+            client_name=client_name,
+            amount=amount,
+            purpose=purpose,
+            remarks=remarks,
+            entry_date=entry_date,
+            created_by_id=get_jwt_identity(),
+        )
+        db.session.add(entry)
+        db.session.commit()
+        return jsonify({"message": "Funds entry created.", "entry": entry.to_dict()}), 201
+
+    # ====================== INCOME / EXPENSES ======================
     resolved_category = _resolve_category(data)
     entry_date = _parse_date(data.get("entry_date"))
     amount_raw = data.get("amount")
@@ -218,9 +243,7 @@ def create_entry():
         valid_cats = config["categories"].get(entry_type, [])
         if valid_cats and resolved_category not in valid_cats:
             if "Others" not in valid_cats:
-                errors.append(
-                    f"category '{resolved_category}' is not valid for {entry_type}."
-                )
+                errors.append(f"category '{resolved_category}' is not valid for {entry_type}.")
 
     if errors:
         return jsonify({"message": "Validation failed.", "errors": errors}), 400
@@ -228,27 +251,24 @@ def create_entry():
     user_id = get_jwt_identity()
 
     entry = FinanceEntry(
-    department=DEPARTMENT,
-    entry_type=entry_type,
-    category=resolved_category,
-    sub_category=_clean(data.get("sub_category")),
-    generated_by=_clean(data.get("generated_by")),
-    revenue_type=_clean(data.get("revenue_type")),
-    patient_name=_clean(data.get("patient_name")),
-    patient_place=_clean(data.get("patient_place")),
-    client_name=_clean(data.get("client_name")),
-    gst_number=_clean(data.get("gst_number")),
-
-    # ✅ NEW — previously dropped, now saved
-    employee_name=_clean(data.get("employee_name")),
-    vehicle_type=_clean(data.get("vehicle_type")),
-    purpose=_clean(data.get("purpose")),
-
-    amount=amount,
-    remarks=_clean(data.get("remarks")),
-    entry_date=entry_date,
-    created_by_id=user_id,
-)
+        department=DEPARTMENT,
+        entry_type=entry_type,
+        category=resolved_category,
+        sub_category=_clean(data.get("sub_category")),
+        generated_by=_clean(data.get("generated_by")),
+        revenue_type=_clean(data.get("revenue_type")),
+        patient_name=_clean(data.get("patient_name")),
+        patient_place=_clean(data.get("patient_place")),
+        client_name=_clean(data.get("client_name")),
+        gst_number=_clean(data.get("gst_number")),
+        employee_name=_clean(data.get("employee_name")),
+        vehicle_type=_clean(data.get("vehicle_type")),
+        purpose=_clean(data.get("purpose")),
+        amount=amount,
+        remarks=_clean(data.get("remarks")),
+        entry_date=entry_date,
+        created_by_id=user_id,
+    )
 
     if data.get("gst_tax_percent") not in (None, ""):
         try:
@@ -263,21 +283,57 @@ def create_entry():
     return jsonify({"message": "Entry created.", "entry": entry.to_dict()}), 201
 
 
-# ---------------------------------------------------------------------------
-# Update entry
-# ---------------------------------------------------------------------------
-
 @dental_bp.route("/entries/<int:entry_id>", methods=["PUT"])
 @role_required("Dental")
 def update_entry(entry_id):
-    # Only entries that truly belong to Dental (department="Dental") can be
-    # edited from the Dental dashboard. Corporate salary rows are read-only here.
     entry = FinanceEntry.query.filter_by(id=entry_id, department=DEPARTMENT).first()
     if not entry:
         return jsonify({"message": "Entry not found."}), 404
 
     data = request.get_json(silent=True) or {}
 
+    # ====================== FUNDS UPDATE ======================
+    if entry.entry_type == "Funds":
+        errors = []
+        fund_category = (data.get("fund_category") or entry.fund_category or "").strip()
+        client_name = (data.get("client_name") or "").strip()
+        purpose = (data.get("purpose") or "").strip()
+        remarks = (data.get("remarks") or "").strip()
+        amount_raw = data.get("amount")
+
+        if fund_category not in FUND_CATEGORIES:
+            errors.append("fund_category must be Restricted Fund or Unrestricted Fund.")
+        if not client_name:
+            errors.append("Name is required.")
+        if not purpose:
+            errors.append("Purpose is required.")
+        try:
+            amount = float(amount_raw)
+            if amount <= 0:
+                errors.append("Amount must be greater than 0.")
+        except (TypeError, ValueError):
+            errors.append("Amount must be a valid number.")
+
+        if errors:
+            return jsonify({"message": "Validation failed.", "errors": errors}), 400
+
+        entry.category = fund_category
+        entry.sub_category = "Capital"
+        entry.fund_category = fund_category
+        entry.client_name = client_name
+        entry.amount = amount
+        entry.purpose = purpose
+        entry.remarks = remarks
+
+        if "entry_date" in data:
+            parsed = _parse_date(data["entry_date"])
+            if parsed:
+                entry.entry_date = parsed
+
+        db.session.commit()
+        return jsonify({"message": "Funds entry updated.", "entry": entry.to_dict()}), 200
+
+    # ====================== INCOME / EXPENSES UPDATE ======================
     if "entry_type" in data:
         if data["entry_type"] not in ENTRY_TYPES:
             return jsonify({"message": "Invalid entry_type."}), 400
@@ -301,12 +357,11 @@ def update_entry(entry_id):
         entry.entry_date = parsed
 
     string_fields = (
-    "sub_category", "generated_by", "revenue_type", "patient_name",
-    "patient_place", "client_name", "gst_number", "remarks",
-    "tax_invoice_number",
-    # ✅ NEW — was missing before
-    "employee_name", "vehicle_type", "purpose",
-)
+        "sub_category", "generated_by", "revenue_type", "patient_name",
+        "patient_place", "client_name", "gst_number", "remarks",
+        "tax_invoice_number",
+        "employee_name", "vehicle_type", "purpose",
+    )
     for field in string_fields:
         if field in data:
             setattr(entry, field, _clean(data[field]))
@@ -325,14 +380,9 @@ def update_entry(entry_id):
     return jsonify({"message": "Entry updated.", "entry": entry.to_dict()}), 200
 
 
-# ---------------------------------------------------------------------------
-# Delete entry
-# ---------------------------------------------------------------------------
-
 @dental_bp.route("/entries/<int:entry_id>", methods=["DELETE"])
 @role_required("Dental")
 def delete_entry(entry_id):
-    # Same restriction as update — delete is only allowed for genuine Dental rows.
     entry = FinanceEntry.query.filter_by(id=entry_id, department=DEPARTMENT).first()
     if not entry:
         return jsonify({"message": "Entry not found."}), 404

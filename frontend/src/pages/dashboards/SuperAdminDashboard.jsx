@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import {
   Users, TrendingUp, TrendingDown, Wallet,
   Search, Upload, Download, RotateCcw, Eye,
+  Landmark,   // ✅ ADDED — Capital summary card icon
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -221,14 +222,13 @@ export default function SuperAdminDashboard() {
     }
   }, [selectedQuarter, selectedYear, activeDept]);
 
-  // ---------- ✅ FIXED: Non-SalesEnterprise quarter → dates (incl. "All") ----------
+  // ---------- Non-SalesEnterprise quarter → dates (incl. "All") ----------
   useEffect(() => {
     if (activeDept === "SalesEnterprise") return;
 
     const year = parseInt(yearFilter, 10);
     if (isNaN(year)) return;
 
-    // "" → All (full year); otherwise 1..4
     const q = quarterFilter === "" ? null : parseInt(quarterFilter, 10);
 
     let start, end;
@@ -789,6 +789,15 @@ export default function SuperAdminDashboard() {
           <>
             <p className="section-title" style={{ marginBottom: 8 }}>Summary Panel</p>
             <div className="stat-grid">
+              {/* ✅ Capital card — FIRST, total of all Corporate Capital entries */}
+              <div className="card stat-card">
+                <div className="stat-icon stat-icon--capital"><Landmark size={22} /></div>
+                <div>
+                  <p className="stat-label">Capital</p>
+                  <p className="stat-value">{formatCurrency(overview?.total_capital)}</p>
+                </div>
+              </div>
+
               <div className="card stat-card">
                 <div className="stat-icon stat-icon--team"><Users size={22} /></div>
                 <div>
@@ -1135,12 +1144,7 @@ export default function SuperAdminDashboard() {
                       <div className="card table-wrap">
                         <table className="data-table">
                           <thead>
-                            <tr>
-                              <th>Date</th><th>Patient</th><th>Test</th><th>Employee</th>
-                              <th className="text-right">Total Paid</th><th>Referral By</th>
-                              <th className="text-right">Referral Amount</th>
-                              <th>Actions</th>
-                            </tr>
+                            <tr><th>Date</th><th>Patient</th><th>Test</th><th>Employee</th><th className="text-right">Total Paid</th><th>Referral By</th><th className="text-right">Referral Amount</th><th>Actions</th></tr>
                           </thead>
                           <tbody>
                             {visibleCaredxLabEntries.map((e) => (
@@ -1176,12 +1180,7 @@ export default function SuperAdminDashboard() {
                       <div className="card table-wrap">
                         <table className="data-table">
                           <thead>
-                            <tr>
-                              <th>Date</th><th>Category</th>
-                              <th className="text-right">Amount</th>
-                              <th>Remarks</th>
-                              <th className="text-right">Actions</th>
-                            </tr>
+                            <tr><th>Date</th><th>Category</th><th className="text-right">Amount</th><th>Remarks</th><th className="text-right">Actions</th></tr>
                           </thead>
                           <tbody>
                             {visibleCaredxExpenses.map((e) => (
