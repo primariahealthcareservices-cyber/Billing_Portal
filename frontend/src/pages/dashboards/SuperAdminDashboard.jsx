@@ -816,13 +816,13 @@ export default function SuperAdminDashboard() {
                   <p className="stat-value">{formatCurrency(overview?.total_expenses)}</p>
                 </div>
               </div>
-              <div className="card stat-card">
+              {/* <div className="card stat-card">
                 <div className="stat-icon stat-icon--funds"><Landmark size={22} /></div>
                 <div>
                   <p className="stat-label">Funds</p>
                   <p className="stat-value">{formatCurrency(overview?.total_funds)}</p>
                 </div>
-              </div>
+              </div> */}
               <div className="card stat-card">
                 <div className="stat-icon stat-icon--profit"><Wallet size={22} /></div>
                 <div>
