@@ -15,8 +15,8 @@ CONFIG = DEPARTMENT_CONFIG[DEPARTMENT]
 FUND_CATEGORIES = ("Restricted Fund", "Unrestricted Fund")
 
 # ✅ Categories that require item-level details
-MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "B2B Revenue", "B2C Revenue"]
-
+# ✅ Categories that require item-level details
+MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Revenue", "B2C Revenue"]
 medtech_bp = Blueprint("medtech", __name__, url_prefix="/api/medtech")
 
 

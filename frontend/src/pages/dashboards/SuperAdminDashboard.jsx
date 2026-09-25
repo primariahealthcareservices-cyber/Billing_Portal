@@ -4,7 +4,7 @@ import toast from "react-hot-toast";
 import {
   Users, TrendingUp, TrendingDown, Wallet,
   Search, Upload, Download, RotateCcw, Eye,
-  Landmark,   // ✅ ADDED — Capital summary card icon
+  Landmark,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -18,9 +18,6 @@ import EntryViewModal from "../../components/EntryViewModal.jsx";
 import ThreeDChart from "../../components/ThreeDChart.jsx";
 import api from "../../api/axios.js";
 
-// ------------------------------------------------------------------
-// Configuration - Department order and labels
-// ------------------------------------------------------------------
 const DEPARTMENTS_CONFIG = [
   { label: "Overview", value: "overview" },
   { label: "Corporate Management", value: "Corporate" },
@@ -84,7 +81,6 @@ const PIE_COLORS = ["#2f5dd4", "#16a34a", "#d97706", "#8b5cf6", "#dc2626", "#0ea
 const formatCurrency = (value) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value || 0);
 
-// ✅ Timezone-safe date formatter (avoids UTC rollover)
 const fmtLocalDate = (d) => {
   const yy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -107,26 +103,11 @@ const getMonthNumber = (monthName) => {
   return months[monthName] || 0;
 };
 
-const getQuarter = (monthNum) => {
-  if (monthNum >= 1 && monthNum <= 3) return 1;
-  if (monthNum >= 4 && monthNum <= 6) return 2;
-  if (monthNum >= 7 && monthNum <= 9) return 3;
-  if (monthNum >= 10 && monthNum <= 12) return 4;
-  return 0;
-};
-
 const average = (arr) => {
   const filtered = arr.filter(v => v !== null && v !== undefined && !isNaN(parseFloat(v)));
   if (filtered.length === 0) return null;
   const sum = filtered.reduce((a, b) => a + parseFloat(b), 0);
   return sum / filtered.length;
-};
-
-const formatKpiValue = (val) => {
-  if (val === null || val === undefined) return "—";
-  const num = parseFloat(val);
-  if (isNaN(num)) return "—";
-  return num.toFixed(2);
 };
 
 const getEntryKind = (entry) => {
@@ -169,7 +150,6 @@ export default function SuperAdminDashboard() {
 
   const [dataView, setDataView] = useState("all");
 
-  // SalesEnterprise specific
   const [selectedQuarter, setSelectedQuarter] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
   const [selectedSubDept, setSelectedSubDept] = useState("All");
@@ -222,7 +202,7 @@ export default function SuperAdminDashboard() {
     }
   }, [selectedQuarter, selectedYear, activeDept]);
 
-  // ---------- Non-SalesEnterprise quarter → dates (incl. "All") ----------
+  // ---------- Non-SalesEnterprise quarter → dates ----------
   useEffect(() => {
     if (activeDept === "SalesEnterprise") return;
 
@@ -424,6 +404,8 @@ export default function SuperAdminDashboard() {
     fetchOptions(activeDept);
   }, [activeDept, fetchOptions]);
 
+  // ✅ FIX: Explicitly depend on selectedCategory + all primitives that affect the URL
+  //       so the request re-fires the moment a category is clicked.
   useEffect(() => {
     if (activeDept === "overview") {
       fetchOverview(startDate, endDate);
@@ -432,7 +414,17 @@ export default function SuperAdminDashboard() {
     } else {
       fetchDeptData();
     }
-  }, [activeDept, startDate, endDate, fetchOverview, fetchDeptData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeDept,
+    startDate,
+    endDate,
+    selectedCategory,
+    caredxSection,
+    page,
+    perPage,
+    searchTerm,
+  ]);
 
   // ---------- Handlers ----------
   const handleSelectDept = (value) => {
@@ -605,10 +597,16 @@ export default function SuperAdminDashboard() {
       : d.income + d.expenses,
   }));
 
+  // ✅ FIX: When a specific category (not Ledger) is selected, hide Ledger rows
+  //       in the UI even if the backend accidentally returns them.
   const filteredDeptEntries = React.useMemo(() => {
-    if (dataView === "all") return deptEntries;
-    return deptEntries.filter(e => matchesDataView(e, dataView));
-  }, [deptEntries, dataView]);
+    let list = deptEntries;
+    if (selectedCategory && selectedCategory !== "Ledger") {
+      list = list.filter(e => e.category !== "Ledger");
+    }
+    if (dataView === "all") return list;
+    return list.filter(e => matchesDataView(e, dataView));
+  }, [deptEntries, dataView, selectedCategory]);
 
   const visibleCaredxLabEntries = React.useMemo(() => {
     if (dataView === "expenses") return [];
@@ -789,7 +787,6 @@ export default function SuperAdminDashboard() {
           <>
             <p className="section-title" style={{ marginBottom: 8 }}>Summary Panel</p>
             <div className="stat-grid">
-              {/* ✅ Capital card — FIRST, total of all Corporate Capital entries */}
               <div className="card stat-card">
                 <div className="stat-icon stat-icon--capital"><Landmark size={22} /></div>
                 <div>
@@ -817,6 +814,13 @@ export default function SuperAdminDashboard() {
                 <div>
                   <p className="stat-label">Platform Expenses</p>
                   <p className="stat-value">{formatCurrency(overview?.total_expenses)}</p>
+                </div>
+              </div>
+              <div className="card stat-card">
+                <div className="stat-icon stat-icon--funds"><Landmark size={22} /></div>
+                <div>
+                  <p className="stat-label">Funds</p>
+                  <p className="stat-value">{formatCurrency(overview?.total_funds)}</p>
                 </div>
               </div>
               <div className="card stat-card">
@@ -1216,10 +1220,12 @@ export default function SuperAdminDashboard() {
                 <p className="section-title" style={{ marginBottom: 8 }}>Transactional Panel</p>
                 {renderDataViewToggle()}
 
+                {/* ✅ Show the active category in the title */}
                 <p className="section-title" style={{ marginBottom: 12 }}>
                   {currentDeptLabel} Finance Entries
                   {dataView === "income" && " — Income"}
                   {dataView === "expenses" && " — Expenses"}
+                  {selectedCategory && ` — ${selectedCategory}`}
                 </p>
                 <FinanceTable
                   entries={filteredDeptEntries}

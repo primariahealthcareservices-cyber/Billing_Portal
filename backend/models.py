@@ -246,6 +246,7 @@ DEPARTMENT_CONFIG = {
                 "Travel & Entertainment (T&E)",
                 "Marketing",
                 "Supplies & Equipments",
+                "Wholesales",                 # ✅ NEW
                 "Facilities & Overhead",
                 "General Operations",
                 "Innovation",
@@ -488,7 +489,7 @@ class FinanceEntry(db.Model):
     entry_type = db.Column(db.String(20), nullable=False)
     category = db.Column(db.String(60), nullable=False)
     sub_category = db.Column(db.String(60), nullable=True)
-    fund_category = db.Column(db.String(50), nullable=True)   # ✅ NEW — Restricted / Unrestricted
+    fund_category = db.Column(db.String(50), nullable=True)
     generated_by = db.Column(db.String(120), nullable=True)
     revenue_type = db.Column(db.String(50), nullable=True)
     patient_name = db.Column(db.String(150), nullable=True)
@@ -541,7 +542,7 @@ class FinanceEntry(db.Model):
             "entry_type": self.entry_type,
             "category": self.category,
             "sub_category": self.sub_category,
-            "fund_category": self.fund_category,   # ✅ NEW
+            "fund_category": self.fund_category,
             "generated_by": self.generated_by,
             "revenue_type": self.revenue_type,
             "patient_name": self.patient_name,

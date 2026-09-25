@@ -136,11 +136,11 @@ const IT_SALES_CATEGORY_FIELDS = {
   "Support & Maintenance": { showEmployeeName: true, showVehicleType: false, labelName: "Client/Service Name", showPurpose: true },
   "Internal allocations": { showEmployeeName: true, showVehicleType: false, labelName: "Department/Team Name", showPurpose: true },
 };
-
 const MEDTECH_CATEGORY_FIELDS = {
   "Travel & Entertainment (T&E)": { showEmployeeName: true, showVehicleType: true, labelName: "Employee/Person Name", labelVehicle: "Transport/Travel Type", showPurpose: true },
   "Marketing": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
   "Supplies & Equipments": { showEmployeeName: true, showVehicleType: false, labelName: "Item/Equipment Name", showPurpose: true },
+  "Wholesales": { showEmployeeName: true, showVehicleType: false, labelName: "Wholesaler / Party Name", showPurpose: true },   // ✅ NEW
   "Facilities & Overhead": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
   "General Operations": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
   "Innovation": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
@@ -153,7 +153,6 @@ const MEDTECH_CATEGORY_FIELDS = {
   "B2C Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Customer/Client Name", showPurpose: true },
   "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
 };
-
 const PCM_CATEGORY_FIELDS = {
   "Personnel & Payroll": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
   "Outsourced Services": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
@@ -243,8 +242,7 @@ export default function FinanceEntryForm({
   const salaryCategoryName = options?.is_salary_category || "Payroll Salaries";
   const ledgerCategoryName = "Ledger";
 
-  const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "B2B Revenue", "B2C Revenue"];
-  const EVERGLADES_ITEM_CATEGORIES = ["Pharmaceuticals & Inventory", "Supplies & Equipments"];
+const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Revenue", "B2C Revenue"];  const EVERGLADES_ITEM_CATEGORIES = ["Pharmaceuticals & Inventory", "Supplies & Equipments"];
 
   const createEmptyForm = () => ({
     entry_type: "Income",

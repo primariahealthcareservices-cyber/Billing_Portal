@@ -19,7 +19,7 @@ superadmin_bp = Blueprint("superadmin", __name__, url_prefix="/api/admin")
 
 
 # ----------------------------------------------------------------------
-# ✅ Robust date parser — accepts "YYYY-MM-DD" and ISO with time
+# Robust date parser
 # ----------------------------------------------------------------------
 def _parse_date(value, default=None):
     if not value:
@@ -147,7 +147,7 @@ def team_stats():
 
 
 # ----------------------------------------------------------------------
-# Overview – EXCLUDES SalesEnterprise, ADDS total_capital
+# Overview – EXCLUDES SalesEnterprise
 # ----------------------------------------------------------------------
 @superadmin_bp.route("/overview", methods=["GET"])
 @role_required("SuperAdmin")
@@ -168,7 +168,6 @@ def overview():
         if end_date: query = query.filter(FinanceEntry.entry_date <= end_date)
         return float(query.scalar())
 
-    # ✅ NEW: total Capital from Corporate Management only
     def sum_capital(start_date, end_date):
         query = db.session.query(func.coalesce(func.sum(FinanceEntry.amount), 0)).filter(
             FinanceEntry.entry_type == "Capital",
@@ -241,78 +240,60 @@ def overview():
     total_income = sum(d["income"] for d in by_department)
     total_expenses = sum(d["expenses"] for d in by_department)
     total_capital = sum_capital(start_date, end_date)
+    total_funds = sum_for(None, "Funds", start_date, end_date)
 
     return jsonify({
         "total_members": total_members,
         "active_members": active_members,
         "total_income": total_income,
         "total_expenses": total_expenses,
-        "total_capital": total_capital,       # ✅ NEW
+        "total_capital": total_capital,
+        "total_funds": total_funds,
         "total_profit": total_income - total_expenses,
         "by_department": by_department,
     }), 200
 
-# ----------------------------------------------------------------------
-# Helpers for filtering finance entries
-# ----------------------------------------------------------------------
-def _apply_finance_filters(query, args):
-    start_date = _parse_date(args.get("start_date"))
-    end_date = _parse_date(args.get("end_date"))
-    if start_date: query = query.filter(FinanceEntry.entry_date >= start_date)
-    if end_date: query = query.filter(FinanceEntry.entry_date <= end_date)
-
-    entry_type = args.get("entry_type")
-    if entry_type in ENTRY_TYPES: query = query.filter(FinanceEntry.entry_type == entry_type)
-
-    category = args.get("category")
-    if category: query = query.filter(FinanceEntry.category == category)
-
-    revenue_type = args.get("revenue_type")
-    if revenue_type: query = query.filter(FinanceEntry.revenue_type == revenue_type)
-
-    sub_category = args.get("sub_category")
-    if sub_category: query = query.filter(FinanceEntry.sub_category == sub_category)
-
-    search = args.get("search")
-    if search:
-        like = f"%{search}%"
-        query = query.filter(
-            or_(
-                FinanceEntry.remarks.ilike(like),
-                FinanceEntry.generated_by.ilike(like),
-                FinanceEntry.client_name.ilike(like),
-                FinanceEntry.patient_name.ilike(like),
-                FinanceEntry.patient_place.ilike(like),
-                FinanceEntry.gst_number.ilike(like),
-                FinanceEntry.category.ilike(like),
-            )
-        )
-    return query
-
 
 # ----------------------------------------------------------------------
-# MedTech helpers
+# MedTech helper — ✅ FIX: also pulls Corporate salary rows
 # ----------------------------------------------------------------------
 def _get_medtech_entries_with_ledger():
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
-    search = request.args.get("search")
-    category = request.args.get("category")
+    search = (request.args.get("search") or "").strip()
+    category = (request.args.get("category") or "").strip()
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 30, type=int)
     if page < 1: page = 1
     if per_page < 1: per_page = 1
     if per_page > 100: per_page = 100
 
-    finance_query = FinanceEntry.query.filter(
-        FinanceEntry.department == "MedTech", FinanceEntry.category != "Ledger"
+    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
+        "is_salary_category", "Personnel & Payroll"
     )
-    if start_date: finance_query = finance_query.filter(FinanceEntry.entry_date >= start_date)
-    if end_date: finance_query = finance_query.filter(FinanceEntry.entry_date <= end_date)
-    if category: finance_query = finance_query.filter(FinanceEntry.category == category)
+    wants_salary = (category == "") or (category == salary_category)
+
+    # Base query: MedTech finance entries (excluding Ledger which lives in a separate table)
+    base_query = FinanceEntry.query.filter(
+        FinanceEntry.department == "MedTech",
+        FinanceEntry.category != "Ledger",
+    )
+
+    # ✅ Exclude salary rows from the base query when we'll pull them from Corporate instead
+    if wants_salary:
+        base_query = base_query.filter(
+            or_(
+                FinanceEntry.category != salary_category,
+                FinanceEntry.category.is_(None),
+            )
+        )
+
+    if start_date: base_query = base_query.filter(FinanceEntry.entry_date >= start_date)
+    if end_date: base_query = base_query.filter(FinanceEntry.entry_date <= end_date)
+    if category: base_query = base_query.filter(FinanceEntry.category == category)
     if search:
         like = f"%{search}%"
-        finance_query = finance_query.filter(
+        base_query = base_query.filter(
             or_(
                 FinanceEntry.remarks.ilike(like),
                 FinanceEntry.generated_by.ilike(like),
@@ -321,22 +302,59 @@ def _get_medtech_entries_with_ledger():
                 FinanceEntry.patient_place.ilike(like),
                 FinanceEntry.gst_number.ilike(like),
                 FinanceEntry.category.ilike(like),
+                FinanceEntry.employee_name.ilike(like),
             )
         )
-    finance_entries = finance_query.order_by(FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()).all()
 
-    ledger_query = MedTechLedger.query
-    if start_date: ledger_query = ledger_query.filter(MedTechLedger.entry_date >= start_date)
-    if end_date: ledger_query = ledger_query.filter(MedTechLedger.entry_date <= end_date)
-    if search:
-        like = f"%{search}%"
-        ledger_query = ledger_query.filter(
-            or_(MedTechLedger.customer_name.ilike(like), MedTechLedger.remarks.ilike(like))
+    finance_entries = base_query.order_by(
+        FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()
+    ).all()
+
+    # ✅ Corporate salary rows for MedTech employees
+    salary_entries = []
+    if wants_salary:
+        salary_query = FinanceEntry.query.filter(
+            FinanceEntry.department == "Corporate",
+            FinanceEntry.exec_department == "MedTech",
+            FinanceEntry.category == salary_category,
         )
-    ledger_entries = ledger_query.order_by(MedTechLedger.entry_date.desc(), MedTechLedger.id.desc()).all()
+        if start_date: salary_query = salary_query.filter(FinanceEntry.entry_date >= start_date)
+        if end_date: salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
+        if search:
+            like = f"%{search}%"
+            salary_query = salary_query.filter(
+                or_(
+                    FinanceEntry.remarks.ilike(like),
+                    FinanceEntry.employee_name.ilike(like),
+                    FinanceEntry.category.ilike(like),
+                )
+            )
+        salary_entries = salary_query.order_by(
+            FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()
+        ).all()
+
+    # Merge finance + salary rows into one dict list
+    merged_finance = list(finance_entries) + list(salary_entries)
+    merged_finance.sort(key=lambda e: (e.entry_date, e.id), reverse=True)
+
+    # Ledger rows (separate table) — only when no specific non-Ledger category is chosen
+    include_ledger = (category == "") or (category == "Ledger")
+    ledger_entries = []
+    if include_ledger:
+        ledger_query = MedTechLedger.query
+        if start_date: ledger_query = ledger_query.filter(MedTechLedger.entry_date >= start_date)
+        if end_date: ledger_query = ledger_query.filter(MedTechLedger.entry_date <= end_date)
+        if search:
+            like = f"%{search}%"
+            ledger_query = ledger_query.filter(
+                or_(MedTechLedger.customer_name.ilike(like), MedTechLedger.remarks.ilike(like))
+            )
+        ledger_entries = ledger_query.order_by(
+            MedTechLedger.entry_date.desc(), MedTechLedger.id.desc()
+        ).all()
 
     combined = []
-    for fe in finance_entries:
+    for fe in merged_finance:
         d = fe.to_dict(); d["_type"] = "finance"; combined.append(d)
     for le in ledger_entries:
         combined.append({
@@ -364,26 +382,58 @@ def _get_medtech_entries_with_ledger():
 def _get_medtech_summary_with_ledger():
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
-    category = request.args.get("category")
+    category = (request.args.get("category") or "").strip()
 
-    finance_query = FinanceEntry.query.filter(
-        FinanceEntry.department == "MedTech", FinanceEntry.category != "Ledger"
+    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
+        "is_salary_category", "Personnel & Payroll"
     )
-    if start_date: finance_query = finance_query.filter(FinanceEntry.entry_date >= start_date)
-    if end_date: finance_query = finance_query.filter(FinanceEntry.entry_date <= end_date)
-    if category: finance_query = finance_query.filter(FinanceEntry.category == category)
-    finance_entries = finance_query.all()
+    wants_salary = (category == "") or (category == salary_category)
 
-    ledger_query = MedTechLedger.query
-    if start_date: ledger_query = ledger_query.filter(MedTechLedger.entry_date >= start_date)
-    if end_date: ledger_query = ledger_query.filter(MedTechLedger.entry_date <= end_date)
-    ledger_entries = ledger_query.all()
+    base_query = FinanceEntry.query.filter(
+        FinanceEntry.department == "MedTech",
+        FinanceEntry.category != "Ledger",
+    )
+    if wants_salary:
+        base_query = base_query.filter(
+            or_(
+                FinanceEntry.category != salary_category,
+                FinanceEntry.category.is_(None),
+            )
+        )
+    if start_date: base_query = base_query.filter(FinanceEntry.entry_date >= start_date)
+    if end_date: base_query = base_query.filter(FinanceEntry.entry_date <= end_date)
+    if category: base_query = base_query.filter(FinanceEntry.category == category)
+    finance_entries = base_query.all()
+
+    salary_entries = []
+    if wants_salary:
+        salary_query = FinanceEntry.query.filter(
+            FinanceEntry.department == "Corporate",
+            FinanceEntry.exec_department == "MedTech",
+            FinanceEntry.category == salary_category,
+        )
+        if start_date: salary_query = salary_query.filter(FinanceEntry.entry_date >= start_date)
+        if end_date: salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
+        salary_entries = salary_query.all()
+
+    include_ledger = (category == "") or (category == "Ledger")
+    ledger_entries = []
+    if include_ledger:
+        ledger_query = MedTechLedger.query
+        if start_date: ledger_query = ledger_query.filter(MedTechLedger.entry_date >= start_date)
+        if end_date: ledger_query = ledger_query.filter(MedTechLedger.entry_date <= end_date)
+        ledger_entries = ledger_query.all()
 
     all_items = []
     for fe in finance_entries:
         all_items.append({
             "entry_date": fe.entry_date, "entry_type": fe.entry_type,
             "category": fe.category, "amount": float(fe.amount),
+        })
+    for se in salary_entries:
+        all_items.append({
+            "entry_date": se.entry_date, "entry_type": se.entry_type,
+            "category": se.category, "amount": float(se.amount),
         })
     for le in ledger_entries:
         all_items.append({
@@ -393,12 +443,18 @@ def _get_medtech_summary_with_ledger():
 
     total_income = sum(i["amount"] for i in all_items if i["entry_type"] == "Income")
     total_expenses = sum(i["amount"] for i in all_items if i["entry_type"] == "Expenses")
+    total_funds = sum(i["amount"] for i in all_items if i["entry_type"] == "Funds")
 
     by_date = {}
     for item in all_items:
         key = item["entry_date"].isoformat()
-        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0})
-        by_date[key]["income" if item["entry_type"] == "Income" else "expenses"] += item["amount"]
+        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "funds": 0})
+        if item["entry_type"] == "Income":
+            by_date[key]["income"] += item["amount"]
+        elif item["entry_type"] == "Expenses":
+            by_date[key]["expenses"] += item["amount"]
+        elif item["entry_type"] == "Funds":
+            by_date[key]["funds"] += item["amount"]
     trend = sorted(by_date.values(), key=lambda x: x["date"])
 
     by_category = {}
@@ -409,35 +465,49 @@ def _get_medtech_summary_with_ledger():
 
     return jsonify({
         "department": "MedTech", "total_income": total_income,
-        "total_expenses": total_expenses, "profit": total_income - total_expenses,
+        "total_expenses": total_expenses, "total_funds": total_funds,
+        "profit": total_income - total_expenses,
         "entry_count": len(all_items), "trend": trend,
         "category_breakdown": list(by_category.values()),
     }), 200
 
 
 # ----------------------------------------------------------------------
-# Everglades helpers
+# Everglades helper — ✅ same Corporate salary union
 # ----------------------------------------------------------------------
 def _get_everglades_entries_with_ledger():
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
-    search = request.args.get("search")
-    category = request.args.get("category")
+    search = (request.args.get("search") or "").strip()
+    category = (request.args.get("category") or "").strip()
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 30, type=int)
     if page < 1: page = 1
     if per_page < 1: per_page = 1
     if per_page > 100: per_page = 100
 
-    finance_query = FinanceEntry.query.filter(
-        FinanceEntry.department == "Everglades", FinanceEntry.category != "Ledger"
+    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
+        "is_salary_category", "Personnel & Payroll"
     )
-    if start_date: finance_query = finance_query.filter(FinanceEntry.entry_date >= start_date)
-    if end_date: finance_query = finance_query.filter(FinanceEntry.entry_date <= end_date)
-    if category: finance_query = finance_query.filter(FinanceEntry.category == category)
+    wants_salary = (category == "") or (category == salary_category)
+
+    base_query = FinanceEntry.query.filter(
+        FinanceEntry.department == "Everglades",
+        FinanceEntry.category != "Ledger",
+    )
+    if wants_salary:
+        base_query = base_query.filter(
+            or_(
+                FinanceEntry.category != salary_category,
+                FinanceEntry.category.is_(None),
+            )
+        )
+    if start_date: base_query = base_query.filter(FinanceEntry.entry_date >= start_date)
+    if end_date: base_query = base_query.filter(FinanceEntry.entry_date <= end_date)
+    if category: base_query = base_query.filter(FinanceEntry.category == category)
     if search:
         like = f"%{search}%"
-        finance_query = finance_query.filter(
+        base_query = base_query.filter(
             or_(
                 FinanceEntry.remarks.ilike(like),
                 FinanceEntry.generated_by.ilike(like),
@@ -446,22 +516,55 @@ def _get_everglades_entries_with_ledger():
                 FinanceEntry.patient_place.ilike(like),
                 FinanceEntry.gst_number.ilike(like),
                 FinanceEntry.category.ilike(like),
+                FinanceEntry.employee_name.ilike(like),
             )
         )
-    finance_entries = finance_query.order_by(FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()).all()
+    finance_entries = base_query.order_by(
+        FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()
+    ).all()
 
-    ledger_query = EvergladesLedger.query
-    if start_date: ledger_query = ledger_query.filter(EvergladesLedger.entry_date >= start_date)
-    if end_date: ledger_query = ledger_query.filter(EvergladesLedger.entry_date <= end_date)
-    if search:
-        like = f"%{search}%"
-        ledger_query = ledger_query.filter(
-            or_(EvergladesLedger.customer_name.ilike(like), EvergladesLedger.remarks.ilike(like))
+    salary_entries = []
+    if wants_salary:
+        salary_query = FinanceEntry.query.filter(
+            FinanceEntry.department == "Corporate",
+            FinanceEntry.exec_department == "Everglades",
+            FinanceEntry.category == salary_category,
         )
-    ledger_entries = ledger_query.order_by(EvergladesLedger.entry_date.desc(), EvergladesLedger.id.desc()).all()
+        if start_date: salary_query = salary_query.filter(FinanceEntry.entry_date >= start_date)
+        if end_date: salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
+        if search:
+            like = f"%{search}%"
+            salary_query = salary_query.filter(
+                or_(
+                    FinanceEntry.remarks.ilike(like),
+                    FinanceEntry.employee_name.ilike(like),
+                    FinanceEntry.category.ilike(like),
+                )
+            )
+        salary_entries = salary_query.order_by(
+            FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()
+        ).all()
+
+    merged_finance = list(finance_entries) + list(salary_entries)
+    merged_finance.sort(key=lambda e: (e.entry_date, e.id), reverse=True)
+
+    include_ledger = (category == "") or (category == "Ledger")
+    ledger_entries = []
+    if include_ledger:
+        ledger_query = EvergladesLedger.query
+        if start_date: ledger_query = ledger_query.filter(EvergladesLedger.entry_date >= start_date)
+        if end_date: ledger_query = ledger_query.filter(EvergladesLedger.entry_date <= end_date)
+        if search:
+            like = f"%{search}%"
+            ledger_query = ledger_query.filter(
+                or_(EvergladesLedger.customer_name.ilike(like), EvergladesLedger.remarks.ilike(like))
+            )
+        ledger_entries = ledger_query.order_by(
+            EvergladesLedger.entry_date.desc(), EvergladesLedger.id.desc()
+        ).all()
 
     combined = []
-    for fe in finance_entries:
+    for fe in merged_finance:
         d = fe.to_dict(); d["_type"] = "finance"; combined.append(d)
     for le in ledger_entries:
         combined.append({
@@ -489,26 +592,58 @@ def _get_everglades_entries_with_ledger():
 def _get_everglades_summary_with_ledger():
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
-    category = request.args.get("category")
+    category = (request.args.get("category") or "").strip()
 
-    finance_query = FinanceEntry.query.filter(
-        FinanceEntry.department == "Everglades", FinanceEntry.category != "Ledger"
+    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
+        "is_salary_category", "Personnel & Payroll"
     )
-    if start_date: finance_query = finance_query.filter(FinanceEntry.entry_date >= start_date)
-    if end_date: finance_query = finance_query.filter(FinanceEntry.entry_date <= end_date)
-    if category: finance_query = finance_query.filter(FinanceEntry.category == category)
-    finance_entries = finance_query.all()
+    wants_salary = (category == "") or (category == salary_category)
 
-    ledger_query = EvergladesLedger.query
-    if start_date: ledger_query = ledger_query.filter(EvergladesLedger.entry_date >= start_date)
-    if end_date: ledger_query = ledger_query.filter(EvergladesLedger.entry_date <= end_date)
-    ledger_entries = ledger_query.all()
+    base_query = FinanceEntry.query.filter(
+        FinanceEntry.department == "Everglades",
+        FinanceEntry.category != "Ledger",
+    )
+    if wants_salary:
+        base_query = base_query.filter(
+            or_(
+                FinanceEntry.category != salary_category,
+                FinanceEntry.category.is_(None),
+            )
+        )
+    if start_date: base_query = base_query.filter(FinanceEntry.entry_date >= start_date)
+    if end_date: base_query = base_query.filter(FinanceEntry.entry_date <= end_date)
+    if category: base_query = base_query.filter(FinanceEntry.category == category)
+    finance_entries = base_query.all()
+
+    salary_entries = []
+    if wants_salary:
+        salary_query = FinanceEntry.query.filter(
+            FinanceEntry.department == "Corporate",
+            FinanceEntry.exec_department == "Everglades",
+            FinanceEntry.category == salary_category,
+        )
+        if start_date: salary_query = salary_query.filter(FinanceEntry.entry_date >= start_date)
+        if end_date: salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
+        salary_entries = salary_query.all()
+
+    include_ledger = (category == "") or (category == "Ledger")
+    ledger_entries = []
+    if include_ledger:
+        ledger_query = EvergladesLedger.query
+        if start_date: ledger_query = ledger_query.filter(EvergladesLedger.entry_date >= start_date)
+        if end_date: ledger_query = ledger_query.filter(EvergladesLedger.entry_date <= end_date)
+        ledger_entries = ledger_query.all()
 
     all_items = []
     for fe in finance_entries:
         all_items.append({
             "entry_date": fe.entry_date, "entry_type": fe.entry_type,
             "category": fe.category, "amount": float(fe.amount),
+        })
+    for se in salary_entries:
+        all_items.append({
+            "entry_date": se.entry_date, "entry_type": se.entry_type,
+            "category": se.category, "amount": float(se.amount),
         })
     for le in ledger_entries:
         all_items.append({
@@ -518,12 +653,18 @@ def _get_everglades_summary_with_ledger():
 
     total_income = sum(i["amount"] for i in all_items if i["entry_type"] == "Income")
     total_expenses = sum(i["amount"] for i in all_items if i["entry_type"] == "Expenses")
+    total_funds = sum(i["amount"] for i in all_items if i["entry_type"] == "Funds")
 
     by_date = {}
     for item in all_items:
         key = item["entry_date"].isoformat()
-        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0})
-        by_date[key]["income" if item["entry_type"] == "Income" else "expenses"] += item["amount"]
+        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "funds": 0})
+        if item["entry_type"] == "Income":
+            by_date[key]["income"] += item["amount"]
+        elif item["entry_type"] == "Expenses":
+            by_date[key]["expenses"] += item["amount"]
+        elif item["entry_type"] == "Funds":
+            by_date[key]["funds"] += item["amount"]
     trend = sorted(by_date.values(), key=lambda x: x["date"])
 
     by_category = {}
@@ -534,7 +675,8 @@ def _get_everglades_summary_with_ledger():
 
     return jsonify({
         "department": "Everglades", "total_income": total_income,
-        "total_expenses": total_expenses, "profit": total_income - total_expenses,
+        "total_expenses": total_expenses, "total_funds": total_funds,
+        "profit": total_income - total_expenses,
         "entry_count": len(all_items), "trend": trend,
         "category_breakdown": list(by_category.values()),
     }), 200
@@ -573,9 +715,9 @@ def department_options(department):
 def _get_caredx_entries_and_summary(for_summary=False):
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
-    search = request.args.get("search")
+    search = (request.args.get("search") or "").strip()
     section = request.args.get("section")
-    category = request.args.get("category")
+    category = (request.args.get("category") or "").strip()
 
     lab_entries = []
     expenses = []
@@ -614,7 +756,7 @@ def _get_caredx_entries_and_summary(for_summary=False):
 
         salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
         salary_items = []
-        if category is None or category == salary_category:
+        if category == "" or category == salary_category:
             salary_query = FinanceEntry.query.filter(
                 FinanceEntry.category == salary_category,
                 or_(
@@ -784,13 +926,13 @@ def dept_entries(dept):
     entry_type = request.args.get("entry_type")
     if entry_type in ENTRY_TYPES: query = query.filter(FinanceEntry.entry_type == entry_type)
 
-    category = request.args.get("category")
+    category = (request.args.get("category") or "").strip()
     if category: query = query.filter(FinanceEntry.category == category)
 
     revenue_type = request.args.get("revenue_type")
     if revenue_type: query = query.filter(FinanceEntry.revenue_type == revenue_type)
 
-    search = request.args.get("search")
+    search = (request.args.get("search") or "").strip()
     if search:
         like = f"%{search}%"
         query = query.filter(
@@ -861,19 +1003,25 @@ def dept_summary(dept):
     if start_date: query = query.filter(FinanceEntry.entry_date >= start_date)
     if end_date: query = query.filter(FinanceEntry.entry_date <= end_date)
 
-    category = request.args.get("category")
+    category = (request.args.get("category") or "").strip()
     if category: query = query.filter(FinanceEntry.category == category)
 
     entries = query.all()
 
     total_income = sum(float(e.amount) for e in entries if e.entry_type == "Income")
     total_expenses = sum(float(e.amount) for e in entries if e.entry_type == "Expenses")
+    total_funds = sum(float(e.amount) for e in entries if e.entry_type == "Funds")
 
     by_date = {}
     for e in entries:
         key = e.entry_date.isoformat()
-        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0})
-        by_date[key]["income" if e.entry_type == "Income" else "expenses"] += float(e.amount)
+        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "funds": 0})
+        if e.entry_type == "Income":
+            by_date[key]["income"] += float(e.amount)
+        elif e.entry_type == "Expenses":
+            by_date[key]["expenses"] += float(e.amount)
+        elif e.entry_type == "Funds":
+            by_date[key]["funds"] += float(e.amount)
     trend = sorted(by_date.values(), key=lambda x: x["date"])
 
     by_category = {}
@@ -883,7 +1031,8 @@ def dept_summary(dept):
 
     return jsonify({
         "department": dept, "total_income": total_income,
-        "total_expenses": total_expenses, "profit": total_income - total_expenses,
+        "total_expenses": total_expenses, "total_funds": total_funds,
+        "profit": total_income - total_expenses,
         "entry_count": len(entries), "trend": trend,
         "category_breakdown": list(by_category.values()),
     }), 200
@@ -1006,7 +1155,9 @@ def department_import(department):
     }), 201
 
 
-# ===================== SalesEnterprise KPI endpoint =====================
+# ----------------------------------------------------------------------
+# SalesEnterprise KPI endpoint
+# ----------------------------------------------------------------------
 @superadmin_bp.route("/salesenterprise/kpis", methods=["GET"])
 @role_required("SuperAdmin")
 def get_salesenterprise_kpis():
