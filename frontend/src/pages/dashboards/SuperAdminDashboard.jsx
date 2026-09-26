@@ -16,6 +16,7 @@ import FinanceTable from "../../components/FinanceTable.jsx";
 import EntryViewModal from "../../components/EntryViewModal.jsx";
 import ThreeDChart from "../../components/ThreeDChart.jsx";
 import api from "../../api/axios.js";
+import PharmacyDashboard from "./PharmacyDashboard.jsx";   // NEW import
 
 // ------------------------------------------------------------------
 // Configuration - Department order and labels
@@ -32,6 +33,7 @@ const DEPARTMENTS_CONFIG = [
   { label: "PCM", value: "PCM" },
   { label: "Research Development", value: "ResearchDevelopment" },
   { label: "Sales Enterprise", value: "SalesEnterprise" },
+  { label: "Pharmacy", value: "Pharmacy" },
 ];
 
 // Sub‑departments for SalesEnterprise
@@ -1024,8 +1026,13 @@ export default function SuperAdminDashboard() {
           </>
         )}
 
+        {/* ========== PHARMACY VIEW ========== */}
+        {activeDept === "Pharmacy" && (
+          <PharmacyDashboard />
+        )}
+
         {/* ========== OTHER DEPARTMENTS ========== */}
-        {activeDept !== "overview" && activeDept !== "SalesEnterprise" && (
+        {activeDept !== "overview" && activeDept !== "SalesEnterprise" && activeDept !== "Pharmacy" && (
           <>
             {deptSummary && (
               <>

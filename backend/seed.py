@@ -1,5 +1,6 @@
 from app import create_app
 from models import db, User
+import models 
 
 DEMO_USERS = [
     {"name": "Raj", "email": "superadmin@primaria.com", "password": "Primaria@123", "role": "SuperAdmin", "department": "Administration"},
@@ -11,8 +12,11 @@ DEMO_USERS = [
     {"name": "Kishore M",     "email": "adminstrationfunctionalunit@primaria.com",    "password": "Primaria@123",  "role": "Adminstrationfunctionalunit",    "department": "Adminstrationfunctionalunit"},
     {"name": "Afreed",     "email": "rd@primaria.com",    "password": "Primaria@123",  "role": "ResearchDevelopment",    "department": "ResearchDevelopment"},
     {"name": "Kumar M",      "email": "caredx@primaria.com",     "password": "Primaria@123",  "role": "Caredx",     "department": "Caredx"},
-    # NEW ADMIN USER
-    {"name": "admin",      "email": "jnanesht@primariacare.com",     "password": "Primaria@123",  "role": "admin",     "department": "Administration"},
+    
+    # FIX: Changed role from 'admin' to 'SuperAdmin' to match your DB Enum restriction
+    {"name": "admin",      "email": "jnanesht@primariacare.com",     "password": "Primaria@123",  "role": "SuperAdmin",     "department": "Administration"},
+    {"name": "Pharmacy User", "email": "pharmacy@primaria.com", "password": "Primaria@123", "role": "Pharmacy", "department": "Pharmacy"},
+
 ]
 
 app = create_app()
@@ -26,7 +30,14 @@ with app.app_context():
         if existing:
             print(f"Skipping {u['email']} (already exists).")
             continue
-        user = User(name=u["name"], email=u["email"], role=u["role"], department=u["department"])
+        
+        # Mapping attributes to your schema columns
+        user = User(
+            name=u["name"], 
+            email=u["email"], 
+            role=u["role"], 
+            department=u["department"]
+        )
         user.set_password(u["password"])
         db.session.add(user)
         print(f"Created {u['role']} user -> {u['email']} / {u['password']}")
