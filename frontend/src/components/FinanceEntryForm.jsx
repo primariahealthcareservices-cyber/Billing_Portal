@@ -71,8 +71,14 @@ const DEPARTMENTS_CONFIG = [
   { label: "Everglades", value: "Everglades" },
 ];
 
-// ✅ NEW — Funds categories
-const FUND_CATEGORIES = ["Restricted Fund", "Unrestricted Fund"];
+// ✅ Capital categories — used for every department
+const CAPITAL_CATEGORIES = [
+  "Equity Infusion",
+  "Partner Contribution",
+  "Asset Capitalization",
+  "Reserve Fund Transfer",
+  "Other Capital",
+];
 
 /* ---------------- CATEGORY FIELD MAPS ---------------- */
 
@@ -140,7 +146,7 @@ const MEDTECH_CATEGORY_FIELDS = {
   "Travel & Entertainment (T&E)": { showEmployeeName: true, showVehicleType: true, labelName: "Employee/Person Name", labelVehicle: "Transport/Travel Type", showPurpose: true },
   "Marketing": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
   "Supplies & Equipments": { showEmployeeName: true, showVehicleType: false, labelName: "Item/Equipment Name", showPurpose: true },
-  "Wholesales": { showEmployeeName: true, showVehicleType: false, labelName: "Wholesaler / Party Name", showPurpose: true },   // ✅ NEW
+  "Wholesales": { showEmployeeName: true, showVehicleType: false, labelName: "Wholesaler / Party Name", showPurpose: true },
   "Facilities & Overhead": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
   "General Operations": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
   "Innovation": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
@@ -242,13 +248,13 @@ export default function FinanceEntryForm({
   const salaryCategoryName = options?.is_salary_category || "Payroll Salaries";
   const ledgerCategoryName = "Ledger";
 
-const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Revenue", "B2C Revenue"];  const EVERGLADES_ITEM_CATEGORIES = ["Pharmaceuticals & Inventory", "Supplies & Equipments"];
+  const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Revenue", "B2C Revenue"];
+  const EVERGLADES_ITEM_CATEGORIES = ["Pharmaceuticals & Inventory", "Supplies & Equipments"];
 
   const createEmptyForm = () => ({
     entry_type: "Income",
     category: options?.categories?.Income?.[0] || "",
     sub_category: "",
-    fund_category: "",                 // ✅ NEW
     generated_by: "",
     revenue_type: options?.revenue_types?.[0] || "",
     patient_name: "",
@@ -288,11 +294,8 @@ const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Rev
 
   const [clientSuggestions, setClientSuggestions] = useState([]);
 
-  // ===== Capital type detection =====
-  const isCapital = isCorporate && form.entry_type === "Capital";
-
-  // ✅ NEW — Funds type detection (all non-corporate depts)
-  const isFunds = form.entry_type === "Funds";
+  // ===== Capital type detection (now for ALL departments) =====
+  const isCapital = form.entry_type === "Capital";
 
   const isSalaryCategory =
     !isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isDental && !isEverglades &&
@@ -367,46 +370,12 @@ const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Rev
     if (!open) return;
 
     const populateForm = (entry) => {
-      // ✅ NEW — Funds entry population
-      if (entry.entry_type === "Funds") {
-        setForm({
-          entry_type: "Funds",
-          category: entry.category || "",
-          sub_category: entry.sub_category || "Capital",
-          fund_category: entry.fund_category || entry.category || "Restricted Fund",
-          generated_by: "",
-          revenue_type: "",
-          patient_name: "",
-          patient_place: "",
-          client_name: entry.client_name || "",
-          gst_number: "",
-          gst_tax_percent: "",
-          tax_invoice_number: "",
-          amount: entry.amount !== undefined && entry.amount !== null ? String(entry.amount) : "",
-          remarks: entry.remarks || "",
-          entry_date: entry.entry_date || today(),
-          exec_department: "",
-          employee_name: "",
-          salary_amount: "",
-          allowance_amount: "",
-          vehicle_type: "",
-          team: "",
-          purpose: entry.purpose || "",
-        });
-        setOtherCategory("");
-        setItems([emptyItem()]);
-        setEmployees([emptyEmployee()]);
-        setInvoiceFile(null);
-        setRemoveInvoice(false);
-        return;
-      }
-
+      // ✅ Capital entry population — works for every department
       if (entry.entry_type === "Capital") {
         setForm({
           entry_type: "Capital",
-          category: entry.category || "",
-          sub_category: "",
-          fund_category: "",
+          category: entry.category || entry.fund_category || CAPITAL_CATEGORIES[0],
+          sub_category: "Capital",
           generated_by: "",
           revenue_type: "",
           patient_name: "",
@@ -441,7 +410,6 @@ const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Rev
         entry_type: entry.entry_type || "Income",
         category: isCustomCategory ? "Others" : entry.category || "",
         sub_category: entry.sub_category || "",
-        fund_category: entry.fund_category || "",
         generated_by: entry.generated_by || "",
         revenue_type: entry.revenue_type || options?.revenue_types?.[0] || "",
         patient_name: entry.patient_name || "",
@@ -588,14 +556,17 @@ const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Rev
   const handleTypeChange = (event) => {
     const newType = event.target.value;
 
-    // ✅ NEW — switching to Funds: seed fund_category and clear unrelated fields
-    if (newType === "Funds") {
+    // ✅ Capital — seed first capital category for every department
+    if (newType === "Capital") {
+      const capitalList =
+        (options?.categories?.Capital && options.categories.Capital.length > 0)
+          ? options.categories.Capital
+          : CAPITAL_CATEGORIES;
       setForm((prev) => ({
         ...prev,
-        entry_type: "Funds",
-        category: "",
+        entry_type: "Capital",
+        category: capitalList[0] || CAPITAL_CATEGORIES[0],
         sub_category: "Capital",
-        fund_category: "Restricted Fund",
         client_name: "",
         amount: "",
         purpose: "",
@@ -614,7 +585,6 @@ const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Rev
       entry_type: newType,
       category: firstCategory,
       sub_category: "",
-      fund_category: "",
     }));
     setOtherCategory("");
     if (!isSalaryCategory) setEmployees([emptyEmployee()]);
@@ -714,85 +684,12 @@ const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Rev
     setRemoveInvoice(false);
   };
 
-  /* ---------------- FUNDS SUBMIT ---------------- */
-  const submitFundsEntry = async () => {
-    if (!["Restricted Fund", "Unrestricted Fund"].includes(form.fund_category)) {
-      toast.error("Please select a Fund Category.");
-      return;
-    }
-    if (!form.client_name.trim()) {
-      toast.error("Name is required for Funds entries.");
-      return;
-    }
-    const amount = Number(form.amount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error("Please enter a valid amount.");
-      return;
-    }
-    if (!form.purpose.trim()) {
-      toast.error("Purpose is required for Funds entries.");
-      return;
-    }
-    if (!form.entry_date) {
-      toast.error("Please select the entry date.");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const url = `/${apiBase}/entries`;
-
-      const payload = {
-        entry_type: "Funds",
-        category: form.fund_category,      // Restricted / Unrestricted
-        sub_category: "Capital",
-        fund_category: form.fund_category,
-        client_name: form.client_name.trim(),
-        amount,
-        purpose: form.purpose.trim(),
-        remarks: form.remarks || "",
-        entry_date: form.entry_date,
-      };
-
-      if (options.show_invoice) {
-        // multipart for IT / IT Sales / MedTech / Everglades
-        const fd = new FormData();
-        Object.entries(payload).forEach(([k, v]) => {
-          if (v !== null && v !== undefined) fd.append(k, v);
-        });
-        if (editingEntry && editingEntry.id) {
-          await api.put(`${url}/${editingEntry.id}`, fd, {
-            headers: { "Content-Type": "multipart/form-data" },
-          });
-          toast.success("Funds entry updated.");
-        } else {
-          await api.post(url, fd, {
-            headers: { "Content-Type": "multipart/form-data" },
-          });
-          toast.success("Funds entry added.");
-        }
-      } else {
-        if (editingEntry && editingEntry.id) {
-          await api.put(`${url}/${editingEntry.id}`, payload);
-          toast.success("Funds entry updated.");
-        } else {
-          await api.post(url, payload);
-          toast.success("Funds entry added.");
-        }
-      }
-
-      if (typeof onSaved === "function") await onSaved();
-      onClose();
-    } catch (error) {
-      const msg = error.response?.data?.message || "Failed to save Funds entry.";
-      toast.error(msg);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  /* ---------------- CAPITAL SUBMIT ---------------- */
+  /* ---------------- CAPITAL SUBMIT (all departments) ---------------- */
   const submitCapitalEntry = async () => {
+    if (!form.category) {
+      toast.error("Please select a Capital Category.");
+      return;
+    }
     if (!form.client_name.trim()) {
       toast.error("Name is required for Capital entries.");
       return;
@@ -815,7 +712,10 @@ const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Rev
     try {
       const body = {
         entry_type: "Capital",
-        category: form.category || "Other Capital",
+        category: form.category,
+        capital_category: form.category,
+        fund_category: form.category, // backwards compat
+        sub_category: "Capital",
         client_name: form.client_name.trim(),
         amount,
         purpose: form.purpose.trim(),
@@ -844,11 +744,6 @@ const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Rev
   /* ---------------- SUBMIT HANDLER ---------------- */
   const handleSubmit = async (event) => {
     event.preventDefault();
-
-    // ✅ NEW — Funds short-circuit
-    if (isFunds) {
-      return submitFundsEntry();
-    }
 
     if (isCapital) {
       return submitCapitalEntry();
@@ -1325,194 +1220,107 @@ const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Rev
     }
   };
 
-  /* ---------------- FUNDS FIELDS RENDERER ---------------- */
-  const renderFundsFields = () => (
-    <>
-      <div className="form-group">
-        <label className="form-label">
-          Fund Category <span style={{ color: "red" }}>*</span>
-        </label>
-        <select
-          name="fund_category"
-          value={form.fund_category || "Restricted Fund"}
-          onChange={handleChange}
-          className="form-control"
-          required
-        >
-          {FUND_CATEGORIES.map((fc) => (
-            <option key={fc} value={fc}>{fc}</option>
-          ))}
-        </select>
-      </div>
+  /* ---------------- CAPITAL FIELDS RENDERER (all departments) ---------------- */
+  const renderCapitalFields = () => {
+    const capitalList =
+      (options?.categories?.Capital && options.categories.Capital.length > 0)
+        ? options.categories.Capital
+        : CAPITAL_CATEGORIES;
 
-      <div className="form-group">
-        <label className="form-label">
-          Name <span style={{ color: "red" }}>*</span>
-        </label>
-        <input
-          name="client_name"
-          value={form.client_name || ""}
-          onChange={handleChange}
-          placeholder="Name of person, organization, or source"
-          className="form-control"
-          required
-        />
-      </div>
-
-      <div className="form-row">
+    return (
+      <>
         <div className="form-group">
           <label className="form-label">
-            Amount (₹) <span style={{ color: "red" }}>*</span>
+            Capital Category <span style={{ color: "red" }}>*</span>
           </label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            name="amount"
-            value={form.amount}
-            onChange={handleChange}
-            placeholder="0.00"
-            className="form-control"
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label className="form-label">
-            Date <span style={{ color: "red" }}>*</span>
-          </label>
-          <input
-            type="date"
-            name="entry_date"
-            value={form.entry_date}
-            onChange={handleChange}
-            className="form-control"
-            required
-          />
-        </div>
-      </div>
-
-      <div className="form-group">
-        <label className="form-label">
-          Purpose <span style={{ color: "red" }}>*</span>
-        </label>
-        <textarea
-          name="purpose"
-          value={form.purpose || ""}
-          onChange={handleChange}
-          rows={3}
-          placeholder="Reason or purpose for which the funds are being added"
-          className="form-control"
-          required
-        />
-      </div>
-
-      <div className="form-group">
-        <label className="form-label">Remarks</label>
-        <textarea
-          name="remarks"
-          value={form.remarks}
-          onChange={handleChange}
-          rows={2}
-          placeholder="Optional notes"
-          className="form-control"
-        />
-      </div>
-    </>
-  );
-
-  /* ---------------- CAPITAL FIELDS RENDERER ---------------- */
-  const renderCapitalFields = () => (
-    <>
-      <div className="form-group">
-        <label className="form-label">
-          Name <span style={{ color: "red" }}>*</span>
-        </label>
-        <input
-          name="client_name"
-          value={form.client_name || ""}
-          onChange={handleChange}
-          placeholder="Enter name of person, organization, or source"
-          className="form-control"
-          required
-        />
-      </div>
-
-      <div className="form-row">
-        <div className="form-group">
-          <label className="form-label">
-            Amount (₹) <span style={{ color: "red" }}>*</span>
-          </label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            name="amount"
-            value={form.amount}
-            onChange={handleChange}
-            placeholder="0.00"
-            className="form-control"
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label className="form-label">
-            Date <span style={{ color: "red" }}>*</span>
-          </label>
-          <input
-            type="date"
-            name="entry_date"
-            value={form.entry_date}
-            onChange={handleChange}
-            className="form-control"
-            required
-          />
-        </div>
-      </div>
-
-      <div className="form-group">
-        <label className="form-label">
-          Purpose <span style={{ color: "red" }}>*</span>
-        </label>
-        <textarea
-          name="purpose"
-          value={form.purpose || ""}
-          onChange={handleChange}
-          rows={3}
-          placeholder="Reason or purpose for which the capital is being added"
-          className="form-control"
-          required
-        />
-      </div>
-
-      <div className="form-group">
-        <label className="form-label">Remarks</label>
-        <textarea
-          name="remarks"
-          value={form.remarks}
-          onChange={handleChange}
-          rows={2}
-          placeholder="Optional notes"
-          className="form-control"
-        />
-      </div>
-
-      {isCorporate && (
-        <div className="form-group">
-          <label className="form-label">Capital Category</label>
           <select
             name="category"
-            value={form.category}
+            value={form.category || capitalList[0]}
             onChange={handleChange}
             className="form-control"
+            required
           >
-            {(options?.categories?.Capital || []).map((cat) => (
+            {capitalList.map((cat) => (
               <option key={cat} value={cat}>{cat}</option>
             ))}
           </select>
         </div>
-      )}
-    </>
-  );
+
+        <div className="form-group">
+          <label className="form-label">
+            Name <span style={{ color: "red" }}>*</span>
+          </label>
+          <input
+            name="client_name"
+            value={form.client_name || ""}
+            onChange={handleChange}
+            placeholder="Enter name of person, organization, or source"
+            className="form-control"
+            required
+          />
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">
+              Amount (₹) <span style={{ color: "red" }}>*</span>
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              name="amount"
+              value={form.amount}
+              onChange={handleChange}
+              placeholder="0.00"
+              className="form-control"
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">
+              Date <span style={{ color: "red" }}>*</span>
+            </label>
+            <input
+              type="date"
+              name="entry_date"
+              value={form.entry_date}
+              onChange={handleChange}
+              className="form-control"
+              required
+            />
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">
+            Purpose <span style={{ color: "red" }}>*</span>
+          </label>
+          <textarea
+            name="purpose"
+            value={form.purpose || ""}
+            onChange={handleChange}
+            rows={3}
+            placeholder="Reason or purpose for which the capital is being added"
+            className="form-control"
+            required
+          />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Remarks</label>
+          <textarea
+            name="remarks"
+            value={form.remarks}
+            onChange={handleChange}
+            rows={2}
+            placeholder="Optional notes"
+            className="form-control"
+          />
+        </div>
+      </>
+    );
+  };
 
   /* ---------------- Standard fields renderer ---------------- */
   const renderStandardFields = () => (
@@ -2059,8 +1867,8 @@ const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Rev
                 ))}
               </select>
             </div>
-            {/* ✅ hide Category when Capital or Funds is selected */}
-            {!isCapital && !isFunds && (
+            {/* ✅ hide Category when Capital is selected */}
+            {!isCapital && (
               <div className="form-group">
                 <label className="form-label">Category</label>
                 {form.entry_type === "Ledger" ? (
@@ -2078,19 +1886,16 @@ const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Rev
             )}
           </div>
 
-          {isOthersCategory && !isCapital && !isFunds && (
+          {isOthersCategory && !isCapital && (
             <div className="form-group">
               <label className="form-label">Other Category Name</label>
               <input value={otherCategory} onChange={(e) => setOtherCategory(e.target.value)} placeholder="Enter a category name" className="form-control" />
             </div>
           )}
 
-          {/* ✅ NEW — Funds fields */}
-          {isFunds && !isCapital && renderFundsFields()}
-
           {isCapital && renderCapitalFields()}
 
-          {!isCapital && !isFunds && requireItemsForCategory && !isGoodwill && (
+          {!isCapital && requireItemsForCategory && !isGoodwill && (
             <div className="form-group">
               <label className="form-label">Items</label>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -2164,7 +1969,7 @@ const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Rev
             </div>
           )}
 
-          {!isCapital && !isFunds && !requireItemsForCategory && !isLedger && !isGoodwill && !isSalaryCategory && (
+          {!isCapital && !requireItemsForCategory && !isLedger && !isGoodwill && !isSalaryCategory && (
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Amount (₹)</label>
@@ -2177,7 +1982,7 @@ const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Rev
             </div>
           )}
 
-          {!isCapital && !isFunds && !requireItemsForCategory && options.show_gst_tax && !isLedger && !isGoodwill && !isSalaryCategory && (
+          {!isCapital && !requireItemsForCategory && options.show_gst_tax && !isLedger && !isGoodwill && !isSalaryCategory && (
             <p className="text-muted" style={{ textAlign: "right", fontSize: 13, marginTop: -8 }}>
               GST Tax ({gstTaxPercentValue || 0}%): {formatCurrency(gstTaxAmount)}
               {" · "}
@@ -2185,58 +1990,58 @@ const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Rev
             </p>
           )}
 
-          {!isCapital && !isFunds && isOfficeAdmin && form.category === salaryCategoryName && (
+          {!isCapital && isOfficeAdmin && form.category === salaryCategoryName && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salary must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for Office Administration employees.</p>
             </div>
           )}
 
-          {!isCapital && !isFunds && isITSales && !isITSalesSalaryCategory && (
+          {!isCapital && isITSales && !isITSalesSalaryCategory && (
             <div className="form-group">
               <label className="form-label">Team</label>
               <input name="team" value={form.team || ""} onChange={handleChange} placeholder="e.g. Sales Team, Enterprise Sales, B2B Team" className="form-control" />
             </div>
           )}
 
-          {!isCapital && !isFunds && isITSalaryCategory && (
+          {!isCapital && isITSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for IT Development employees.</p>
             </div>
           )}
-          {!isCapital && !isFunds && isITSalesSalaryCategory && (
+          {!isCapital && isITSalesSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for IT Sales employees.</p>
             </div>
           )}
-          {!isCapital && !isFunds && isMedTechSalaryCategory && (
+          {!isCapital && isMedTechSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for MedTech employees.</p>
             </div>
           )}
-          {!isCapital && !isFunds && isPCMSalaryCategory && (
+          {!isCapital && isPCMSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for PCM employees.</p>
             </div>
           )}
-          {!isCapital && !isFunds && isDentalSalaryCategory && (
+          {!isCapital && isDentalSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for Dental employees.</p>
             </div>
           )}
-          {!isCapital && !isFunds && isEvergladesSalaryCategory && (
+          {!isCapital && isEvergladesSalaryCategory && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for Everglades employees.</p>
             </div>
           )}
 
-          {!isCapital && !isFunds && isSalaryCategory && (
+          {!isCapital && isSalaryCategory && (
             <div className="form-group">
               <label className="form-label">Employees</label>
               {employees.map((emp) => (
@@ -2302,9 +2107,9 @@ const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Rev
             </div>
           )}
 
-          {!isCapital && !isFunds && isLedger && renderLedgerFields()}
+          {!isCapital && isLedger && renderLedgerFields()}
 
-          {!isCapital && !isFunds && isGoodwill && (
+          {!isCapital && isGoodwill && (
             <>
               <div className="form-group">
                 <label className="form-label">Client Name <span style={{ color: "red" }}>*</span></label>
@@ -2330,14 +2135,14 @@ const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Rev
             </>
           )}
 
-          {!isCapital && !isFunds && isOfficeAdmin && !isOfficeAdminSalary && !isLedger && renderOfficeAdminFields()}
-          {!isCapital && !isFunds && isIT && !isITSalaryCategory && !isLedger && (showITFields ? renderITFields() : renderStandardFields())}
-          {!isCapital && !isFunds && isITSales && !isITSalesSalaryCategory && !isLedger && (showITSalesFields ? renderITSalesFields() : renderStandardFields())}
-          {!isCapital && !isFunds && isMedTech && !isMedTechSalaryCategory && !isLedger && !isGoodwill && (showMedTechFields ? renderMedTechFields() : renderStandardFields())}
-          {!isCapital && !isFunds && isPCM && !isPCMSalaryCategory && !isLedger && (showPCMFields ? renderPCMFields() : renderStandardFields())}
-          {!isCapital && !isFunds && isDental && !isDentalSalaryCategory && !isLedger && (showDentalFields ? renderDentalFields() : renderStandardFields())}
-          {!isCapital && !isFunds && isEverglades && !isEvergladesSalaryCategory && !isLedger && !isGoodwill && (showEvergladesFields ? renderEvergladesFields() : renderStandardFields())}
-          {!isCapital && !isFunds && !isSalaryCategory && !isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isDental && !isEverglades && !isLedger && !isGoodwill && renderStandardFields()}
+          {!isCapital && isOfficeAdmin && !isOfficeAdminSalary && !isLedger && renderOfficeAdminFields()}
+          {!isCapital && isIT && !isITSalaryCategory && !isLedger && (showITFields ? renderITFields() : renderStandardFields())}
+          {!isCapital && isITSales && !isITSalesSalaryCategory && !isLedger && (showITSalesFields ? renderITSalesFields() : renderStandardFields())}
+          {!isCapital && isMedTech && !isMedTechSalaryCategory && !isLedger && !isGoodwill && (showMedTechFields ? renderMedTechFields() : renderStandardFields())}
+          {!isCapital && isPCM && !isPCMSalaryCategory && !isLedger && (showPCMFields ? renderPCMFields() : renderStandardFields())}
+          {!isCapital && isDental && !isDentalSalaryCategory && !isLedger && (showDentalFields ? renderDentalFields() : renderStandardFields())}
+          {!isCapital && isEverglades && !isEvergladesSalaryCategory && !isLedger && !isGoodwill && (showEvergladesFields ? renderEvergladesFields() : renderStandardFields())}
+          {!isCapital && !isSalaryCategory && !isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isDental && !isEverglades && !isLedger && !isGoodwill && renderStandardFields()}
 
           <div className="modal-footer">
             <button type="button" onClick={onClose} className="btn btn-secondary" disabled={saving}>Cancel</button>

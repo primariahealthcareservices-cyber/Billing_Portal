@@ -15,7 +15,6 @@ import StatCards from "../../components/StatCards.jsx";
 import FinanceCharts from "../../components/FinanceCharts.jsx";
 import FinanceTable from "../../components/FinanceTable.jsx";
 import EntryViewModal from "../../components/EntryViewModal.jsx";
-import ThreeDChart from "../../components/ThreeDChart.jsx";
 import api from "../../api/axios.js";
 
 const DEPARTMENTS_CONFIG = [
@@ -95,6 +94,20 @@ const firstOfMonth = () => {
 };
 const todayStr = () => fmtLocalDate(new Date());
 
+const computeDateRangeFromQuarter = (quarter, year) => {
+  const y = parseInt(year, 10);
+  if (isNaN(y)) return null;
+  const q = quarter === "" ? null : parseInt(quarter, 10);
+  let start, end;
+  if (q === null) { start = new Date(y, 0, 1); end = new Date(y, 11, 31); }
+  else if (q === 1) { start = new Date(y, 0, 1); end = new Date(y, 2, 31); }
+  else if (q === 2) { start = new Date(y, 3, 1); end = new Date(y, 5, 30); }
+  else if (q === 3) { start = new Date(y, 6, 1); end = new Date(y, 8, 30); }
+  else if (q === 4) { start = new Date(y, 9, 1); end = new Date(y, 11, 31); }
+  else return null;
+  return { start: fmtLocalDate(start), end: fmtLocalDate(end) };
+};
+
 const getMonthNumber = (monthName) => {
   const months = {
     January: 1, February: 2, March: 3, April: 4, May: 5, June: 6,
@@ -110,6 +123,7 @@ const average = (arr) => {
   return sum / filtered.length;
 };
 
+// Recognizes capital as a first-class transaction kind; Funds is intentionally dropped.
 const getEntryKind = (entry) => {
   if (!entry) return null;
   const raw = (
@@ -122,6 +136,7 @@ const getEntryKind = (entry) => {
     if (!Number.isNaN(amt) && amt !== 0) return amt < 0 ? "expenses" : "income";
     return null;
   }
+  if (raw.includes("capital")) return "capital";
   if (raw.includes("income") || raw.includes("revenue") || raw.includes("credit") || raw === "in") return "income";
   if (raw.includes("expense") || raw.includes("expenditure") || raw.includes("debit") || raw === "out") return "expenses";
   return null;
@@ -134,6 +149,27 @@ const matchesDataView = (entry, view) => {
   return kind === view;
 };
 
+// Hide "Other" / "Others" placeholder categories and Corpus Fund from Income lists
+const excludeOtherCategory = (c) => {
+  const lower = (c || "").trim().toLowerCase();
+  return lower !== "others" && lower !== "other";
+};
+
+// ⭐ Corpus Fund must NEVER show as an Income category
+const excludeCorpusFund = (c) => {
+  const lower = (c || "").trim().toLowerCase();
+  return lower !== "corpus fund";
+};
+
+// Filters applied to an Income category list
+const filterIncomeCategory = (c) => excludeOtherCategory(c) && excludeCorpusFund(c);
+
+// Filters applied to an Expense category list
+const filterExpenseCategory = (c) => excludeOtherCategory(c);
+
+// Filters applied to a Capital category list (keep all, just drop placeholders)
+const filterCapitalCategory = (c) => excludeOtherCategory(c);
+
 export default function SuperAdminDashboard() {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -141,6 +177,7 @@ export default function SuperAdminDashboard() {
   const [activeDept, setActiveDept] = useState("overview");
   const [activeExtra, setActiveExtra] = useState(null);
 
+  // ---- Applied (committed) filters ----
   const [startDate, setStartDate] = useState(firstOfMonth());
   const [endDate, setEndDate] = useState(todayStr());
   const [searchTerm, setSearchTerm] = useState("");
@@ -148,7 +185,18 @@ export default function SuperAdminDashboard() {
   const [quarterFilter, setQuarterFilter] = useState("");
   const [yearFilter, setYearFilter] = useState(String(new Date().getFullYear()));
 
+  // dataView = "all" | "income" | "expenses" | "capital"
   const [dataView, setDataView] = useState("all");
+
+  const [selectedCategory, setSelectedCategory] = useState(null);
+
+  // ---- Draft filters (Main Filter Panel) ----
+  const [draftTransactionType, setDraftTransactionType] = useState("all");
+  const [draftQuarter, setDraftQuarter] = useState("");
+  const [draftYear, setDraftYear] = useState(String(new Date().getFullYear()));
+  const [draftStartDate, setDraftStartDate] = useState(firstOfMonth());
+  const [draftEndDate, setDraftEndDate] = useState(todayStr());
+  const [draftSearchTerm, setDraftSearchTerm] = useState("");
 
   const [selectedQuarter, setSelectedQuarter] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
@@ -158,7 +206,6 @@ export default function SuperAdminDashboard() {
   const [salesSelectedDept, setSalesSelectedDept] = useState(null);
   const [salesAggregated, setSalesAggregated] = useState({ averages: {}, monthlyData: [] });
 
-  const [selectedCategory, setSelectedCategory] = useState(null);
   const [caredxSection, setCaredxSection] = useState("lab");
   const [departmentOptions, setDepartmentOptions] = useState(null);
 
@@ -201,39 +248,6 @@ export default function SuperAdminDashboard() {
       setEndDate(fmtLocalDate(end));
     }
   }, [selectedQuarter, selectedYear, activeDept]);
-
-  // ---------- Non-SalesEnterprise quarter → dates ----------
-  useEffect(() => {
-    if (activeDept === "SalesEnterprise") return;
-
-    const year = parseInt(yearFilter, 10);
-    if (isNaN(year)) return;
-
-    const q = quarterFilter === "" ? null : parseInt(quarterFilter, 10);
-
-    let start, end;
-    if (q === null) {
-      start = new Date(year, 0, 1);
-      end = new Date(year, 11, 31);
-    } else if (q === 1) {
-      start = new Date(year, 0, 1);
-      end = new Date(year, 2, 31);
-    } else if (q === 2) {
-      start = new Date(year, 3, 1);
-      end = new Date(year, 5, 30);
-    } else if (q === 3) {
-      start = new Date(year, 6, 1);
-      end = new Date(year, 8, 30);
-    } else if (q === 4) {
-      start = new Date(year, 9, 1);
-      end = new Date(year, 11, 31);
-    } else {
-      return;
-    }
-
-    setStartDate(fmtLocalDate(start));
-    setEndDate(fmtLocalDate(end));
-  }, [quarterFilter, yearFilter, activeDept]);
 
   // ---------- Fetch KPIs for SalesEnterprise ----------
   useEffect(() => {
@@ -404,8 +418,7 @@ export default function SuperAdminDashboard() {
     fetchOptions(activeDept);
   }, [activeDept, fetchOptions]);
 
-  // ✅ FIX: Explicitly depend on selectedCategory + all primitives that affect the URL
-  //       so the request re-fires the moment a category is clicked.
+  // Data-fetch trigger
   useEffect(() => {
     if (activeDept === "overview") {
       fetchOverview(startDate, endDate);
@@ -426,37 +439,48 @@ export default function SuperAdminDashboard() {
     searchTerm,
   ]);
 
-  // ---------- Handlers ----------
+  // ---------- Handlers: Department / Reset / Apply ----------
   const handleSelectDept = (value) => {
-    const config = DEPARTMENTS_CONFIG.find(d => d.value === value);
+    const config = DEPARTMENTS_CONFIG.find((d) => d.value === value);
     if (!config) return;
 
+    // ✏️ Only the department identity changes.
     setActiveDept(value);
     setActiveExtra(config.extra || null);
-    setStartDate(firstOfMonth());
-    setEndDate(todayStr());
+
+    // ♻️ Reset values that are inherently department-specific, so stale
+    //    data doesn't leak into the newly selected department.
+    setDraftSearchTerm("");
     setSearchTerm("");
     setSelectedCategory(null);
     setCaredxSection("lab");
-    setSelectedQuarter("");
-    setSelectedYear("");
-    setSelectedSubDept("All");
     setSalesSelectedDept(null);
-    setQuarterFilter("");
-    setYearFilter(String(new Date().getFullYear()));
-    setDataView("all");
+    setSelectedSubDept("All");
+
+    // ♻️ Clear cached rows/summary so the panel shows a clean loading state.
     setDeptEntries([]);
     setCaredxLabEntries([]);
     setCaredxExpenses([]);
     setDeptSummary(null);
+
+    // ♻️ Reset pagination.
     setPage(1);
     setTotalEntries(0);
     setTotalPages(0);
+
+    // 🔒 Everything else — Transaction Type, Quarter, Year, Start Date,
+    //    End Date, applied dataView, applied quarterFilter/yearFilter,
+    //    applied start/end dates — is intentionally LEFT UNTOUCHED so the
+    //    user's selected period carries over to the new department.
   };
 
   const handleResetFilters = () => {
-    setStartDate(firstOfMonth());
-    setEndDate(todayStr());
+    const defaultStart = firstOfMonth();
+    const defaultEnd = todayStr();
+    const defaultYear = String(new Date().getFullYear());
+
+    setStartDate(defaultStart);
+    setEndDate(defaultEnd);
     setSearchTerm("");
     setSelectedCategory(null);
     setCaredxSection("lab");
@@ -465,26 +489,71 @@ export default function SuperAdminDashboard() {
     setSelectedSubDept("All");
     setSalesSelectedDept(null);
     setQuarterFilter("");
-    setYearFilter(String(new Date().getFullYear()));
+    setYearFilter(defaultYear);
     setDataView("all");
+    setPage(1);
+
+    setDraftTransactionType("all");
+    setDraftQuarter("");
+    setDraftYear(defaultYear);
+    setDraftStartDate(defaultStart);
+    setDraftEndDate(defaultEnd);
+    setDraftSearchTerm("");
+  };
+
+  const handleApplyFilters = () => {
+    if (activeDept === "Caredx") {
+      if (draftTransactionType === "income") setCaredxSection("lab");
+      else if (draftTransactionType === "expenses") setCaredxSection("expenses");
+    }
+
+    setDataView(draftTransactionType);
+    setSelectedCategory(null);
+
+    setQuarterFilter(draftQuarter);
+    setYearFilter(draftYear);
+    setStartDate(draftStartDate);
+    setEndDate(draftEndDate);
+    setSearchTerm(draftSearchTerm);
     setPage(1);
   };
 
-  const handleDataViewChange = (view) => {
-    setDataView(view);
-    if (activeDept === "Caredx") {
-      if (view === "income") setCaredxSection("lab");
-      else if (view === "expenses") setCaredxSection("expenses");
+  // ---------- Draft-only handlers ----------
+  const handleDraftQuarterChange = (q) => {
+    setDraftQuarter(q);
+    const range = computeDateRangeFromQuarter(q, draftYear);
+    if (range) {
+      setDraftStartDate(range.start);
+      setDraftEndDate(range.end);
     }
+  };
+
+  const handleDraftYearChange = (y) => {
+    setDraftYear(y);
+    const range = computeDateRangeFromQuarter(draftQuarter, y);
+    if (range) {
+      setDraftStartDate(range.start);
+      setDraftEndDate(range.end);
+    }
+  };
+
+  const handleDraftStartDateChange = (v) => {
+    setDraftStartDate(v);
+    setDraftQuarter("");
+  };
+
+  const handleDraftEndDateChange = (v) => {
+    setDraftEndDate(v);
+    setDraftQuarter("");
+  };
+
+  const handleCategorySelect = (cat) => {
+    setSelectedCategory(cat);
+    setPage(1);
   };
 
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) setPage(newPage);
-  };
-
-  const handleCategoryClick = (cat) => {
-    setSelectedCategory(prev => (prev === cat ? null : cat));
-    setPage(1);
   };
 
   const handleCaredxSectionChange = (section) => {
@@ -554,24 +623,33 @@ export default function SuperAdminDashboard() {
   // ---------- Derived data ----------
   const currentDeptLabel = DEPARTMENTS_CONFIG.find(d => d.value === activeDept)?.label || activeDept;
 
-  let categories = [];
-  if (departmentOptions?.categories) {
-    if (activeDept === "Caredx" && caredxSection === "expenses") {
-      categories = (departmentOptions.categories.Expenses || []).filter(c => {
-        const lower = c.trim().toLowerCase();
-        return lower !== "others" && lower !== "other";
-      });
-    } else if (activeDept === "Caredx" && caredxSection === "lab") {
-      categories = [];
-    } else {
-      const allCats = new Set();
-      Object.values(departmentOptions.categories).forEach(catList => catList.forEach(c => allCats.add(c)));
-      categories = Array.from(allCats).filter(c => {
-        const lower = c.trim().toLowerCase();
-        return lower !== "others" && lower !== "other";
-      });
+  // ⭐ Category Panel — dynamic per applied Transaction Type.
+  const categoryPanelOptions = React.useMemo(() => {
+    if (activeDept === "overview" || activeDept === "SalesEnterprise") return [];
+    if (!departmentOptions?.categories) return [];
+
+    const cats = departmentOptions.categories;
+
+    // CareDx: expense records only (lab revenue has no free-form categories)
+    if (activeDept === "Caredx") {
+      if (dataView === "income") return [];
+      if (dataView === "capital") {
+        return (cats.Capital || []).filter(filterCapitalCategory);
+      }
+      return (cats.Expenses || []).filter(filterExpenseCategory);
     }
-  }
+
+    if (dataView === "income")   return (cats.Income   || []).filter(filterIncomeCategory);
+    if (dataView === "expenses") return (cats.Expenses || []).filter(filterExpenseCategory);
+    if (dataView === "capital")  return (cats.Capital  || []).filter(filterCapitalCategory);
+
+    // "all"
+    const allCats = new Set();
+    (cats.Income   || []).filter(filterIncomeCategory).forEach(c => allCats.add(c));
+    (cats.Expenses || []).filter(filterExpenseCategory).forEach(c => allCats.add(c));
+    (cats.Capital  || []).filter(filterCapitalCategory).forEach(c => allCats.add(c));
+    return Array.from(allCats);
+  }, [activeDept, dataView, departmentOptions]);
 
   const sortedDepartments = React.useMemo(() => {
     if (!overview?.by_department) return [];
@@ -585,7 +663,7 @@ export default function SuperAdminDashboard() {
     return allDepts.map(dept => {
       const data = deptDataMap[dept];
       if (data) return data;
-      return { department: dept, income: 0, expenses: 0, profit: 0 };
+      return { department: dept, income: 0, expenses: 0, capital: 0, profit: 0 };
     });
   }, [overview]);
 
@@ -594,11 +672,10 @@ export default function SuperAdminDashboard() {
     value:
       dataView === "income" ? d.income
       : dataView === "expenses" ? d.expenses
-      : d.income + d.expenses,
+      : dataView === "capital" ? (d.capital || 0)
+      : d.income + d.expenses + (d.capital || 0),
   }));
 
-  // ✅ FIX: When a specific category (not Ledger) is selected, hide Ledger rows
-  //       in the UI even if the backend accidentally returns them.
   const filteredDeptEntries = React.useMemo(() => {
     let list = deptEntries;
     if (selectedCategory && selectedCategory !== "Ledger") {
@@ -609,34 +686,75 @@ export default function SuperAdminDashboard() {
   }, [deptEntries, dataView, selectedCategory]);
 
   const visibleCaredxLabEntries = React.useMemo(() => {
-    if (dataView === "expenses") return [];
+    if (dataView === "expenses" || dataView === "capital") return [];
     return caredxLabEntries;
   }, [caredxLabEntries, dataView]);
 
   const visibleCaredxExpenses = React.useMemo(() => {
-    if (dataView === "income") return [];
+    if (dataView === "income" || dataView === "capital") return [];
     return caredxExpenses;
   }, [caredxExpenses, dataView]);
 
-  const renderDataViewToggle = () => (
-    <div className="card" style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
-      <span style={{ fontWeight: 600, marginRight: 8 }}>View:</span>
-      <button type="button" className={`btn ${dataView === "all" ? "btn-primary" : "btn-secondary"}`} onClick={() => handleDataViewChange("all")}>All</button>
-      <button type="button" className={`btn ${dataView === "income" ? "btn-primary" : "btn-secondary"}`} onClick={() => handleDataViewChange("income")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-        <TrendingUp size={15} /> Income
-      </button>
-      <button type="button" className={`btn ${dataView === "expenses" ? "btn-primary" : "btn-secondary"}`} onClick={() => handleDataViewChange("expenses")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-        <TrendingDown size={15} /> Expenses
-      </button>
-    </div>
-  );
+  const renderCategoryPanel = () => {
+    if (categoryPanelOptions.length === 0) return null;
+    return (
+      <div className="card" style={{ marginBottom: 16 }}>
+        <p className="section-title" style={{ marginBottom: 12 }}>Categories</p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button
+            type="button"
+            className={`btn ${!selectedCategory ? "btn-primary" : "btn-secondary"}`}
+            onClick={() => handleCategorySelect(null)}
+            style={{ padding: "8px 16px", borderRadius: 20, fontSize: 14 }}
+          >
+            All Categories
+          </button>
+          {categoryPanelOptions.map(cat => (
+            <button
+              key={cat}
+              type="button"
+              className={`btn ${selectedCategory === cat ? "btn-primary" : "btn-secondary"}`}
+              onClick={() => handleCategorySelect(cat)}
+              style={{ padding: "8px 16px", borderRadius: 20, fontSize: 14 }}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   const renderPagination = () => {
     if (totalPages <= 1) return null;
+
+    const rangeStart = (page - 1) * perPage + 1;
+    const rangeEnd = Math.min(page * perPage, totalEntries);
+
+    const windowSize = 5;
+    let winStart = Math.max(1, page - Math.floor(windowSize / 2));
+    let winEnd = Math.min(totalPages, winStart + windowSize - 1);
+    winStart = Math.max(1, winEnd - windowSize + 1);
+    const pageNumbers = [];
+    for (let p = winStart; p <= winEnd; p++) pageNumbers.push(p);
+
     return (
-      <div className="pagination" style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 16, alignItems: "center" }}>
+      <div className="pagination" style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 16, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ display: "flex", alignItems: "center", marginRight: 8, color: "#6b7280", fontSize: 14 }}>
+          Showing {rangeStart}–{rangeEnd} of {totalEntries} entries
+        </span>
         <button className="btn btn-secondary" onClick={() => handlePageChange(page - 1)} disabled={page === 1}>Previous</button>
-        <span style={{ display: "flex", alignItems: "center" }}>Page {page} of {totalPages} (Total {totalEntries} entries)</span>
+        {winStart > 1 && <span style={{ padding: "0 4px" }}>…</span>}
+        {pageNumbers.map(p => (
+          <button
+            key={p}
+            className={`btn ${p === page ? "btn-primary" : "btn-secondary"}`}
+            onClick={() => handlePageChange(p)}
+          >
+            {p}
+          </button>
+        ))}
+        {winEnd < totalPages && <span style={{ padding: "0 4px" }}>…</span>}
         <button className="btn btn-secondary" onClick={() => handlePageChange(page + 1)} disabled={page === totalPages}>Next</button>
         <select
           value={perPage}
@@ -657,7 +775,7 @@ export default function SuperAdminDashboard() {
       <Navbar title="CEO Governance Dashboard" roleColor="#7c3aed" />
 
       <main className="page-main">
-        {/* ========== FILTER PANEL ========== */}
+        {/* ========== MAIN FILTER PANEL ========== */}
         <p className="section-title" style={{ marginBottom: 8 }}>Filter Panel</p>
         <div className="card" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
@@ -672,8 +790,23 @@ export default function SuperAdminDashboard() {
           {activeDept !== "SalesEnterprise" && (
             <>
               <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Transaction Type</label>
+                <select
+                  className="form-control"
+                  value={draftTransactionType}
+                  onChange={(e) => setDraftTransactionType(e.target.value)}
+                  style={{ minWidth: 130 }}
+                >
+                  <option value="all">All</option>
+                  <option value="income">Income</option>
+                  <option value="expenses">Expenses</option>
+                  <option value="capital">Capital</option>
+                </select>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Quarter</label>
-                <select className="form-control" value={quarterFilter} onChange={(e) => setQuarterFilter(e.target.value)}>
+                <select className="form-control" value={draftQuarter} onChange={(e) => handleDraftQuarterChange(e.target.value)}>
                   <option value="">All</option>
                   <option value="1">Q1 (Jan–Mar)</option>
                   <option value="2">Q2 (Apr–Jun)</option>
@@ -684,7 +817,7 @@ export default function SuperAdminDashboard() {
 
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Year</label>
-                <select className="form-control" value={yearFilter} onChange={(e) => setYearFilter(e.target.value)}>
+                <select className="form-control" value={draftYear} onChange={(e) => handleDraftYearChange(e.target.value)}>
                   {Array.from({ length: 10 }, (_, i) => {
                     const y = new Date().getFullYear() - i;
                     return <option key={y} value={y}>{y}</option>;
@@ -697,8 +830,8 @@ export default function SuperAdminDashboard() {
                 <input
                   type="date"
                   className="form-control"
-                  value={startDate}
-                  onChange={(e) => { setStartDate(e.target.value); setQuarterFilter(""); }}
+                  value={draftStartDate}
+                  onChange={(e) => handleDraftStartDateChange(e.target.value)}
                 />
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
@@ -706,8 +839,8 @@ export default function SuperAdminDashboard() {
                 <input
                   type="date"
                   className="form-control"
-                  value={endDate}
-                  onChange={(e) => { setEndDate(e.target.value); setQuarterFilter(""); }}
+                  value={draftEndDate}
+                  onChange={(e) => handleDraftEndDateChange(e.target.value)}
                 />
               </div>
             </>
@@ -752,6 +885,12 @@ export default function SuperAdminDashboard() {
             </>
           )}
 
+          {activeDept !== "SalesEnterprise" && (
+            <button type="button" onClick={handleApplyFilters} className="btn btn-primary">
+              <Search size={15} /> Search Entries
+            </button>
+          )}
+
           <button type="button" onClick={handleResetFilters} className="btn btn-secondary">
             <RotateCcw size={15} /> Reset
           </button>
@@ -759,15 +898,16 @@ export default function SuperAdminDashboard() {
           {activeDept !== "overview" && activeDept !== "SalesEnterprise" && (
             <>
               <div className="form-group" style={{ marginBottom: 0, flex: 1, minWidth: 200 }}>
-                <label className="form-label">Search</label>
+                <label className="form-label">Quick Search</label>
                 <div style={{ position: "relative" }}>
                   <Search size={15} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", opacity: 0.5 }} />
                   <input
                     className="form-control"
                     style={{ paddingLeft: 32 }}
-                    placeholder={`Search ${currentDeptLabel} entries...`}
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Name, description, purpose, patient, employee..."
+                    value={draftSearchTerm}
+                    onChange={(e) => setDraftSearchTerm(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleApplyFilters(); }}
                   />
                 </div>
               </div>
@@ -816,13 +956,6 @@ export default function SuperAdminDashboard() {
                   <p className="stat-value">{formatCurrency(overview?.total_expenses)}</p>
                 </div>
               </div>
-              {/* <div className="card stat-card">
-                <div className="stat-icon stat-icon--funds"><Landmark size={22} /></div>
-                <div>
-                  <p className="stat-label">Funds</p>
-                  <p className="stat-value">{formatCurrency(overview?.total_funds)}</p>
-                </div>
-              </div> */}
               <div className="card stat-card">
                 <div className="stat-icon stat-icon--profit"><Wallet size={22} /></div>
                 <div>
@@ -832,8 +965,6 @@ export default function SuperAdminDashboard() {
               </div>
             </div>
 
-            <div style={{ marginTop: 16 }}>{renderDataViewToggle()}</div>
-
             {overview?.by_department && (
               <>
                 <p className="section-title" style={{ marginBottom: 8 }}>Categories Panel</p>
@@ -841,6 +972,7 @@ export default function SuperAdminDashboard() {
                   <p className="section-title" style={{ marginBottom: 16 }}>
                     {dataView === "income" ? "Income by Department"
                      : dataView === "expenses" ? "Expenses by Department"
+                     : dataView === "capital" ? "Capital by Department"
                      : "Income / Expenses / Profit by Department"}
                   </p>
                   <div className="dept-grid">
@@ -856,16 +988,22 @@ export default function SuperAdminDashboard() {
                           style={{ textAlign: "left", cursor: "pointer", border: activeDept === d.department ? "2px solid #7c3aed" : undefined }}
                         >
                           <p className="dept-card-title">{label}</p>
-                          {dataView !== "expenses" && (
+                          {dataView !== "expenses" && dataView !== "capital" && (
                             <div className="dept-row">
                               <span className="dept-row-label">Income</span>
                               <span className="dept-row-value--income">{formatCurrency(d.income)}</span>
                             </div>
                           )}
-                          {dataView !== "income" && (
+                          {dataView !== "income" && dataView !== "capital" && (
                             <div className="dept-row">
                               <span className="dept-row-label">Expenses</span>
                               <span className="dept-row-value--expense">{formatCurrency(d.expenses)}</span>
+                            </div>
+                          )}
+                          {(dataView === "all" || dataView === "capital") && (
+                            <div className="dept-row">
+                              <span className="dept-row-label">Capital</span>
+                              <span className="dept-row-value--capital">{formatCurrency(d.capital || 0)}</span>
                             </div>
                           )}
                           {dataView === "all" && (
@@ -892,6 +1030,7 @@ export default function SuperAdminDashboard() {
                     <h3>
                       {dataView === "income" ? "Income by Department"
                        : dataView === "expenses" ? "Expenses by Department"
+                       : dataView === "capital" ? "Capital by Department"
                        : "Income vs Expenses by Department"}
                     </h3>
                     <ResponsiveContainer width="100%" height={280}>
@@ -901,8 +1040,9 @@ export default function SuperAdminDashboard() {
                         <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} />
                         <Tooltip formatter={(v) => formatCurrency(v)} />
                         <Legend />
-                        {dataView !== "expenses" && <Bar dataKey="income" fill="#16a34a" name="Income" radius={[4, 4, 0, 0]} />}
-                        {dataView !== "income" && <Bar dataKey="expenses" fill="#dc2626" name="Expenses" radius={[4, 4, 0, 0]} />}
+                        {dataView !== "expenses" && dataView !== "capital" && <Bar dataKey="income" fill="#16a34a" name="Income" radius={[4, 4, 0, 0]} />}
+                        {dataView !== "income" && dataView !== "capital" && <Bar dataKey="expenses" fill="#dc2626" name="Expenses" radius={[4, 4, 0, 0]} />}
+                        {(dataView === "all" || dataView === "capital") && <Bar dataKey="capital" fill="#7c3aed" name="Capital" radius={[4, 4, 0, 0]} />}
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -910,6 +1050,7 @@ export default function SuperAdminDashboard() {
                     <h3>
                       {dataView === "income" ? "Department Share of Income"
                        : dataView === "expenses" ? "Department Share of Expenses"
+                       : dataView === "capital" ? "Department Share of Capital"
                        : "Department Share of Total Volume"}
                     </h3>
                     <ResponsiveContainer width="100%" height={280}>
@@ -1074,11 +1215,12 @@ export default function SuperAdminDashboard() {
               <>
                 <p className="section-title" style={{ marginBottom: 8 }}>Summary Panel</p>
                 <StatCards
-                  totalIncome={dataView === "expenses" ? 0 : deptSummary.total_income}
-                  totalExpenses={dataView === "income" ? 0 : deptSummary.total_expenses}
+                  totalIncome={dataView === "expenses" || dataView === "capital" ? 0 : deptSummary.total_income}
+                  totalExpenses={dataView === "income" || dataView === "capital" ? 0 : deptSummary.total_expenses}
                   profit={
                     dataView === "income" ? deptSummary.total_income
                     : dataView === "expenses" ? -deptSummary.total_expenses
+                    : dataView === "capital" ? (deptSummary.total_capital ?? 0)
                     : deptSummary.profit
                   }
                   entryCount={
@@ -1109,122 +1251,114 @@ export default function SuperAdminDashboard() {
               </div>
             )}
 
-            {categories.length > 0 && (
-              <div className="card" style={{ marginBottom: 16 }}>
-                <p className="section-title" style={{ marginBottom: 12 }}>Categories</p>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {categories.map(cat => (
-                    <button
-                      key={cat}
-                      className={`btn ${selectedCategory === cat ? "btn-primary" : "btn-secondary"}`}
-                      onClick={() => handleCategoryClick(cat)}
-                      style={{ padding: "8px 16px", borderRadius: 20, fontSize: 14 }}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                  {selectedCategory && (
-                    <button className="btn btn-secondary" onClick={() => setSelectedCategory(null)} style={{ padding: "8px 16px", borderRadius: 20, fontSize: 14 }}>
-                      Clear Filter
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
             {deptLoading ? (
               <div className="card empty-state">Loading...</div>
             ) : activeDept === "Caredx" ? (
               <>
                 <p className="section-title" style={{ marginBottom: 8 }}>Transactional Panel</p>
-                {renderDataViewToggle()}
 
-                {dataView !== "expenses" && (
-                  <div>
-                    <p className="section-title" style={{ marginBottom: 12 }}>Lab Data Entries</p>
-                    {visibleCaredxLabEntries.length === 0 ? (
-                      <div className="card empty-state">No lab entries found for this filter.</div>
-                    ) : (
-                      <div className="card table-wrap">
-                        <table className="data-table">
-                          <thead>
-                            <tr><th>Date</th><th>Patient</th><th>Test</th><th>Employee</th><th className="text-right">Total Paid</th><th>Referral By</th><th className="text-right">Referral Amount</th><th>Actions</th></tr>
-                          </thead>
-                          <tbody>
-                            {visibleCaredxLabEntries.map((e) => (
-                              <tr key={e.id}>
-                                <td style={{ whiteSpace: "nowrap" }}>{e.entry_date}</td>
-                                <td>{e.patient_name}</td>
-                                <td>{e.test_name}</td>
-                                <td>{e.employee_name || "—"}</td>
-                                <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(e.total_amount_paid)}</td>
-                                <td>{e.referral_by || "—"}</td>
-                                <td className="text-right">{formatCurrency(e.referral_amount)}</td>
-                                <td>
-                                  <button type="button" className="btn-icon" onClick={() => setViewEntry({ type: "lab", data: e })} title="View">
-                                    <Eye size={15} />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        {renderPagination()}
+                {dataView === "capital" ? (
+                  <>
+                    {renderCategoryPanel()}
+                    <FinanceTable
+                      entries={filteredDeptEntries}
+                      onView={(entry) => setViewEntry({ type: "finance", data: entry })}
+                    />
+                    {renderPagination()}
+                  </>
+                ) : (
+                  <>
+                    {renderCategoryPanel()}
+
+                    {dataView !== "expenses" && (
+                      <div>
+                        <p className="section-title" style={{ marginBottom: 12 }}>Lab Data Entries</p>
+                        {visibleCaredxLabEntries.length === 0 ? (
+                          <div className="card empty-state">No lab entries found for this filter.</div>
+                        ) : (
+                          <div className="card table-wrap">
+                            <table className="data-table">
+                              <thead>
+                                <tr><th>Date</th><th>Patient</th><th>Test</th><th>Employee</th><th className="text-right">Total Paid</th><th>Referral By</th><th className="text-right">Referral Amount</th><th>Actions</th></tr>
+                              </thead>
+                              <tbody>
+                                {visibleCaredxLabEntries.map((e) => (
+                                  <tr key={e.id}>
+                                    <td style={{ whiteSpace: "nowrap" }}>{e.entry_date}</td>
+                                    <td>{e.patient_name}</td>
+                                    <td>{e.test_name}</td>
+                                    <td>{e.employee_name || "—"}</td>
+                                    <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(e.total_amount_paid)}</td>
+                                    <td>{e.referral_by || "—"}</td>
+                                    <td className="text-right">{formatCurrency(e.referral_amount)}</td>
+                                    <td>
+                                      <button type="button" className="btn-icon" onClick={() => setViewEntry({ type: "lab", data: e })} title="View">
+                                        <Eye size={15} />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            {renderPagination()}
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
 
-                {dataView !== "income" && (
-                  <div style={{ marginTop: 16 }}>
-                    <p className="section-title" style={{ marginBottom: 12 }}>Expenses</p>
-                    {visibleCaredxExpenses.length === 0 ? (
-                      <div className="card empty-state">No expenses found for this filter.</div>
-                    ) : (
-                      <div className="card table-wrap">
-                        <table className="data-table">
-                          <thead>
-                            <tr><th>Date</th><th>Category</th><th className="text-right">Amount</th><th>Remarks</th><th className="text-right">Actions</th></tr>
-                          </thead>
-                          <tbody>
-                            {visibleCaredxExpenses.map((e) => (
-                              <tr key={e.id || e._key}>
-                                <td style={{ whiteSpace: "nowrap" }}>{e.expense_date || e.entry_date}</td>
-                                <td>{e.category}</td>
-                                <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(e.amount)}</td>
-                                <td className="truncate">
-                                  {e.remarks || (e.employee_name ? `Salary for ${e.employee_name}` : "—")}
-                                </td>
-                                <td>
-                                  <button
-                                    type="button"
-                                    className="btn-icon"
-                                    onClick={() => setViewEntry({ type: e._isSalary ? "finance" : "expense", data: e })}
-                                    title="View"
-                                  >
-                                    <Eye size={15} />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        {renderPagination()}
+                    {dataView !== "income" && (
+                      <div style={{ marginTop: 16 }}>
+                        <p className="section-title" style={{ marginBottom: 12 }}>Expenses</p>
+                        {visibleCaredxExpenses.length === 0 ? (
+                          <div className="card empty-state">No expenses found for this filter.</div>
+                        ) : (
+                          <div className="card table-wrap">
+                            <table className="data-table">
+                              <thead>
+                                <tr><th>Date</th><th>Category</th><th className="text-right">Amount</th><th>Remarks</th><th className="text-right">Actions</th></tr>
+                              </thead>
+                              <tbody>
+                                {visibleCaredxExpenses.map((e) => (
+                                  <tr key={e.id || e._key}>
+                                    <td style={{ whiteSpace: "nowrap" }}>{e.expense_date || e.entry_date}</td>
+                                    <td>{e.category}</td>
+                                    <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(e.amount)}</td>
+                                    <td className="truncate">
+                                      {e.remarks || (e.employee_name ? `Salary for ${e.employee_name}` : "—")}
+                                    </td>
+                                    <td>
+                                      <button
+                                        type="button"
+                                        className="btn-icon"
+                                        onClick={() => setViewEntry({ type: e._isSalary ? "finance" : "expense", data: e })}
+                                        title="View"
+                                      >
+                                        <Eye size={15} />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            {renderPagination()}
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
+                  </>
                 )}
               </>
             ) : (
               <div>
                 <p className="section-title" style={{ marginBottom: 8 }}>Transactional Panel</p>
-                {renderDataViewToggle()}
 
-                {/* ✅ Show the active category in the title */}
+                {renderCategoryPanel()}
+
                 <p className="section-title" style={{ marginBottom: 12 }}>
                   {currentDeptLabel} Finance Entries
                   {dataView === "income" && " — Income"}
                   {dataView === "expenses" && " — Expenses"}
+                  {dataView === "capital" && " — Capital"}
                   {selectedCategory && ` — ${selectedCategory}`}
                 </p>
                 <FinanceTable

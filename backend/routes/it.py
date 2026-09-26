@@ -1,5 +1,5 @@
 # backend/routes/it.py
-"""IT department finance routes — Income/Expenses/Funds entries with categories.
+"""IT department finance routes — Income/Expenses/Capital entries with categories.
 Now includes salary entries from Corporate Management.
 """
 from datetime import datetime, date
@@ -13,7 +13,13 @@ from file_utils import save_invoice_file, delete_invoice_file
 
 DEPARTMENT = "IT"
 CONFIG = DEPARTMENT_CONFIG[DEPARTMENT]
-FUND_CATEGORIES = ("Restricted Fund", "Unrestricted Fund")
+CAPITAL_CATEGORIES = (
+    "Equity Infusion",
+    "Partner Contribution",
+    "Asset Capitalization",
+    "Reserve Fund Transfer",
+    "Other Capital",
+)
 
 it_bp = Blueprint("it", __name__, url_prefix="/api/it")
 
@@ -37,6 +43,13 @@ def _apply_date_filters(query):
     return query
 
 
+def _read_request_data():
+    """Return a dict-like object regardless of JSON vs form-data."""
+    if request.is_json:
+        return request.get_json(silent=True) or {}
+    return request.form
+
+
 @it_bp.route("/options", methods=["GET"])
 @role_required("IT")
 def options():
@@ -50,28 +63,35 @@ def options():
         "show_client_name": CONFIG["show_client_name"],
         "show_invoice": CONFIG["show_invoice"],
         "is_salary_category": CONFIG.get("is_salary_category"),
+        "capital_categories": list(CAPITAL_CATEGORIES),
     }), 200
 
 
 @it_bp.route("/entries", methods=["POST"])
 @role_required("IT")
 def create_entry():
-    data = request.form  # multipart/form-data
-
+    data = _read_request_data()
     entry_type = data.get("entry_type")
 
-    # ====================== FUNDS ENTRY ======================
-    if entry_type == "Funds":
+    # ====================== CAPITAL ENTRY ======================
+    if entry_type == "Capital":
         errors = []
-        fund_category = (data.get("fund_category") or "").strip()
+        capital_category = (
+            data.get("capital_category")
+            or data.get("fund_category")
+            or data.get("category")
+            or ""
+        ).strip()
         client_name = (data.get("client_name") or "").strip()
         purpose = (data.get("purpose") or "").strip()
         remarks = (data.get("remarks") or "").strip()
         entry_date = _parse_date(data.get("entry_date"), default=date.today())
         amount_raw = data.get("amount")
 
-        if fund_category not in FUND_CATEGORIES:
-            errors.append("fund_category must be Restricted Fund or Unrestricted Fund.")
+        if capital_category not in CAPITAL_CATEGORIES:
+            errors.append(
+                "capital_category must be one of: " + ", ".join(CAPITAL_CATEGORIES) + "."
+            )
         if not client_name:
             errors.append("Name is required.")
         if not purpose:
@@ -88,10 +108,10 @@ def create_entry():
 
         entry = FinanceEntry(
             department=DEPARTMENT,
-            entry_type="Funds",
-            category=fund_category,
+            entry_type="Capital",
+            category=capital_category,
             sub_category="Capital",
-            fund_category=fund_category,
+            fund_category=capital_category,
             client_name=client_name,
             amount=amount,
             purpose=purpose,
@@ -101,7 +121,7 @@ def create_entry():
         )
         db.session.add(entry)
         db.session.commit()
-        return jsonify({"message": "Funds entry created.", "entry": entry.to_dict()}), 201
+        return jsonify({"message": "Capital entry created.", "entry": entry.to_dict()}), 201
 
     # ====================== INCOME / EXPENSES ======================
     category = data.get("category")
@@ -123,7 +143,7 @@ def create_entry():
         errors.append("Salaries must be entered by Corporate Management only.")
 
     if entry_type not in ENTRY_TYPES:
-        errors.append("entry_type must be Income or Expenses.")
+        errors.append("entry_type must be Income, Expenses, or Capital.")
 
     allowed_categories = CONFIG["categories"].get(entry_type, [])
     if category not in allowed_categories:
@@ -233,19 +253,27 @@ def update_entry(entry_id):
     if not entry:
         return jsonify({"message": "Entry not found."}), 404
 
-    data = request.form
+    data = _read_request_data()
 
-    # ====================== FUNDS UPDATE ======================
-    if entry.entry_type == "Funds":
+    # ====================== CAPITAL UPDATE ======================
+    if entry.entry_type == "Capital":
         errors = []
-        fund_category = (data.get("fund_category") or entry.fund_category or "").strip()
+        capital_category = (
+            data.get("capital_category")
+            or data.get("fund_category")
+            or data.get("category")
+            or entry.fund_category
+            or ""
+        ).strip()
         client_name = (data.get("client_name") or "").strip()
         purpose = (data.get("purpose") or "").strip()
         remarks = (data.get("remarks") or "").strip()
         amount_raw = data.get("amount")
 
-        if fund_category not in FUND_CATEGORIES:
-            errors.append("fund_category must be Restricted Fund or Unrestricted Fund.")
+        if capital_category not in CAPITAL_CATEGORIES:
+            errors.append(
+                "capital_category must be one of: " + ", ".join(CAPITAL_CATEGORIES) + "."
+            )
         if not client_name:
             errors.append("Name is required.")
         if not purpose:
@@ -260,9 +288,9 @@ def update_entry(entry_id):
         if errors:
             return jsonify({"message": "Validation failed.", "errors": errors}), 400
 
-        entry.category = fund_category
+        entry.category = capital_category
         entry.sub_category = "Capital"
-        entry.fund_category = fund_category
+        entry.fund_category = capital_category
         entry.client_name = client_name
         entry.amount = amount
         entry.purpose = purpose
@@ -274,7 +302,7 @@ def update_entry(entry_id):
                 entry.entry_date = parsed
 
         db.session.commit()
-        return jsonify({"message": "Funds entry updated.", "entry": entry.to_dict()}), 200
+        return jsonify({"message": "Capital entry updated.", "entry": entry.to_dict()}), 200
 
     # ====================== INCOME / EXPENSES UPDATE ======================
     new_type = data.get("entry_type", entry.entry_type)
@@ -291,7 +319,7 @@ def update_entry(entry_id):
         entry.entry_type = data["entry_type"]
     if "category" in data and data["category"] in allowed_categories:
         entry.category = data["category"]
-    if "generated_by" in data and data["generated_by"].strip():
+    if "generated_by" in data and (data["generated_by"] or "").strip():
         entry.generated_by = data["generated_by"].strip()
     if "revenue_type" in data and data["revenue_type"] in CONFIG["revenue_types"]:
         entry.revenue_type = data["revenue_type"]
@@ -382,18 +410,18 @@ def finance_summary():
 
     total_income   = sum(float(e.amount) for e in entries if e.entry_type == "Income")
     total_expenses = sum(float(e.amount) for e in entries if e.entry_type == "Expenses")
-    total_funds    = sum(float(e.amount) for e in entries if e.entry_type == "Funds")
+    total_capital  = sum(float(e.amount) for e in entries if e.entry_type == "Capital")
 
     by_date = {}
     for e in entries:
         key = e.entry_date.isoformat()
-        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "funds": 0})
+        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "capital": 0})
         if e.entry_type == "Income":
             by_date[key]["income"] += float(e.amount)
         elif e.entry_type == "Expenses":
             by_date[key]["expenses"] += float(e.amount)
-        elif e.entry_type == "Funds":
-            by_date[key]["funds"] += float(e.amount)
+        elif e.entry_type == "Capital":
+            by_date[key]["capital"] += float(e.amount)
 
     trend = sorted(by_date.values(), key=lambda x: x["date"])
 
@@ -406,8 +434,8 @@ def finance_summary():
         "department": DEPARTMENT,
         "total_income": total_income,
         "total_expenses": total_expenses,
-        "total_funds": total_funds,
-        "profit": total_income - total_expenses,   # Funds excluded from profit
+        "total_capital": total_capital,
+        "profit": total_income - total_expenses,   # Capital excluded from profit
         "entry_count": len(entries),
         "trend": trend,
         "category_breakdown": list(by_category.values()),

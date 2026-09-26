@@ -5,7 +5,8 @@ CareDx routes.
 Modules:
 1. Lab Data Entry
 2. Expenses (with Referral Amount)
-3. Funds (Restricted / Unrestricted)
+3. Capital (Equity Infusion, Partner Contribution, Asset Capitalization,
+   Reserve Fund Transfer, Other Capital)
 4. Combined dashboard summary
 5. Excel import/export for lab entries
 """
@@ -40,7 +41,13 @@ caredx_bp = Blueprint(
     url_prefix="/api/caredx",
 )
 
-FUND_CATEGORIES = ("Restricted Fund", "Unrestricted Fund")
+CAPITAL_CATEGORIES = (
+    "Equity Infusion",
+    "Partner Contribution",
+    "Asset Capitalization",
+    "Reserve Fund Transfer",
+    "Other Capital",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -521,27 +528,27 @@ def delete_expense(expense_id):
 
 
 # ===========================================================================
-# 3. FUNDS  —  GET + POST on the same rule
+# 3. CAPITAL  —  GET + POST on the same rule
 # ===========================================================================
 
-@caredx_bp.route("/funds/options", methods=["GET"])
+@caredx_bp.route("/capital/options", methods=["GET"])
 @role_required("Caredx")
-def funds_options():
+def capital_options():
     return jsonify({
         "department": "Caredx",
-        "fund_categories": list(FUND_CATEGORIES),
+        "capital_categories": list(CAPITAL_CATEGORIES),
     }), 200
 
 
-@caredx_bp.route("/funds", methods=["GET", "POST"])
+@caredx_bp.route("/capital", methods=["GET", "POST"])
 @role_required("Caredx")
-def funds():
+def capital():
     # ---------- POST: create ----------
     if request.method == "POST":
         data = request.get_json(silent=True) if request.is_json else request.form
         data = data or {}
 
-        fund_category = (data.get("fund_category") or "").strip()
+        capital_category = (data.get("capital_category") or data.get("fund_category") or "").strip()
         client_name = (data.get("client_name") or "").strip()
         purpose = (data.get("purpose") or "").strip()
         remarks = (data.get("remarks") or "").strip()
@@ -550,8 +557,10 @@ def funds():
 
         errors = []
 
-        if fund_category not in FUND_CATEGORIES:
-            errors.append("fund_category must be Restricted Fund or Unrestricted Fund.")
+        if capital_category not in CAPITAL_CATEGORIES:
+            errors.append(
+                "capital_category must be one of: " + ", ".join(CAPITAL_CATEGORIES) + "."
+            )
         if not client_name:
             errors.append("Name is required.")
         if not purpose:
@@ -570,10 +579,10 @@ def funds():
 
         entry = FinanceEntry(
             department="Caredx",
-            entry_type="Funds",
-            category=fund_category,
+            entry_type="Capital",
+            category=capital_category,
             sub_category="Capital",
-            fund_category=fund_category,
+            fund_category=capital_category,  # reuse existing column
             client_name=client_name,
             amount=amount,
             purpose=purpose,
@@ -589,14 +598,14 @@ def funds():
             db.session.rollback()
             import traceback
             traceback.print_exc()
-            return jsonify({"message": "Failed to create Funds entry.", "error": str(exc)}), 500
+            return jsonify({"message": "Failed to create Capital entry.", "error": str(exc)}), 500
 
-        return jsonify({"message": "Funds entry created.", "fund": entry.to_dict()}), 201
+        return jsonify({"message": "Capital entry created.", "capital": entry.to_dict()}), 201
 
     # ---------- GET: list ----------
     query = FinanceEntry.query.filter_by(
         department="Caredx",
-        entry_type="Funds",
+        entry_type="Capital",
     )
 
     start_date = _parse_date(request.args.get("start_date"))
@@ -618,30 +627,35 @@ def funds():
             )
         )
 
-    fund_category = (request.args.get("fund_category") or "").strip()
-    if fund_category in FUND_CATEGORIES:
-        query = query.filter(FinanceEntry.fund_category == fund_category)
+    capital_category = (request.args.get("capital_category") or "").strip()
+    if capital_category in CAPITAL_CATEGORIES:
+        query = query.filter(FinanceEntry.fund_category == capital_category)
 
     query = query.order_by(FinanceEntry.entry_date.desc(), FinanceEntry.id.desc())
-    return jsonify({"funds": [e.to_dict() for e in query.all()]}), 200
+    return jsonify({"capital": [e.to_dict() for e in query.all()]}), 200
 
 
-@caredx_bp.route("/funds/<int:fund_id>", methods=["PUT"])
+@caredx_bp.route("/capital/<int:capital_id>", methods=["PUT"])
 @role_required("Caredx")
-def update_fund(fund_id):
+def update_capital(capital_id):
     entry = FinanceEntry.query.filter_by(
-        id=fund_id,
+        id=capital_id,
         department="Caredx",
-        entry_type="Funds",
+        entry_type="Capital",
     ).first()
 
     if not entry:
-        return jsonify({"message": "Funds entry not found."}), 404
+        return jsonify({"message": "Capital entry not found."}), 404
 
     data = request.get_json(silent=True) if request.is_json else request.form
     data = data or {}
 
-    fund_category = (data.get("fund_category") or entry.fund_category or "").strip()
+    capital_category = (
+        data.get("capital_category")
+        or data.get("fund_category")
+        or entry.fund_category
+        or ""
+    ).strip()
     client_name = (data.get("client_name") or "").strip()
     purpose = (data.get("purpose") or "").strip()
     remarks = (data.get("remarks") or "").strip()
@@ -649,8 +663,10 @@ def update_fund(fund_id):
 
     errors = []
 
-    if fund_category not in FUND_CATEGORIES:
-        errors.append("fund_category must be Restricted Fund or Unrestricted Fund.")
+    if capital_category not in CAPITAL_CATEGORIES:
+        errors.append(
+            "capital_category must be one of: " + ", ".join(CAPITAL_CATEGORIES) + "."
+        )
     if not client_name:
         errors.append("Name is required.")
     if not purpose:
@@ -667,9 +683,9 @@ def update_fund(fund_id):
     if errors:
         return jsonify({"message": "Validation failed.", "errors": errors}), 400
 
-    entry.category = fund_category
+    entry.category = capital_category
     entry.sub_category = "Capital"
-    entry.fund_category = fund_category
+    entry.fund_category = capital_category
     entry.client_name = client_name
     entry.amount = amount
     entry.purpose = purpose
@@ -686,22 +702,22 @@ def update_fund(fund_id):
         db.session.rollback()
         import traceback
         traceback.print_exc()
-        return jsonify({"message": "Failed to update Funds entry.", "error": str(exc)}), 500
+        return jsonify({"message": "Failed to update Capital entry.", "error": str(exc)}), 500
 
-    return jsonify({"message": "Funds entry updated.", "fund": entry.to_dict()}), 200
+    return jsonify({"message": "Capital entry updated.", "capital": entry.to_dict()}), 200
 
 
-@caredx_bp.route("/funds/<int:fund_id>", methods=["DELETE"])
+@caredx_bp.route("/capital/<int:capital_id>", methods=["DELETE"])
 @role_required("Caredx")
-def delete_fund(fund_id):
+def delete_capital(capital_id):
     entry = FinanceEntry.query.filter_by(
-        id=fund_id,
+        id=capital_id,
         department="Caredx",
-        entry_type="Funds",
+        entry_type="Capital",
     ).first()
 
     if not entry:
-        return jsonify({"message": "Funds entry not found."}), 404
+        return jsonify({"message": "Capital entry not found."}), 404
 
     try:
         db.session.delete(entry)
@@ -710,17 +726,17 @@ def delete_fund(fund_id):
         db.session.rollback()
         import traceback
         traceback.print_exc()
-        return jsonify({"message": "Failed to delete Funds entry.", "error": str(exc)}), 500
+        return jsonify({"message": "Failed to delete Capital entry.", "error": str(exc)}), 500
 
-    return jsonify({"message": "Funds entry deleted."}), 200
+    return jsonify({"message": "Capital entry deleted."}), 200
 
 
-@caredx_bp.route("/funds/summary", methods=["GET"])
+@caredx_bp.route("/capital/summary", methods=["GET"])
 @role_required("Caredx")
-def funds_summary():
+def capital_summary():
     query = FinanceEntry.query.filter_by(
         department="Caredx",
-        entry_type="Funds",
+        entry_type="Capital",
     )
 
     start_date = _parse_date(request.args.get("start_date"))
@@ -733,20 +749,16 @@ def funds_summary():
     entries = query.all()
 
     total = sum(float(e.amount or 0) for e in entries)
-    restricted = sum(
-        float(e.amount or 0) for e in entries
-        if (e.fund_category or "") == "Restricted Fund"
-    )
-    unrestricted = sum(
-        float(e.amount or 0) for e in entries
-        if (e.fund_category or "") == "Unrestricted Fund"
-    )
+    by_category = {}
+    for e in entries:
+        cat = e.fund_category or e.category or "Other Capital"
+        by_category.setdefault(cat, 0.0)
+        by_category[cat] += float(e.amount or 0)
 
     return jsonify({
         "department": "Caredx",
-        "total_funds": total,
-        "restricted_total": restricted,
-        "unrestricted_total": unrestricted,
+        "total_capital": total,
+        "by_category": [{"category": k, "amount": v} for k, v in by_category.items()],
         "entry_count": len(entries),
     }), 200
 
@@ -861,12 +873,12 @@ def lab_entries_summary():
         by_category.setdefault("Referral", {"category": "Referral", "amount": 0})
         by_category["Referral"]["amount"] += total_referral
 
-    funds_query = _apply_date_filters(
-        FinanceEntry.query.filter_by(department="Caredx", entry_type="Funds"),
+    capital_query = _apply_date_filters(
+        FinanceEntry.query.filter_by(department="Caredx", entry_type="Capital"),
         FinanceEntry.entry_date,
     )
-    funds_entries = funds_query.all()
-    total_funds = sum(float(e.amount or 0) for e in funds_entries)
+    capital_entries = capital_query.all()
+    total_capital = sum(float(e.amount or 0) for e in capital_entries)
 
     return jsonify({
         "entry_count": len(lab_entries),
@@ -879,7 +891,7 @@ def lab_entries_summary():
         "total_referral_amount": total_referral,
         "total_sales": total("sales"),
         "total_expenses": total_expenses,
-        "total_funds": total_funds,
+        "total_capital": total_capital,
         "profit": profit,
         "expense_count": len(caredx_expenses) + len(salary_entries),
         "trend": trend,

@@ -30,8 +30,8 @@ import CaredxLabEntryForm from "../../components/CaredxLabEntryForm.jsx";
 import CaredxExpenseTable from "../../components/CaredxExpenseTable.jsx";
 import CaredxExpenseForm from "../../components/CaredxExpenseForm.jsx";
 
-import CaredxFundsTable from "../../components/CaredxFundsTable.jsx";
-import CaredxFundsForm from "../../components/CaredxFundsForm.jsx";
+import CaredxCapitalTable from "../../components/CaredxCapitalTable.jsx";
+import CaredxCapitalForm from "../../components/CaredxCapitalForm.jsx";
 
 import Pagination from "../../components/Pagination.jsx";
 
@@ -89,14 +89,14 @@ export default function CaredxDashboard() {
   const [editingExpense, setEditingExpense] = useState(null);
 
   // -------------------------------------------------------------------------
-  // Funds
+  // Capital (replaces Funds)
   // -------------------------------------------------------------------------
-  const [funds, setFunds] = useState([]);
-  const [fundsLoading, setFundsLoading] = useState(true);
-  const [fundsPage, setFundsPage] = useState(1);
+  const [capitalEntries, setCapitalEntries] = useState([]);
+  const [capitalLoading, setCapitalLoading] = useState(true);
+  const [capitalPage, setCapitalPage] = useState(1);
 
-  const [fundFormOpen, setFundFormOpen] = useState(false);
-  const [editingFund, setEditingFund] = useState(null);
+  const [capitalFormOpen, setCapitalFormOpen] = useState(false);
+  const [editingCapital, setEditingCapital] = useState(null);
 
   // -------------------------------------------------------------------------
   // Shared API params
@@ -169,21 +169,25 @@ export default function CaredxDashboard() {
     }
   }, [startDate, endDate]);
 
-  const fetchFunds = useCallback(async () => {
-    setFundsLoading(true);
+  const fetchCapital = useCallback(async () => {
+    setCapitalLoading(true);
     try {
-      const response = await api.get("/caredx/funds", { params: dateParams });
-      setFunds(Array.isArray(response.data?.funds) ? response.data.funds : []);
-      setFundsPage(1);
-    } catch (error) {
-      console.error("Funds error:", error);
-      toast.error(
-        error.response?.data?.message || "Failed to load funds."
+      const response = await api.get("/caredx/capital", {
+        params: dateParams,
+      });
+      setCapitalEntries(
+        Array.isArray(response.data?.capital) ? response.data.capital : []
       );
-      setFunds([]);
-      setFundsPage(1);
+      setCapitalPage(1);
+    } catch (error) {
+      console.error("Capital error:", error);
+      toast.error(
+        error.response?.data?.message || "Failed to load capital entries."
+      );
+      setCapitalEntries([]);
+      setCapitalPage(1);
     } finally {
-      setFundsLoading(false);
+      setCapitalLoading(false);
     }
   }, [startDate, endDate]);
 
@@ -192,9 +196,9 @@ export default function CaredxDashboard() {
       fetchSummary(),
       fetchLabEntries(),
       fetchExpenses(),
-      fetchFunds(),
+      fetchCapital(),
     ]);
-  }, [fetchSummary, fetchLabEntries, fetchExpenses, fetchFunds]);
+  }, [fetchSummary, fetchLabEntries, fetchExpenses, fetchCapital]);
 
   useEffect(() => {
     refetchAll();
@@ -219,12 +223,15 @@ export default function CaredxDashboard() {
   );
 
   // -------------------------------------------------------------------------
-  // Pagination — Funds
+  // Pagination — Capital
   // -------------------------------------------------------------------------
-  const fundsTotalPages = Math.max(1, Math.ceil(funds.length / PAGE_SIZE));
-  const paginatedFunds = funds.slice(
-    (fundsPage - 1) * PAGE_SIZE,
-    fundsPage * PAGE_SIZE
+  const capitalTotalPages = Math.max(
+    1,
+    Math.ceil(capitalEntries.length / PAGE_SIZE)
+  );
+  const paginatedCapital = capitalEntries.slice(
+    (capitalPage - 1) * PAGE_SIZE,
+    capitalPage * PAGE_SIZE
   );
 
   // -------------------------------------------------------------------------
@@ -368,34 +375,34 @@ export default function CaredxDashboard() {
   };
 
   // -------------------------------------------------------------------------
-  // Fund actions
+  // Capital actions
   // -------------------------------------------------------------------------
-  const openNewFund = () => {
-    setEditingFund(null);
-    setFundFormOpen(true);
+  const openNewCapital = () => {
+    setEditingCapital(null);
+    setCapitalFormOpen(true);
   };
 
-  const openEditFund = (fund) => {
-    setEditingFund(fund);
-    setFundFormOpen(true);
+  const openEditCapital = (entry) => {
+    setEditingCapital(entry);
+    setCapitalFormOpen(true);
   };
 
-  const handleFundDelete = async (fund) => {
+  const handleCapitalDelete = async (entry) => {
     const confirmed = window.confirm(
-      `Delete the funds entry for "${fund.client_name || "—"}" dated ${
-        fund.entry_date
+      `Delete the capital entry for "${entry.client_name || "—"}" dated ${
+        entry.entry_date
       }?`
     );
     if (!confirmed) return;
 
     try {
-      await api.delete(`/caredx/funds/${fund.id}`);
-      toast.success("Funds entry deleted.");
+      await api.delete(`/caredx/capital/${entry.id}`);
+      toast.success("Capital entry deleted.");
       await refetchAll();
     } catch (error) {
-      console.error("Delete funds error:", error);
+      console.error("Delete capital error:", error);
       toast.error(
-        error.response?.data?.message || "Failed to delete funds entry."
+        error.response?.data?.message || "Failed to delete capital entry."
       );
     }
   };
@@ -535,15 +542,15 @@ export default function CaredxDashboard() {
                 </div>
               </div>
 
-              {/* NEW: Funds card */}
+              {/* Capital card (was Funds) */}
               <div className="card stat-card">
                 <div className="stat-icon stat-icon--funds">
                   <Landmark size={22} />
                 </div>
                 <div>
-                  <p className="stat-label">Total Funds</p>
+                  <p className="stat-label">Total Capital</p>
                   <p className="stat-value">
-                    {formatCurrency(summary.total_funds)}
+                    {formatCurrency(summary.total_capital)}
                   </p>
                 </div>
               </div>
@@ -675,32 +682,32 @@ export default function CaredxDashboard() {
           </>
         )}
 
-        {/* ============ FUNDS ============ */}
+        {/* ============ CAPITAL (was Funds) ============ */}
         <div className="section-header">
-          <p className="section-title">Funds</p>
+          <p className="section-title">Capital</p>
           <button
             type="button"
-            onClick={openNewFund}
+            onClick={openNewCapital}
             className="btn btn-primary"
           >
-            <Plus size={16} /> Add Funds
+            <Plus size={16} /> Add Capital
           </button>
         </div>
 
-        {fundsLoading ? (
-          <div className="card empty-state">Loading funds...</div>
+        {capitalLoading ? (
+          <div className="card empty-state">Loading capital entries...</div>
         ) : (
           <>
-            <CaredxFundsTable
-              funds={paginatedFunds}
-              onEdit={openEditFund}
-              onDelete={handleFundDelete}
+            <CaredxCapitalTable
+              entries={paginatedCapital}
+              onEdit={openEditCapital}
+              onDelete={handleCapitalDelete}
             />
             <Pagination
-              currentPage={fundsPage}
-              totalPages={fundsTotalPages}
-              onPageChange={setFundsPage}
-              totalItems={funds.length}
+              currentPage={capitalPage}
+              totalPages={capitalTotalPages}
+              onPageChange={setCapitalPage}
+              totalItems={capitalEntries.length}
               pageSize={PAGE_SIZE}
             />
           </>
@@ -722,11 +729,14 @@ export default function CaredxDashboard() {
         editingExpense={editingExpense}
       />
 
-      <CaredxFundsForm
-        open={fundFormOpen}
-        onClose={() => setFundFormOpen(false)}
+      <CaredxCapitalForm
+        open={capitalFormOpen}
+        onClose={() => {
+          setCapitalFormOpen(false);
+          setEditingCapital(null);
+        }}
         onSaved={refetchAll}
-        editingFund={editingFund}
+        editingCapital={editingCapital}
       />
     </div>
   );

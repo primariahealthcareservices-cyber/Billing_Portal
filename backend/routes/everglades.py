@@ -14,8 +14,14 @@ from file_utils import save_invoice_file, delete_invoice_file
 DEPARTMENT = "Everglades"
 CONFIG = DEPARTMENT_CONFIG[DEPARTMENT]
 
-# ✅ Fund categories
-FUND_CATEGORIES = ("Restricted Fund", "Unrestricted Fund")
+# ✅ Capital categories
+CAPITAL_CATEGORIES = (
+    "Equity Infusion",
+    "Partner Contribution",
+    "Asset Capitalization",
+    "Reserve Fund Transfer",
+    "Other Capital",
+)
 
 everglades_bp = Blueprint("everglades", __name__, url_prefix="/api/everglades")
 
@@ -115,7 +121,7 @@ def options():
     )
     return jsonify({
         "department": DEPARTMENT,
-        "entry_types": ["Income", "Expenses", "Funds", "Ledger"],
+        "entry_types": ["Income", "Expenses", "Capital", "Ledger"],
         "categories": CONFIG["categories"],
         "revenue_types": CONFIG["revenue_types"],
         "show_generated_by": CONFIG["show_generated_by"],
@@ -129,6 +135,7 @@ def options():
         "show_tax_invoice_number": CONFIG["show_tax_invoice_number"],
         "is_salary_category": salary_category,
         "is_ledger_category": "Ledger",
+        "capital_categories": list(CAPITAL_CATEGORIES),
     }), 200
 
 
@@ -155,18 +162,20 @@ def create_entry():
 
     entry_type = data.get("entry_type")
 
-    # ====================== FUNDS ENTRY ======================
-    if entry_type == "Funds":
+    # ====================== CAPITAL ENTRY ======================
+    if entry_type == "Capital":
         errors = []
-        fund_category = (data.get("fund_category") or "").strip()
+        capital_category = (data.get("capital_category") or data.get("fund_category") or "").strip()
         client_name = (data.get("client_name") or "").strip()
         purpose = (data.get("purpose") or "").strip()
         remarks_val = (data.get("remarks") or "").strip()
         entry_date_val = _parse_date(data.get("entry_date"), default=date.today())
         amount_raw = data.get("amount")
 
-        if fund_category not in FUND_CATEGORIES:
-            errors.append("fund_category must be Restricted Fund or Unrestricted Fund.")
+        if capital_category not in CAPITAL_CATEGORIES:
+            errors.append(
+                "capital_category must be one of: " + ", ".join(CAPITAL_CATEGORIES) + "."
+            )
         if not client_name:
             errors.append("Name is required.")
         if not purpose:
@@ -183,10 +192,10 @@ def create_entry():
 
         entry = FinanceEntry(
             department=DEPARTMENT,
-            entry_type="Funds",
-            category=fund_category,
+            entry_type="Capital",
+            category=capital_category,
             sub_category="Capital",
-            fund_category=fund_category,
+            fund_category=capital_category,
             client_name=client_name,
             amount=amount_val,
             purpose=purpose,
@@ -201,8 +210,8 @@ def create_entry():
             db.session.rollback()
             import traceback
             traceback.print_exc()
-            return jsonify({"message": "Failed to create Funds entry.", "error": str(exc)}), 500
-        return jsonify({"message": "Funds entry created.", "entry": entry.to_dict()}), 201
+            return jsonify({"message": "Failed to create Capital entry.", "error": str(exc)}), 500
+        return jsonify({"message": "Capital entry created.", "entry": entry.to_dict()}), 201
 
     # ---- LEDGER HANDLING ----
     category = data.get("category")
@@ -273,7 +282,7 @@ def create_entry():
 
     errors = []
     if entry_type not in ENTRY_TYPES:
-        errors.append("entry_type must be Income or Expenses.")
+        errors.append("entry_type must be Income, Expenses, or Capital.")
     allowed_categories = CONFIG["categories"].get(entry_type, [])
     if category not in allowed_categories:
         errors.append(f"category must be one of: {', '.join(allowed_categories)}.")
@@ -470,23 +479,29 @@ def list_entries():
 def update_entry(entry_id):
     entry = FinanceEntry.query.filter_by(id=entry_id, department=DEPARTMENT).first()
 
-    # ====================== FUNDS UPDATE ======================
-    if entry and entry.entry_type == "Funds":
-        # ✅ Accept both JSON and multipart/form-data
+    # ====================== CAPITAL UPDATE ======================
+    if entry and entry.entry_type == "Capital":
         if request.is_json:
             data = request.get_json(silent=True) or {}
         else:
             data = request.form
 
         errors = []
-        fund_category = (data.get("fund_category") or entry.fund_category or "").strip()
+        capital_category = (
+            data.get("capital_category")
+            or data.get("fund_category")
+            or entry.fund_category
+            or ""
+        ).strip()
         client_name = (data.get("client_name") or "").strip()
         purpose = (data.get("purpose") or "").strip()
         remarks_val = (data.get("remarks") or "").strip()
         amount_raw = data.get("amount")
 
-        if fund_category not in FUND_CATEGORIES:
-            errors.append("fund_category must be Restricted Fund or Unrestricted Fund.")
+        if capital_category not in CAPITAL_CATEGORIES:
+            errors.append(
+                "capital_category must be one of: " + ", ".join(CAPITAL_CATEGORIES) + "."
+            )
         if not client_name:
             errors.append("Name is required.")
         if not purpose:
@@ -501,9 +516,9 @@ def update_entry(entry_id):
         if errors:
             return jsonify({"message": "Validation failed.", "errors": errors}), 400
 
-        entry.category = fund_category
+        entry.category = capital_category
         entry.sub_category = "Capital"
-        entry.fund_category = fund_category
+        entry.fund_category = capital_category
         entry.client_name = client_name
         entry.amount = amount_val
         entry.purpose = purpose
@@ -520,8 +535,8 @@ def update_entry(entry_id):
             db.session.rollback()
             import traceback
             traceback.print_exc()
-            return jsonify({"message": "Failed to update Funds entry.", "error": str(exc)}), 500
-        return jsonify({"message": "Funds entry updated.", "entry": entry.to_dict()}), 200
+            return jsonify({"message": "Failed to update Capital entry.", "error": str(exc)}), 500
+        return jsonify({"message": "Capital entry updated.", "entry": entry.to_dict()}), 200
 
     # ---- Ledger / not-found fallback ----
     if not entry:
@@ -568,11 +583,10 @@ def update_entry(entry_id):
             return jsonify({"message": "Entry not found."}), 404
 
     # ---- Regular finance entry update ----
-    # ✅ THE FIX: accept BOTH JSON and multipart/form-data.
     if request.is_json:
         data = request.get_json(silent=True) or {}
     else:
-        data = request.form  # ImmutableMultiDict works with .get() and "in"
+        data = request.form
 
     errors = []
 
@@ -667,7 +681,6 @@ def update_entry(entry_id):
         if require_items:
             items_changed = "items" in data
             if items_changed:
-                # ✅ Handle items that arrive as a JSON string (FormData) or list (JSON)
                 items_data = _parse_items_field(data.get("items"))
                 if items_data is None:
                     items_data = []
@@ -783,7 +796,7 @@ def finance_summary():
 
     total_income = sum(float(e.amount) for e in finance_entries if e.entry_type == "Income")
     total_expenses = sum(float(e.amount) for e in finance_entries if e.entry_type == "Expenses")
-    total_funds = sum(float(e.amount) for e in finance_entries if e.entry_type == "Funds")
+    total_capital = sum(float(e.amount) for e in finance_entries if e.entry_type == "Capital")
 
     ledger_query = EvergladesLedger.query
     if start_date:
@@ -807,13 +820,13 @@ def finance_summary():
     by_date = {}
     for item in all_items:
         key = item.entry_date.isoformat()
-        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "funds": 0})
+        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "capital": 0})
         if item.entry_type == "Income":
             by_date[key]["income"] += float(item.amount)
         elif item.entry_type == "Expenses":
             by_date[key]["expenses"] += float(item.amount)
-        elif item.entry_type == "Funds":
-            by_date[key]["funds"] += float(item.amount)
+        elif item.entry_type == "Capital":
+            by_date[key]["capital"] += float(item.amount)
     trend = sorted(by_date.values(), key=lambda x: x["date"])
 
     by_category = {}
@@ -826,7 +839,7 @@ def finance_summary():
         "department": DEPARTMENT,
         "total_income": total_income,
         "total_expenses": total_expenses,
-        "total_funds": total_funds,
+        "total_capital": total_capital,
         "profit": total_income - total_expenses,
         "entry_count": len(all_items),
         "trend": trend,

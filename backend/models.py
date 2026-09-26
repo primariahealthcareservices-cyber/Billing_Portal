@@ -13,13 +13,14 @@ ROLES = [
 ]
 
 # Master list — used by superadmin/validation code that doesn't care about dept-level filtering
-ENTRY_TYPES = ["Income", "Expenses", "Capital", "Funds"]
+# Master list — used by superadmin/validation code that doesn't care about dept-level filtering
+ENTRY_TYPES = ["Income", "Expenses", "Capital"]
 
 # ---------- DEPARTMENT_CONFIG ----------
 DEPARTMENT_CONFIG = {
     # =================== IT ===================
     "IT": {
-        "entry_types": ["Income", "Expenses", "Funds"],
+        "entry_types": ["Income", "Expenses", "Capital"],
         "categories": {
             "Income": ["Web Services", "Portal Services", "Corpus Fund", "Others"],
             "Expenses": [
@@ -38,7 +39,13 @@ DEPARTMENT_CONFIG = {
                 "Corpus Fund",
                 "Other"
             ],
-            "Funds": ["Restricted Fund", "Unrestricted Fund"],
+            "Capital": [
+                "Equity Infusion",
+                "Partner Contribution",
+                "Asset Capitalization",
+                "Reserve Fund Transfer",
+                "Other Capital"
+            ],
         },
         "revenue_types": ["Subscription", "One-Time", "Renewal", "Maintenance", "Other"],
         "show_generated_by": True,
@@ -55,7 +62,7 @@ DEPARTMENT_CONFIG = {
 
     # =================== IT Sales ===================
     "IT Sales": {
-        "entry_types": ["Income", "Expenses", "Funds"],
+        "entry_types": ["Income", "Expenses", "Capital"],
         "categories": {
             "Income": [
                 "Professional Services & Implementation",
@@ -90,7 +97,13 @@ DEPARTMENT_CONFIG = {
                 "Corpus Fund",
                 "Other"
             ],
-            "Funds": ["Restricted Fund", "Unrestricted Fund"],
+            "Capital": [
+                "Equity Infusion",
+                "Partner Contribution",
+                "Asset Capitalization",
+                "Reserve Fund Transfer",
+                "Other Capital"
+            ],
         },
         "revenue_types": ["Direct", "Recurring", "Project-based"],
         "show_generated_by": True,
@@ -107,7 +120,7 @@ DEPARTMENT_CONFIG = {
 
     # =================== Dental ===================
     "Dental": {
-        "entry_types": ["Income", "Expenses", "Funds"],
+        "entry_types": ["Income", "Expenses", "Capital"],
         "categories": {
             "Income": [
                 "Dental Operations",
@@ -138,7 +151,13 @@ DEPARTMENT_CONFIG = {
                 "Corpus Fund",
                 "Other",
             ],
-            "Funds": ["Restricted Fund", "Unrestricted Fund"],
+            "Capital": [
+                "Equity Infusion",
+                "Partner Contribution",
+                "Asset Capitalization",
+                "Reserve Fund Transfer",
+                "Other Capital"
+            ],
         },
         "revenue_types": [],
         "show_generated_by": True,
@@ -157,7 +176,7 @@ DEPARTMENT_CONFIG = {
 
     # =================== Caredx ===================
     "Caredx": {
-        "entry_types": ["Income", "Expenses", "Funds"],
+        "entry_types": ["Income", "Expenses", "Capital"],
         "categories": {
             "Income": ["Lab", "Camp", "Walkin/Person", "Referral", "Corpus Fund"],
             "Expenses": [
@@ -180,7 +199,13 @@ DEPARTMENT_CONFIG = {
                 "Billing Administration",
                 "Corpus Fund",
             ],
-            "Funds": ["Restricted Fund", "Unrestricted Fund"],
+            "Capital": [
+                "Equity Infusion",
+                "Partner Contribution",
+                "Asset Capitalization",
+                "Reserve Fund Transfer",
+                "Other Capital"
+            ],
         },
         "revenue_types": ["Direct", "Recurring"],
         "show_generated_by": False,
@@ -197,7 +222,7 @@ DEPARTMENT_CONFIG = {
 
     # =================== PCM ===================
     "PCM": {
-        "entry_types": ["Income", "Expenses", "Funds"],
+        "entry_types": ["Income", "Expenses", "Capital"],
         "categories": {
             "Income": [
                 "Field Labour and Nursing Care",
@@ -221,7 +246,13 @@ DEPARTMENT_CONFIG = {
                 "Corpus Fund",
                 "Other"
             ],
-            "Funds": ["Restricted Fund", "Unrestricted Fund"],
+            "Capital": [
+                "Equity Infusion",
+                "Partner Contribution",
+                "Asset Capitalization",
+                "Reserve Fund Transfer",
+                "Other Capital"
+            ],
         },
         "revenue_types": [],
         "show_generated_by": False,
@@ -238,7 +269,7 @@ DEPARTMENT_CONFIG = {
 
     # =================== MedTech ===================
     "MedTech": {
-        "entry_types": ["Income", "Expenses", "Funds"],
+        "entry_types": ["Income", "Expenses", "Capital"],
         "categories": {
             "Income": ["B2B Revenue", "B2C Revenue", "Business Services Revenue", "Goodwill", "Corpus Fund"],
             "Expenses": [
@@ -246,7 +277,7 @@ DEPARTMENT_CONFIG = {
                 "Travel & Entertainment (T&E)",
                 "Marketing",
                 "Supplies & Equipments",
-                "Wholesales",                 # ✅ NEW
+                "Wholesales",
                 "Facilities & Overhead",
                 "General Operations",
                 "Innovation",
@@ -260,7 +291,13 @@ DEPARTMENT_CONFIG = {
                 "Corpus Fund",
                 "Other"
             ],
-            "Funds": ["Restricted Fund", "Unrestricted Fund"],
+            "Capital": [
+                "Equity Infusion",
+                "Partner Contribution",
+                "Asset Capitalization",
+                "Reserve Fund Transfer",
+                "Other Capital"
+            ],
         },
         "revenue_types": ["Direct", "Recurring"],
         "show_generated_by": True,
@@ -277,7 +314,7 @@ DEPARTMENT_CONFIG = {
 
     # =================== Everglades (Pharmacy) ===================
     "Everglades": {
-        "entry_types": ["Income", "Expenses", "Funds"],
+        "entry_types": ["Income", "Expenses", "Capital"],
         "categories": {
             "Income": [
                 "Prescription Sales",
@@ -315,7 +352,13 @@ DEPARTMENT_CONFIG = {
                 "Corpus Fund",
                 "Other",
             ],
-            "Funds": ["Restricted Fund", "Unrestricted Fund"],
+            "Capital": [
+                "Equity Infusion",
+                "Partner Contribution",
+                "Asset Capitalization",
+                "Reserve Fund Transfer",
+                "Other Capital"
+            ],
         },
         "revenue_types": ["Direct", "Recurring", "Insurance"],
         "show_generated_by": True,
@@ -330,7 +373,7 @@ DEPARTMENT_CONFIG = {
         "show_tax_invoice_number": True,
     },
 
-    # =================== Corporate (ONLY dept with Capital) ===================
+    # =================== Corporate ===================
     "Corporate": {
         "entry_types": ["Income", "Expenses", "Capital"],
         "categories": {
@@ -384,7 +427,7 @@ DEPARTMENT_CONFIG = {
 
     # =================== Office Administration ===================
     "Adminstrationfunctionalunit": {
-        "entry_types": ["Income", "Expenses"],
+        "entry_types": ["Income", "Expenses", "Capital"],
         "categories": {
             "Income": ["Other"],
             "Expenses": [
@@ -404,6 +447,13 @@ DEPARTMENT_CONFIG = {
                 "Corpus Fund",
                 "Other"
             ],
+            "Capital": [
+                "Equity Infusion",
+                "Partner Contribution",
+                "Asset Capitalization",
+                "Reserve Fund Transfer",
+                "Other Capital"
+            ],
         },
         "revenue_types": [],
         "show_generated_by": True,
@@ -421,7 +471,7 @@ DEPARTMENT_CONFIG = {
 
     # =================== Research & Development ===================
     "ResearchDevelopment": {
-        "entry_types": ["Income", "Expenses"],
+        "entry_types": ["Income", "Expenses", "Capital"],
         "categories": {
             "Income": ["Grants", "Funding", "Other"],
             "Expenses": [
@@ -431,6 +481,13 @@ DEPARTMENT_CONFIG = {
                 "Testing",
                 "Corpus Fund",
                 "Other"
+            ],
+            "Capital": [
+                "Equity Infusion",
+                "Partner Contribution",
+                "Asset Capitalization",
+                "Reserve Fund Transfer",
+                "Other Capital"
             ],
         },
         "revenue_types": [],
@@ -448,7 +505,6 @@ DEPARTMENT_CONFIG = {
 }
 
 VALID_DEPARTMENTS = list(DEPARTMENT_CONFIG.keys())
-
 
 # ---------- User model ----------
 class User(db.Model):

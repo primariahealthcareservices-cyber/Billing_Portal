@@ -64,7 +64,7 @@ def _parse_quarter_year(quarter, year):
 
 
 # ----------------------------------------------------------------------
-# User management (unchanged)
+# User management
 # ----------------------------------------------------------------------
 @superadmin_bp.route("/roles", methods=["GET"])
 @role_required("SuperAdmin")
@@ -168,11 +168,13 @@ def overview():
         if end_date: query = query.filter(FinanceEntry.entry_date <= end_date)
         return float(query.scalar())
 
-    def sum_capital(start_date, end_date):
+    def sum_capital(start_date, end_date, department=None):
+        """Sum Capital entries across all departments (or a specific one)."""
         query = db.session.query(func.coalesce(func.sum(FinanceEntry.amount), 0)).filter(
             FinanceEntry.entry_type == "Capital",
-            FinanceEntry.department == "Corporate",
         )
+        if department is not None:
+            query = query.filter(FinanceEntry.department == department)
         if start_date: query = query.filter(FinanceEntry.entry_date >= start_date)
         if end_date: query = query.filter(FinanceEntry.entry_date <= end_date)
         return float(query.scalar())
@@ -215,7 +217,9 @@ def overview():
 
     by_department = []
     for dept in VALID_DEPARTMENTS:
-        if dept == "SalesEnterprise": continue
+        if dept == "SalesEnterprise":
+            continue
+
         if dept == "Caredx":
             income = caredx_income(start_date, end_date)
             expenses = caredx_expenses(start_date, end_date)
@@ -232,15 +236,21 @@ def overview():
         else:
             income = sum_for(dept, "Income", start_date, end_date)
             expenses = sum_for(dept, "Expenses", start_date, end_date)
+
+        capital = sum_capital(start_date, end_date, department=dept)
+
         by_department.append({
-            "department": dept, "income": income,
-            "expenses": expenses, "profit": income - expenses,
+            "department": dept,
+            "income": income,
+            "expenses": expenses,
+            "capital": capital,
+            "profit": income - expenses,
         })
 
     total_income = sum(d["income"] for d in by_department)
     total_expenses = sum(d["expenses"] for d in by_department)
-    total_capital = sum_capital(start_date, end_date)
-    total_funds = sum_for(None, "Funds", start_date, end_date)
+    total_capital = sum(d["capital"] for d in by_department)
+    total_funds = sum_for(None, "Funds", start_date, end_date)  # legacy; 0 going forward
 
     return jsonify({
         "total_members": total_members,
@@ -255,7 +265,7 @@ def overview():
 
 
 # ----------------------------------------------------------------------
-# MedTech helper — ✅ FIX: also pulls Corporate salary rows
+# MedTech helper — includes Corporate salary rows
 # ----------------------------------------------------------------------
 def _get_medtech_entries_with_ledger():
     start_date = _parse_date(request.args.get("start_date"))
@@ -273,13 +283,11 @@ def _get_medtech_entries_with_ledger():
     )
     wants_salary = (category == "") or (category == salary_category)
 
-    # Base query: MedTech finance entries (excluding Ledger which lives in a separate table)
     base_query = FinanceEntry.query.filter(
         FinanceEntry.department == "MedTech",
         FinanceEntry.category != "Ledger",
     )
 
-    # ✅ Exclude salary rows from the base query when we'll pull them from Corporate instead
     if wants_salary:
         base_query = base_query.filter(
             or_(
@@ -310,7 +318,6 @@ def _get_medtech_entries_with_ledger():
         FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()
     ).all()
 
-    # ✅ Corporate salary rows for MedTech employees
     salary_entries = []
     if wants_salary:
         salary_query = FinanceEntry.query.filter(
@@ -333,11 +340,9 @@ def _get_medtech_entries_with_ledger():
             FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()
         ).all()
 
-    # Merge finance + salary rows into one dict list
     merged_finance = list(finance_entries) + list(salary_entries)
     merged_finance.sort(key=lambda e: (e.entry_date, e.id), reverse=True)
 
-    # Ledger rows (separate table) — only when no specific non-Ledger category is chosen
     include_ledger = (category == "") or (category == "Ledger")
     ledger_entries = []
     if include_ledger:
@@ -443,16 +448,19 @@ def _get_medtech_summary_with_ledger():
 
     total_income = sum(i["amount"] for i in all_items if i["entry_type"] == "Income")
     total_expenses = sum(i["amount"] for i in all_items if i["entry_type"] == "Expenses")
+    total_capital = sum(i["amount"] for i in all_items if i["entry_type"] == "Capital")
     total_funds = sum(i["amount"] for i in all_items if i["entry_type"] == "Funds")
 
     by_date = {}
     for item in all_items:
         key = item["entry_date"].isoformat()
-        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "funds": 0})
+        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "capital": 0, "funds": 0})
         if item["entry_type"] == "Income":
             by_date[key]["income"] += item["amount"]
         elif item["entry_type"] == "Expenses":
             by_date[key]["expenses"] += item["amount"]
+        elif item["entry_type"] == "Capital":
+            by_date[key]["capital"] += item["amount"]
         elif item["entry_type"] == "Funds":
             by_date[key]["funds"] += item["amount"]
     trend = sorted(by_date.values(), key=lambda x: x["date"])
@@ -464,16 +472,20 @@ def _get_medtech_summary_with_ledger():
         by_category[cat]["amount"] += item["amount"]
 
     return jsonify({
-        "department": "MedTech", "total_income": total_income,
-        "total_expenses": total_expenses, "total_funds": total_funds,
+        "department": "MedTech",
+        "total_income": total_income,
+        "total_expenses": total_expenses,
+        "total_capital": total_capital,
+        "total_funds": total_funds,
         "profit": total_income - total_expenses,
-        "entry_count": len(all_items), "trend": trend,
+        "entry_count": len(all_items),
+        "trend": trend,
         "category_breakdown": list(by_category.values()),
     }), 200
 
 
 # ----------------------------------------------------------------------
-# Everglades helper — ✅ same Corporate salary union
+# Everglades helper — same Corporate salary union
 # ----------------------------------------------------------------------
 def _get_everglades_entries_with_ledger():
     start_date = _parse_date(request.args.get("start_date"))
@@ -653,16 +665,19 @@ def _get_everglades_summary_with_ledger():
 
     total_income = sum(i["amount"] for i in all_items if i["entry_type"] == "Income")
     total_expenses = sum(i["amount"] for i in all_items if i["entry_type"] == "Expenses")
+    total_capital = sum(i["amount"] for i in all_items if i["entry_type"] == "Capital")
     total_funds = sum(i["amount"] for i in all_items if i["entry_type"] == "Funds")
 
     by_date = {}
     for item in all_items:
         key = item["entry_date"].isoformat()
-        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "funds": 0})
+        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "capital": 0, "funds": 0})
         if item["entry_type"] == "Income":
             by_date[key]["income"] += item["amount"]
         elif item["entry_type"] == "Expenses":
             by_date[key]["expenses"] += item["amount"]
+        elif item["entry_type"] == "Capital":
+            by_date[key]["capital"] += item["amount"]
         elif item["entry_type"] == "Funds":
             by_date[key]["funds"] += item["amount"]
     trend = sorted(by_date.values(), key=lambda x: x["date"])
@@ -674,10 +689,14 @@ def _get_everglades_summary_with_ledger():
         by_category[cat]["amount"] += item["amount"]
 
     return jsonify({
-        "department": "Everglades", "total_income": total_income,
-        "total_expenses": total_expenses, "total_funds": total_funds,
+        "department": "Everglades",
+        "total_income": total_income,
+        "total_expenses": total_expenses,
+        "total_capital": total_capital,
+        "total_funds": total_funds,
         "profit": total_income - total_expenses,
-        "entry_count": len(all_items), "trend": trend,
+        "entry_count": len(all_items),
+        "trend": trend,
         "category_breakdown": list(by_category.values()),
     }), 200
 
@@ -1007,19 +1026,21 @@ def dept_summary(dept):
     if category: query = query.filter(FinanceEntry.category == category)
 
     entries = query.all()
-
     total_income = sum(float(e.amount) for e in entries if e.entry_type == "Income")
     total_expenses = sum(float(e.amount) for e in entries if e.entry_type == "Expenses")
+    total_capital = sum(float(e.amount) for e in entries if e.entry_type == "Capital")
     total_funds = sum(float(e.amount) for e in entries if e.entry_type == "Funds")
 
     by_date = {}
     for e in entries:
         key = e.entry_date.isoformat()
-        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "funds": 0})
+        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "capital": 0, "funds": 0})
         if e.entry_type == "Income":
             by_date[key]["income"] += float(e.amount)
         elif e.entry_type == "Expenses":
             by_date[key]["expenses"] += float(e.amount)
+        elif e.entry_type == "Capital":
+            by_date[key]["capital"] += float(e.amount)
         elif e.entry_type == "Funds":
             by_date[key]["funds"] += float(e.amount)
     trend = sorted(by_date.values(), key=lambda x: x["date"])
@@ -1030,10 +1051,14 @@ def dept_summary(dept):
         by_category[e.category]["amount"] += float(e.amount)
 
     return jsonify({
-        "department": dept, "total_income": total_income,
-        "total_expenses": total_expenses, "total_funds": total_funds,
+        "department": dept,
+        "total_income": total_income,
+        "total_expenses": total_expenses,
+        "total_capital": total_capital,
+        "total_funds": total_funds,
         "profit": total_income - total_expenses,
-        "entry_count": len(entries), "trend": trend,
+        "entry_count": len(entries),
+        "trend": trend,
         "category_breakdown": list(by_category.values()),
     }), 200
 
