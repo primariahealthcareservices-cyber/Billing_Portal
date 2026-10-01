@@ -15,6 +15,7 @@ import StatCards from "../../components/StatCards.jsx";
 import FinanceCharts from "../../components/FinanceCharts.jsx";
 import FinanceTable from "../../components/FinanceTable.jsx";
 import EntryViewModal from "../../components/EntryViewModal.jsx";
+import CopperBookPage from "../../components/CopperBookPage.jsx";   // ✅ NEW
 import api from "../../api/axios.js";
 
 const DEPARTMENTS_CONFIG = [
@@ -123,7 +124,6 @@ const average = (arr) => {
   return sum / filtered.length;
 };
 
-// Recognizes capital as a first-class transaction kind; Funds is intentionally dropped.
 const getEntryKind = (entry) => {
   if (!entry) return null;
   const raw = (
@@ -149,25 +149,18 @@ const matchesDataView = (entry, view) => {
   return kind === view;
 };
 
-// Hide "Other" / "Others" placeholder categories and Corpus Fund from Income lists
 const excludeOtherCategory = (c) => {
   const lower = (c || "").trim().toLowerCase();
   return lower !== "others" && lower !== "other";
 };
 
-// ⭐ Corpus Fund must NEVER show as an Income category
 const excludeCorpusFund = (c) => {
   const lower = (c || "").trim().toLowerCase();
   return lower !== "corpus fund";
 };
 
-// Filters applied to an Income category list
 const filterIncomeCategory = (c) => excludeOtherCategory(c) && excludeCorpusFund(c);
-
-// Filters applied to an Expense category list
 const filterExpenseCategory = (c) => excludeOtherCategory(c);
-
-// Filters applied to a Capital category list (keep all, just drop placeholders)
 const filterCapitalCategory = (c) => excludeOtherCategory(c);
 
 export default function SuperAdminDashboard() {
@@ -177,7 +170,6 @@ export default function SuperAdminDashboard() {
   const [activeDept, setActiveDept] = useState("overview");
   const [activeExtra, setActiveExtra] = useState(null);
 
-  // ---- Applied (committed) filters ----
   const [startDate, setStartDate] = useState(firstOfMonth());
   const [endDate, setEndDate] = useState(todayStr());
   const [searchTerm, setSearchTerm] = useState("");
@@ -185,12 +177,10 @@ export default function SuperAdminDashboard() {
   const [quarterFilter, setQuarterFilter] = useState("");
   const [yearFilter, setYearFilter] = useState(String(new Date().getFullYear()));
 
-  // dataView = "all" | "income" | "expenses" | "capital"
   const [dataView, setDataView] = useState("all");
 
   const [selectedCategory, setSelectedCategory] = useState(null);
 
-  // ---- Draft filters (Main Filter Panel) ----
   const [draftTransactionType, setDraftTransactionType] = useState("all");
   const [draftQuarter, setDraftQuarter] = useState("");
   const [draftYear, setDraftYear] = useState(String(new Date().getFullYear()));
@@ -225,7 +215,9 @@ export default function SuperAdminDashboard() {
 
   const [viewEntry, setViewEntry] = useState(null);
 
-  // ---------- Effect: SalesEnterprise quarter → dates ----------
+  // ✅ NEW — controls CopperBook view
+  const [showCopperBook, setShowCopperBook] = useState(false);
+
   useEffect(() => {
     if (activeDept !== "SalesEnterprise") return;
     if (!selectedYear) return;
@@ -249,7 +241,6 @@ export default function SuperAdminDashboard() {
     }
   }, [selectedQuarter, selectedYear, activeDept]);
 
-  // ---------- Fetch KPIs for SalesEnterprise ----------
   useEffect(() => {
     if (activeDept !== "SalesEnterprise") return;
     if (selectedSubDept === "All" || !selectedYear) {
@@ -312,7 +303,6 @@ export default function SuperAdminDashboard() {
     fetchKpis();
   }, [activeDept, selectedSubDept, selectedYear, selectedQuarter]);
 
-  // ---------- Fetch department summary when salesSelectedDept changes ----------
   useEffect(() => {
     if (activeDept !== "SalesEnterprise") return;
     if (!salesSelectedDept) {
@@ -322,7 +312,6 @@ export default function SuperAdminDashboard() {
     fetchDeptSummaryOnly(salesSelectedDept, startDate, endDate);
   }, [activeDept, salesSelectedDept, startDate, endDate]);
 
-  // ---------- API calls ----------
   const fetchOptions = useCallback(async (dept) => {
     if (dept === "overview" || dept === "SalesEnterprise") {
       setDepartmentOptions(null);
@@ -418,7 +407,6 @@ export default function SuperAdminDashboard() {
     fetchOptions(activeDept);
   }, [activeDept, fetchOptions]);
 
-  // Data-fetch trigger
   useEffect(() => {
     if (activeDept === "overview") {
       fetchOverview(startDate, endDate);
@@ -439,17 +427,13 @@ export default function SuperAdminDashboard() {
     searchTerm,
   ]);
 
-  // ---------- Handlers: Department / Reset / Apply ----------
   const handleSelectDept = (value) => {
     const config = DEPARTMENTS_CONFIG.find((d) => d.value === value);
     if (!config) return;
 
-    // ✏️ Only the department identity changes.
     setActiveDept(value);
     setActiveExtra(config.extra || null);
 
-    // ♻️ Reset values that are inherently department-specific, so stale
-    //    data doesn't leak into the newly selected department.
     setDraftSearchTerm("");
     setSearchTerm("");
     setSelectedCategory(null);
@@ -457,21 +441,14 @@ export default function SuperAdminDashboard() {
     setSalesSelectedDept(null);
     setSelectedSubDept("All");
 
-    // ♻️ Clear cached rows/summary so the panel shows a clean loading state.
     setDeptEntries([]);
     setCaredxLabEntries([]);
     setCaredxExpenses([]);
     setDeptSummary(null);
 
-    // ♻️ Reset pagination.
     setPage(1);
     setTotalEntries(0);
     setTotalPages(0);
-
-    // 🔒 Everything else — Transaction Type, Quarter, Year, Start Date,
-    //    End Date, applied dataView, applied quarterFilter/yearFilter,
-    //    applied start/end dates — is intentionally LEFT UNTOUCHED so the
-    //    user's selected period carries over to the new department.
   };
 
   const handleResetFilters = () => {
@@ -518,7 +495,6 @@ export default function SuperAdminDashboard() {
     setPage(1);
   };
 
-  // ---------- Draft-only handlers ----------
   const handleDraftQuarterChange = (q) => {
     setDraftQuarter(q);
     const range = computeDateRangeFromQuarter(q, draftYear);
@@ -620,17 +596,14 @@ export default function SuperAdminDashboard() {
     }
   };
 
-  // ---------- Derived data ----------
   const currentDeptLabel = DEPARTMENTS_CONFIG.find(d => d.value === activeDept)?.label || activeDept;
 
-  // ⭐ Category Panel — dynamic per applied Transaction Type.
   const categoryPanelOptions = React.useMemo(() => {
     if (activeDept === "overview" || activeDept === "SalesEnterprise") return [];
     if (!departmentOptions?.categories) return [];
 
     const cats = departmentOptions.categories;
 
-    // CareDx: expense records only (lab revenue has no free-form categories)
     if (activeDept === "Caredx") {
       if (dataView === "income") return [];
       if (dataView === "capital") {
@@ -643,7 +616,6 @@ export default function SuperAdminDashboard() {
     if (dataView === "expenses") return (cats.Expenses || []).filter(filterExpenseCategory);
     if (dataView === "capital")  return (cats.Capital  || []).filter(filterCapitalCategory);
 
-    // "all"
     const allCats = new Set();
     (cats.Income   || []).filter(filterIncomeCategory).forEach(c => allCats.add(c));
     (cats.Expenses || []).filter(filterExpenseCategory).forEach(c => allCats.add(c));
@@ -770,9 +742,36 @@ export default function SuperAdminDashboard() {
     );
   };
 
+  // ✅ NEW — early return for CopperBook view
+  if (showCopperBook) {
+    return <CopperBookPage onBack={() => setShowCopperBook(false)} />;
+  }
+
   return (
     <div className="page">
-      <Navbar title="CEO Governance Dashboard" roleColor="#7c3aed" />
+      <Navbar
+  title="CEO Governance Dashboard"
+  roleColor="#7c3aed"
+  onCopperBook={() => setShowCopperBook(true)}
+/>
+
+      {/* ✅ NEW — Floating CopperBook button */}
+   { /*  <button
+        onClick={() => setShowCopperBook(true)}
+        className="btn btn-primary"
+        style={{
+          position: "fixed",
+          bottom: 28,
+          right: 28,
+          zIndex: 900,
+          boxShadow: "0 8px 20px rgba(124, 58, 237, 0.35)",
+          padding: "12px 20px",
+          fontSize: 15,
+          fontWeight: 600,
+        }}
+      >
+        📘 CopperBook
+      </button> */}
 
       <main className="page-main">
         {/* ========== MAIN FILTER PANEL ========== */}

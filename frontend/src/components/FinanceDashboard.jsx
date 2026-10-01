@@ -40,7 +40,7 @@ const buildPageNumbers = (current, total) => {
   return pages;
 };
 
-export default function FinanceDashboard({ department, title, roleColor }) {
+export default function FinanceDashboard({ department, title, roleColor, onCopperBook }) {
   const apiBase = department.toLowerCase().replace(/\s/g, '');
   const supportsExcelImportExport = department === "PCM";
   const isCorporate = department === "Corporate";
@@ -266,7 +266,7 @@ export default function FinanceDashboard({ department, title, roleColor }) {
 
   return (
     <div className="page">
-      <Navbar title={title} roleColor={roleColor} />
+    <Navbar title={title} roleColor={roleColor} onCopperBook={onCopperBook} />
 
       <main className="page-main">
         <FilterBar
