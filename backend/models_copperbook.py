@@ -19,7 +19,7 @@ class CopperBookRequest(db.Model):
     status = db.Column(db.String(30), default="pending")
     assigned_to_role = db.Column(db.String(20), default="finance")
     is_payroll = db.Column(db.Boolean, default=False)
-    amount = db.Column(db.Numeric(14, 2), nullable=True)          # for General Expenses
+    amount = db.Column(db.Numeric(14, 2), nullable=True)
 
     finance_action_by = db.Column(db.String(150), nullable=True)
     finance_action_at = db.Column(db.DateTime, nullable=True)
@@ -83,3 +83,8 @@ class CopperBookEmployeeEntry(db.Model):
     remarks = db.Column(db.Text, nullable=True)
     action_by = db.Column(db.String(150), nullable=True)
     action_at = db.Column(db.DateTime, nullable=True)
+
+    # ✅ NEW — per-employee attachment metadata
+    attachment_filename = db.Column(db.String(255), nullable=True)
+    attachment_original_name = db.Column(db.String(255), nullable=True)
+    attachment_mimetype = db.Column(db.String(100), nullable=True)

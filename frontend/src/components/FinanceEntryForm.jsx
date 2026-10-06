@@ -71,7 +71,6 @@ const DEPARTMENTS_CONFIG = [
   { label: "Everglades", value: "Everglades" },
 ];
 
-// ✅ Capital categories — used for every department
 const CAPITAL_CATEGORIES = [
   "Equity Infusion",
   "Partner Contribution",
@@ -142,6 +141,7 @@ const IT_SALES_CATEGORY_FIELDS = {
   "Support & Maintenance": { showEmployeeName: true, showVehicleType: false, labelName: "Client/Service Name", showPurpose: true },
   "Internal allocations": { showEmployeeName: true, showVehicleType: false, labelName: "Department/Team Name", showPurpose: true },
 };
+
 const MEDTECH_CATEGORY_FIELDS = {
   "Travel & Entertainment (T&E)": { showEmployeeName: true, showVehicleType: true, labelName: "Employee/Person Name", labelVehicle: "Transport/Travel Type", showPurpose: true },
   "Marketing": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
@@ -159,6 +159,7 @@ const MEDTECH_CATEGORY_FIELDS = {
   "B2C Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Customer/Client Name", showPurpose: true },
   "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
 };
+
 const PCM_CATEGORY_FIELDS = {
   "Personnel & Payroll": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
   "Outsourced Services": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
@@ -175,55 +176,55 @@ const PCM_CATEGORY_FIELDS = {
 };
 
 const DENTAL_CATEGORY_FIELDS = {
-  "Travel & Entertainment (T&E)":       { showEmployeeName: true, showVehicleType: true,  labelName: "Employee/Person Name",  labelVehicle: "Transport/Travel Type", showPurpose: true },
-  "Marketing":                          { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                        showPurpose: true },
-  "Dental Supplies & Consumables":      { showEmployeeName: true, showVehicleType: false, labelName: "Item/Supply Name",                                             showPurpose: true },
-  "Equipment Purchase & Maintenance":   { showEmployeeName: true, showVehicleType: false, labelName: "Equipment/Vendor Name",                                        showPurpose: true },
-  "Lab Fees & Prosthetics":             { showEmployeeName: true, showVehicleType: false, labelName: "Lab/Vendor Name",                                              showPurpose: true },
-  "Facilities & Overhead":              { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                         showPurpose: true },
-  "General Operations":                 { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                         showPurpose: true },
-  "Innovation":                         { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                         showPurpose: true },
-  "Guest Concierge":                    { showEmployeeName: true, showVehicleType: false, labelName: "Guest/Person Name",                                            showPurpose: true },
-  "Business Services Revenue":          { showEmployeeName: true, showVehicleType: false, labelName: "Service Name",                                                 showPurpose: false },
-  "Miscellaneous":                      { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                         showPurpose: true },
-  "Outsourced Services":                { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name",                                          showPurpose: true },
-  "Events-Conferences-Training":        { showEmployeeName: true, showVehicleType: false, labelName: "Event/Training Name",                                          showPurpose: true },
-  "Consulting":                         { showEmployeeName: true, showVehicleType: false, labelName: "Consultant/Company Name",                                      showPurpose: true },
-  "Management Fees":                    { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name",                                          showPurpose: true },
-  "Personnel & Payroll":                { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                         showPurpose: true },
-  "Dental Operations":                  { showEmployeeName: true, showVehicleType: false, labelName: "Doctor/Staff Name",    showPurpose: true },
-  "Doctor Consultation":                { showEmployeeName: true, showVehicleType: false, labelName: "Doctor Name",          showPurpose: true },
-  "Clinical Procedures":                { showEmployeeName: true, showVehicleType: false, labelName: "Doctor/Staff Name",    showPurpose: true },
-  "Diagnostics & X-Ray":                { showEmployeeName: true, showVehicleType: false, labelName: "Technician Name",      showPurpose: true },
-  "Other":                              { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item",            showPurpose: true },
+  "Travel & Entertainment (T&E)": { showEmployeeName: true, showVehicleType: true, labelName: "Employee/Person Name", labelVehicle: "Transport/Travel Type", showPurpose: true },
+  "Marketing": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Dental Supplies & Consumables": { showEmployeeName: true, showVehicleType: false, labelName: "Item/Supply Name", showPurpose: true },
+  "Equipment Purchase & Maintenance": { showEmployeeName: true, showVehicleType: false, labelName: "Equipment/Vendor Name", showPurpose: true },
+  "Lab Fees & Prosthetics": { showEmployeeName: true, showVehicleType: false, labelName: "Lab/Vendor Name", showPurpose: true },
+  "Facilities & Overhead": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "General Operations": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Innovation": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Guest Concierge": { showEmployeeName: true, showVehicleType: false, labelName: "Guest/Person Name", showPurpose: true },
+  "Business Services Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Service Name", showPurpose: false },
+  "Miscellaneous": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Outsourced Services": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
+  "Events-Conferences-Training": { showEmployeeName: true, showVehicleType: false, labelName: "Event/Training Name", showPurpose: true },
+  "Consulting": { showEmployeeName: true, showVehicleType: false, labelName: "Consultant/Company Name", showPurpose: true },
+  "Management Fees": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
+  "Personnel & Payroll": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Dental Operations": { showEmployeeName: true, showVehicleType: false, labelName: "Doctor/Staff Name", showPurpose: true },
+  "Doctor Consultation": { showEmployeeName: true, showVehicleType: false, labelName: "Doctor Name", showPurpose: true },
+  "Clinical Procedures": { showEmployeeName: true, showVehicleType: false, labelName: "Doctor/Staff Name", showPurpose: true },
+  "Diagnostics & X-Ray": { showEmployeeName: true, showVehicleType: false, labelName: "Technician Name", showPurpose: true },
+  "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
 };
 
 const EVERGLADES_CATEGORY_FIELDS = {
-  "Travel & Entertainment (T&E)":     { showEmployeeName: true, showVehicleType: true,  labelName: "Employee/Person Name",  labelVehicle: "Transport/Travel Type", showPurpose: true },
-  "Marketing":                        { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                        showPurpose: true },
-  "Pharmaceuticals & Inventory":      { showEmployeeName: true, showVehicleType: false, labelName: "Supplier/Vendor Name",                                        showPurpose: true },
-  "Supplies & Equipments":            { showEmployeeName: true, showVehicleType: false, labelName: "Item/Equipment Name",                                         showPurpose: true },
-  "Facilities & Overhead":            { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                        showPurpose: true },
-  "General Operations":               { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                        showPurpose: true },
-  "Innovation":                       { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                        showPurpose: true },
-  "Guest Concierge":                  { showEmployeeName: true, showVehicleType: false, labelName: "Guest/Person Name",                                           showPurpose: true },
-  "Business Services Revenue":        { showEmployeeName: true, showVehicleType: false, labelName: "Service Name",                                                showPurpose: false },
-  "Miscellaneous":                    { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                        showPurpose: true },
-  "Outsourced Services":              { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name",                                         showPurpose: true },
-  "Events-Conferences-Training":      { showEmployeeName: true, showVehicleType: false, labelName: "Event/Training Name",                                         showPurpose: true },
-  "Consulting":                       { showEmployeeName: true, showVehicleType: false, labelName: "Consultant/Company Name",                                     showPurpose: true },
-  "Management Fees":                  { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name",                                         showPurpose: true },
-  "Personnel & Payroll":              { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name",                                        showPurpose: true },
-  "Prescription Sales":               { showEmployeeName: true, showVehicleType: false, labelName: "Pharmacist/Staff Name",   showPurpose: true },
-  "OTC Sales":                        { showEmployeeName: true, showVehicleType: false, labelName: "Cashier/Staff Name",      showPurpose: true },
-  "Insurance Claims":                 { showEmployeeName: true, showVehicleType: false, labelName: "Insurance Provider",      showPurpose: true },
-  "Consultation Fees":                { showEmployeeName: true, showVehicleType: false, labelName: "Pharmacist Name",         showPurpose: true },
-  "Health Screenings":                { showEmployeeName: true, showVehicleType: false, labelName: "Technician Name",         showPurpose: true },
-  "Vaccinations":                     { showEmployeeName: true, showVehicleType: false, labelName: "Pharmacist Name",         showPurpose: true },
-  "Home Delivery":                    { showEmployeeName: true, showVehicleType: true,  labelName: "Delivery Person",         labelVehicle: "Vehicle Type", showPurpose: true },
-  "Loyalty & Subscription Revenue":   { showEmployeeName: true, showVehicleType: false, labelName: "Customer/Client Name",    showPurpose: false },
-  "B2B Wholesale":                    { showEmployeeName: true, showVehicleType: false, labelName: "Client/Business Name",    showPurpose: true },
-  "Other":                            { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item",               showPurpose: true },
+  "Travel & Entertainment (T&E)": { showEmployeeName: true, showVehicleType: true, labelName: "Employee/Person Name", labelVehicle: "Transport/Travel Type", showPurpose: true },
+  "Marketing": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Pharmaceuticals & Inventory": { showEmployeeName: true, showVehicleType: false, labelName: "Supplier/Vendor Name", showPurpose: true },
+  "Supplies & Equipments": { showEmployeeName: true, showVehicleType: false, labelName: "Item/Equipment Name", showPurpose: true },
+  "Facilities & Overhead": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "General Operations": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Innovation": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Guest Concierge": { showEmployeeName: true, showVehicleType: false, labelName: "Guest/Person Name", showPurpose: true },
+  "Business Services Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Service Name", showPurpose: false },
+  "Miscellaneous": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Outsourced Services": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
+  "Events-Conferences-Training": { showEmployeeName: true, showVehicleType: false, labelName: "Event/Training Name", showPurpose: true },
+  "Consulting": { showEmployeeName: true, showVehicleType: false, labelName: "Consultant/Company Name", showPurpose: true },
+  "Management Fees": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
+  "Personnel & Payroll": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
+  "Prescription Sales": { showEmployeeName: true, showVehicleType: false, labelName: "Pharmacist/Staff Name", showPurpose: true },
+  "OTC Sales": { showEmployeeName: true, showVehicleType: false, labelName: "Cashier/Staff Name", showPurpose: true },
+  "Insurance Claims": { showEmployeeName: true, showVehicleType: false, labelName: "Insurance Provider", showPurpose: true },
+  "Consultation Fees": { showEmployeeName: true, showVehicleType: false, labelName: "Pharmacist Name", showPurpose: true },
+  "Health Screenings": { showEmployeeName: true, showVehicleType: false, labelName: "Technician Name", showPurpose: true },
+  "Vaccinations": { showEmployeeName: true, showVehicleType: false, labelName: "Pharmacist Name", showPurpose: true },
+  "Home Delivery": { showEmployeeName: true, showVehicleType: true, labelName: "Delivery Person", labelVehicle: "Vehicle Type", showPurpose: true },
+  "Loyalty & Subscription Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Customer/Client Name", showPurpose: false },
+  "B2B Wholesale": { showEmployeeName: true, showVehicleType: false, labelName: "Client/Business Name", showPurpose: true },
+  "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
 };
 
 export default function FinanceEntryForm({
@@ -294,7 +295,6 @@ export default function FinanceEntryForm({
 
   const [clientSuggestions, setClientSuggestions] = useState([]);
 
-  // ===== Capital type detection (now for ALL departments) =====
   const isCapital = form.entry_type === "Capital";
 
   const isSalaryCategory =
@@ -303,6 +303,9 @@ export default function FinanceEntryForm({
 
   const isLedger = (isMedTech || isEverglades) && form.category === ledgerCategoryName;
   const isGoodwill = (isMedTech || isEverglades) && form.category === "Goodwill";
+
+  // ✅ NEW — always show invoice for non-special entries
+  const showInvoiceField = !isCapital && !isLedger && !isGoodwill && !isSalaryCategory;
 
   const isEditingSalaryEntry =
     isSalaryCategory && !!(editingEntry && editingEntry.id !== undefined && editingEntry.id !== null);
@@ -370,7 +373,6 @@ export default function FinanceEntryForm({
     if (!open) return;
 
     const populateForm = (entry) => {
-      // ✅ Capital entry population — works for every department
       if (entry.entry_type === "Capital") {
         setForm({
           entry_type: "Capital",
@@ -554,41 +556,75 @@ export default function FinanceEntryForm({
   const isOfficeAdminSalary = isOfficeAdmin && form.category === salaryCategoryName;
 
   const handleTypeChange = (event) => {
-    const newType = event.target.value;
+  const newType = event.target.value;
 
-    // ✅ Capital — seed first capital category for every department
-    if (newType === "Capital") {
-      const capitalList =
-        (options?.categories?.Capital && options.categories.Capital.length > 0)
-          ? options.categories.Capital
-          : CAPITAL_CATEGORIES;
-      setForm((prev) => ({
-        ...prev,
-        entry_type: "Capital",
-        category: capitalList[0] || CAPITAL_CATEGORIES[0],
-        sub_category: "Capital",
-        client_name: "",
-        amount: "",
-        purpose: "",
-        remarks: "",
-        entry_date: prev.entry_date || today(),
-      }));
-      setOtherCategory("");
-      setEmployees([emptyEmployee()]);
-      setItems([emptyItem()]);
-      return;
-    }
-
-    let firstCategory = options?.categories?.[newType]?.[0] || "";
+  // ─────────────────────────────────────────────────────────────
+  // ✅ Ledger — force category="Ledger" so renderLedgerFields() shows
+  // the same Customer Name / Outstanding / New Amount / Paid / Total /
+  // Balance / Date / Remarks / Invoice fields that Expenses + Ledger shows.
+  // ─────────────────────────────────────────────────────────────
+  if (newType === "Ledger") {
     setForm((prev) => ({
       ...prev,
-      entry_type: newType,
-      category: firstCategory,
-      sub_category: "",
+      entry_type: "Ledger",
+      category: "Ledger",
+      sub_category: "Ledger",
     }));
     setOtherCategory("");
-    if (!isSalaryCategory) setEmployees([emptyEmployee()]);
-  };
+    setEmployees([emptyEmployee()]);
+    setItems([emptyItem()]);
+
+    // Reset all ledger-specific state so the form starts clean
+    setLedgerCustomer("");
+    setLedgerNewAmount("");
+    setLedgerPaid("");
+    setLedgerBalance(0);
+    setLedgerHistory([]);
+    setLedgerOutstanding(0);
+    setLedgerTotalAmount(0);
+    setInvoiceFile(null);
+    setRemoveInvoice(false);
+    return;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Capital — seed first capital category
+  // ─────────────────────────────────────────────────────────────
+  if (newType === "Capital") {
+    const capitalList =
+      (options?.categories?.Capital && options.categories.Capital.length > 0)
+        ? options.categories.Capital
+        : CAPITAL_CATEGORIES;
+    setForm((prev) => ({
+      ...prev,
+      entry_type: "Capital",
+      category: capitalList[0] || CAPITAL_CATEGORIES[0],
+      sub_category: "Capital",
+      client_name: "",
+      amount: "",
+      purpose: "",
+      remarks: "",
+      entry_date: prev.entry_date || today(),
+    }));
+    setOtherCategory("");
+    setEmployees([emptyEmployee()]);
+    setItems([emptyItem()]);
+    return;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Everything else — seed first category for that entry type
+  // ─────────────────────────────────────────────────────────────
+  let firstCategory = options?.categories?.[newType]?.[0] || "";
+  setForm((prev) => ({
+    ...prev,
+    entry_type: newType,
+    category: firstCategory,
+    sub_category: "",
+  }));
+  setOtherCategory("");
+  if (!isSalaryCategory) setEmployees([emptyEmployee()]);
+};
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -684,7 +720,52 @@ export default function FinanceEntryForm({
     setRemoveInvoice(false);
   };
 
-  /* ---------------- CAPITAL SUBMIT (all departments) ---------------- */
+  // ✅ NEW — reusable invoice field renderer
+  const renderInvoiceField = () => {
+    if (!showInvoiceField) return null;
+    return (
+      <div className="form-group">
+        <label className="form-label">Upload File (optional)</label>
+        {editingEntry && editingEntry.invoice_url && !removeInvoice && (
+          <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
+            <a
+              href={invoiceHref(editingEntry)}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-secondary"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              <FileText size={15} /> <span>View current file</span>
+            </a>
+            <button
+              type="button"
+              className="btn-icon btn-icon--danger"
+              onClick={() => setRemoveInvoice(true)}
+              title="Remove file"
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+        )}
+        {removeInvoice && (
+          <p className="text-muted" style={{ marginBottom: 8, fontSize: 13 }}>
+            Current file will be removed when you save.
+          </p>
+        )}
+        <input
+          type="file"
+          accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.csv"
+          onChange={handleInvoiceChange}
+          className="form-control"
+        />
+        <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+          Accepted: PDF, Word, Excel, CSV, JPG, PNG, GIF, WEBP. Max 10 MB.
+        </p>
+      </div>
+    );
+  };
+
+  /* ---------------- CAPITAL SUBMIT ---------------- */
   const submitCapitalEntry = async () => {
     if (!form.category) {
       toast.error("Please select a Capital Category.");
@@ -714,7 +795,7 @@ export default function FinanceEntryForm({
         entry_type: "Capital",
         category: form.category,
         capital_category: form.category,
-        fund_category: form.category, // backwards compat
+        fund_category: form.category,
         sub_category: "Capital",
         client_name: form.client_name.trim(),
         amount,
@@ -758,6 +839,7 @@ export default function FinanceEntryForm({
       return;
     }
 
+    // ---- LEDGER ----
     if (isLedger) {
       if (!ledgerCustomer.trim()) {
         toast.error("Customer name is required.");
@@ -776,25 +858,48 @@ export default function FinanceEntryForm({
         return;
       }
       const paid = parseFloat(ledgerPaid) || 0;
+
       setSaving(true);
       try {
-        const payload = {
-          entry_type: "Ledger",
-          category: "Ledger",
-          customer_name: ledgerCustomer.trim(),
-          entry_date: form.entry_date,
-          total_amount: totalAmount,
-          paid,
-          remarks: form.remarks || "",
-        };
+        const useFormData = !!invoiceFile || removeInvoice;
+        let body;
+        let config = {};
+
+        if (useFormData) {
+          const fd = new FormData();
+          fd.append("entry_type", "Ledger");
+          fd.append("category", "Ledger");
+          fd.append("customer_name", ledgerCustomer.trim());
+          fd.append("entry_date", form.entry_date);
+          fd.append("total_amount", String(totalAmount));
+          fd.append("paid", String(paid));
+          fd.append("remarks", form.remarks || "");
+          if (invoiceFile) fd.append("invoice", invoiceFile);
+          if (removeInvoice) fd.append("remove_invoice", "true");
+          body = fd;
+          config = { headers: { "Content-Type": "multipart/form-data" } };
+        } else {
+          body = {
+            entry_type: "Ledger",
+            category: "Ledger",
+            customer_name: ledgerCustomer.trim(),
+            entry_date: form.entry_date,
+            total_amount: totalAmount,
+            paid,
+            remarks: form.remarks || "",
+          };
+        }
+
         const url = `/${apiBase}/entries`;
         if (editingEntry && editingEntry._type === "ledger") {
-          await api.put(`${url}/${editingEntry.id}`, payload);
+          await api.put(`${url}/${editingEntry.id}`, body, config);
           toast.success("Ledger entry updated.");
         } else {
-          await api.post(url, payload);
+          await api.post(url, body, config);
           toast.success("Ledger entry saved.");
         }
+        setInvoiceFile(null);
+        setRemoveInvoice(false);
         if (typeof onSaved === "function") await onSaved();
         onClose();
       } catch (err) {
@@ -997,7 +1102,10 @@ export default function FinanceEntryForm({
       const isEditing =
         editingEntry && editingEntry.id !== undefined && editingEntry.id !== null;
 
-      if (options.show_invoice) {
+      // ✅ NEW — use FormData if the department always used it OR a file is attached OR a file is being removed
+      const useFormData = options.show_invoice || !!invoiceFile || removeInvoice;
+
+      if (useFormData) {
         const formData = new FormData();
 
         Object.keys(form).forEach((key) => {
@@ -1143,6 +1251,8 @@ export default function FinanceEntryForm({
         await api.post(url, body, config);
         toast.success("Entry added successfully.");
       }
+      setInvoiceFile(null);
+      setRemoveInvoice(false);
       if (typeof onSaved === "function") await onSaved();
       onClose();
     } catch (error) {
@@ -1220,7 +1330,7 @@ export default function FinanceEntryForm({
     }
   };
 
-  /* ---------------- CAPITAL FIELDS RENDERER (all departments) ---------------- */
+  /* ---------------- CAPITAL FIELDS RENDERER ---------------- */
   const renderCapitalFields = () => {
     const capitalList =
       (options?.categories?.Capital && options.categories.Capital.length > 0)
@@ -1389,24 +1499,8 @@ export default function FinanceEntryForm({
         </div>
       )}
 
-      {options.show_invoice && (
-        <div className="form-group">
-          <label className="form-label">Invoice</label>
-          {editingEntry && editingEntry.invoice_url && !removeInvoice && (
-            <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
-              <a href={invoiceHref(editingEntry)} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <FileText size={15} /> <span>View current invoice</span>
-              </a>
-              <button type="button" className="btn-icon btn-icon--danger" onClick={() => setRemoveInvoice(true)} title="Remove invoice">
-                <Trash2 size={15} />
-              </button>
-            </div>
-          )}
-          {removeInvoice && <p className="text-muted" style={{ marginBottom: 8, fontSize: 13 }}>Current invoice will be removed when you save.</p>}
-          <input type="file" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx" onChange={handleInvoiceChange} className="form-control" />
-          <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>Accepted: PDF, JPG, PNG, GIF, WEBP, DOC, DOCX, XLS, XLSX.</p>
-        </div>
-      )}
+      {/* ✅ NEW — always show upload field */}
+      {renderInvoiceField()}
 
       <div className="form-group">
         <label className="form-label">Remarks</label>
@@ -1444,6 +1538,7 @@ export default function FinanceEntryForm({
             <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Optional notes" className="form-control" />
           </div>
         )}
+        {renderInvoiceField()}
       </>
     );
   };
@@ -1475,6 +1570,7 @@ export default function FinanceEntryForm({
           <label className="form-label">Remarks <span style={{ color: "red" }}>*</span></label>
           <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Detailed remarks (required)" className="form-control" required />
         </div>
+        {renderInvoiceField()}
       </>
     );
   };
@@ -1524,6 +1620,7 @@ export default function FinanceEntryForm({
           <label className="form-label">Remarks <span style={{ color: "red" }}>*</span></label>
           <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Detailed remarks (required)" className="form-control" required />
         </div>
+        {renderInvoiceField()}
       </>
     );
   };
@@ -1573,6 +1670,7 @@ export default function FinanceEntryForm({
           <label className="form-label">Remarks <span style={{ color: "red" }}>*</span></label>
           <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Detailed remarks (required)" className="form-control" required />
         </div>
+        {renderInvoiceField()}
       </>
     );
   };
@@ -1604,6 +1702,7 @@ export default function FinanceEntryForm({
           <label className="form-label">Remarks <span style={{ color: "red" }}>*</span></label>
           <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Detailed remarks (required)" className="form-control" required />
         </div>
+        {renderInvoiceField()}
       </>
     );
   };
@@ -1653,6 +1752,7 @@ export default function FinanceEntryForm({
           <label className="form-label">Remarks <span style={{ color: "red" }}>*</span></label>
           <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Detailed remarks (required)" className="form-control" required />
         </div>
+        {renderInvoiceField()}
       </>
     );
   };
@@ -1702,6 +1802,7 @@ export default function FinanceEntryForm({
           <label className="form-label">Remarks <span style={{ color: "red" }}>*</span></label>
           <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Detailed remarks (required)" className="form-control" required />
         </div>
+        {renderInvoiceField()}
       </>
     );
   };
@@ -1832,6 +1933,46 @@ export default function FinanceEntryForm({
           <textarea name="remarks" value={form.remarks} onChange={handleChange} rows={2} placeholder="Optional notes" className="form-control" />
         </div>
 
+        {/* ✅ Invoice upload for Ledger */}
+        <div className="form-group">
+          <label className="form-label">Invoice / Attachment (optional)</label>
+          {isEditingLedger && editingEntry.invoice_url && !removeInvoice && (
+            <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
+              <a
+                href={invoiceHref(editingEntry)}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-secondary"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                <FileText size={15} /> <span>View current invoice</span>
+              </a>
+              <button
+                type="button"
+                className="btn-icon btn-icon--danger"
+                onClick={() => setRemoveInvoice(true)}
+                title="Remove invoice"
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          )}
+          {removeInvoice && (
+            <p className="text-muted" style={{ marginBottom: 8, fontSize: 13 }}>
+              Current invoice will be removed when you save.
+            </p>
+          )}
+          <input
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.csv"
+            onChange={handleInvoiceChange}
+            className="form-control"
+          />
+          <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+            Accepted: PDF, Word, Excel, CSV, JPG, PNG, GIF, WEBP.
+          </p>
+        </div>
+
         <div style={{ marginTop: 12, background: "#f0f9ff", padding: "8px", borderRadius: "4px" }}>
           <p style={{ fontSize: "0.9rem" }}>
             <strong>Note:</strong> To add new amount, enter the amount in "New Amount to Add". To record a payment, set "New Amount" to 0 and enter the paid amount.
@@ -1867,7 +2008,6 @@ export default function FinanceEntryForm({
                 ))}
               </select>
             </div>
-            {/* ✅ hide Category when Capital is selected */}
             {!isCapital && (
               <div className="form-group">
                 <label className="form-label">Category</label>
@@ -1966,6 +2106,9 @@ export default function FinanceEntryForm({
                   <div style={{ fontWeight: 600 }}>Total Amount: {formatCurrency(itemsTotal)}</div>
                 )}
               </div>
+
+              {/* ✅ Upload field for item-based categories */}
+              {renderInvoiceField()}
             </div>
           )}
 

@@ -199,7 +199,7 @@ export default function CopperBookPage({ onBack }) {
               onClick={() => setShowAllEmployees(true)}
               style={{ marginLeft: 12 }}
             >
-              👥 All Employees
+              Salaries
             </button>
           )}
 

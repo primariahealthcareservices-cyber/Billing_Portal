@@ -16,6 +16,8 @@ from utils import send_email
 
 cb_bp = Blueprint("copperbook", __name__, url_prefix="/api/copperbook")
 
+BRAND = "Primaria HealthCare Services"
+
 
 # ─────────────────────────────────────────────────────────────────
 def _service_token_ok():
@@ -24,8 +26,70 @@ def _service_token_ok():
     return bool(expected) and expected == got
 
 
-def _notify_role_async(role_names, message, related_id=None):
-    """Bulk-insert notification rows + fire emails in background."""
+def _fmt_money(v):
+    try:
+        return f"₹ {float(v):,.2f}"
+    except Exception:
+        return "—"
+
+
+def _branded_html(heading: str, intro: str, details: dict, message: str, closing: str) -> str:
+    rows = ""
+    for k, v in (details or {}).items():
+        rows += (
+            f'<tr>'
+            f'<td style="padding:9px 14px;border-bottom:1px solid #eef2f7;'
+            f'color:#64748b;font-size:13px;width:38%;">{k}</td>'
+            f'<td style="padding:9px 14px;border-bottom:1px solid #eef2f7;'
+            f'color:#0f172a;font-size:13px;font-weight:600;">{v}</td>'
+            f'</tr>'
+        )
+    details_block = (
+        f'<table role="presentation" cellspacing="0" cellpadding="0" '
+        f'style="width:100%;border:1px solid #e2e8f0;border-radius:10px;'
+        f'overflow:hidden;margin-top:18px;">{rows}</table>'
+    ) if rows else ""
+
+    return f"""<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#f5f7fb;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;background:#f5f7fb;padding:24px 0;">
+    <tr><td align="center">
+      <table role="presentation" cellspacing="0" cellpadding="0" style="max-width:580px;width:100%;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 18px rgba(15,23,42,0.06);">
+        <tr><td style="padding:22px 26px;background:linear-gradient(135deg,#0ea5e9 0%,#2563eb 100%);">
+          <div style="color:#fff;font-size:17px;font-weight:700;">{BRAND}</div>
+          <div style="color:#dbeafe;font-size:12px;margin-top:2px;">Finance Hub</div>
+        </td></tr>
+        <tr><td style="padding:28px 26px 10px;">
+          <h2 style="margin:0;color:#0f172a;font-size:20px;font-weight:700;line-height:1.3;">{heading}</h2>
+          <p style="margin:12px 0 0;color:#475569;font-size:14px;line-height:1.6;white-space:pre-line;">{intro}</p>
+          {details_block}
+          <p style="margin:18px 0 0;color:#334155;font-size:14px;line-height:1.65;white-space:pre-line;">{message}</p>
+          <p style="margin:22px 0 0;color:#64748b;font-size:13px;line-height:1.6;white-space:pre-line;">{closing}</p>
+        </td></tr>
+        <tr><td style="padding:22px 26px;border-top:1px solid #e2e8f0;background:#f8fafc;">
+          <p style="margin:0;color:#64748b;font-size:12px;line-height:1.55;">
+            This is an automated message from {BRAND}. Please do not reply directly.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>"""
+
+
+def _notify_role_async(
+    role_names,
+    *,
+    in_app_message,
+    related_id=None,
+    email_subject=None,
+    email_heading=None,
+    email_intro=None,
+    email_details=None,
+    email_message=None,
+    email_closing=None,
+):
+    """Bulk-insert notification rows + fire branded HTML emails."""
     if isinstance(role_names, str):
         role_names = [role_names]
 
@@ -33,20 +97,33 @@ def _notify_role_async(role_names, message, related_id=None):
     if not users:
         return
 
-    rows = []
     for u in users:
-        rows.append(Notification(
-            user_id=u.id, message=message, is_read=False,
+        db.session.add(Notification(
+            user_id=u.id, message=in_app_message, is_read=False,
             related_type="copperbook", related_id=related_id,
         ))
-    db.session.add_all(rows)
-    # (caller commits)
 
-    # Emails — non-blocking
+    if not email_subject:
+        return
+
+    html = _branded_html(
+        heading=email_heading or "CopperBook Update",
+        intro=email_intro or "Hello,",
+        details=email_details or {},
+        message=email_message or in_app_message,
+        closing=email_closing or (
+            "Thank you.\n\nWarm regards,\n" + BRAND
+        ),
+    )
+    plain = f"{email_heading or 'CopperBook Update'}\n\n{email_intro or ''}\n"
+    for k, v in (email_details or {}).items():
+        plain += f"{k}: {v}\n"
+    plain += f"\n{email_message or in_app_message}\n\n{email_closing or BRAND}"
+
     for u in users:
         if u.email:
             try:
-                send_email(u.email, "CopperBook Update", message)
+                send_email(u.email, email_subject, plain, html_body=html)
             except Exception as e:
                 print("[notify] email enqueue failed:", e)
 
@@ -64,6 +141,8 @@ def _entry_to_dict(e):
         "remarks": e.remarks,
         "action_by": e.action_by,
         "action_at": e.action_at.isoformat() if e.action_at else None,
+        "attachment_filename": e.attachment_original_name or e.attachment_filename,
+        "attachment_mimetype": e.attachment_mimetype,
     }
 
 
@@ -83,7 +162,6 @@ def _serialize(r, with_files=False):
         "status": r.status,
         "assigned_to_role": r.assigned_to_role,
         "is_payroll": bool(r.is_payroll),
-        # ✅ NEW — General Expenses amount
         "amount": float(r.amount) if r.amount is not None else None,
         "finance_action_by": r.finance_action_by,
         "finance_action_at": r.finance_action_at.isoformat() if r.finance_action_at else None,
@@ -101,9 +179,7 @@ def _sync_to_staffportal(req: CopperBookRequest):
     base = (os.getenv("STAFFPORTAL_BASE_URL") or "").rstrip("/")
     token = os.getenv("COPPERBOOK_CALLBACK_TOKEN") or ""
     if not base or not token:
-        print("[copperbook→staffportal] skipped — base or token missing")
         return
-
     payload = {
         "remote_id": req.remote_id,
         "status": req.status,
@@ -126,7 +202,7 @@ def _sync_to_staffportal(req: CopperBookRequest):
 
 
 # ─────────────────────────────────────────────────────────────────
-# INTAKE — accepts amount for General Expenses
+# INTAKE
 # ─────────────────────────────────────────────────────────────────
 @cb_bp.route("/intake", methods=["POST", "OPTIONS"])
 def intake():
@@ -139,7 +215,6 @@ def intake():
         d = request.form
         is_payroll = (d.get("is_payroll") or "0") == "1"
 
-        # ✅ Parse amount (only for General Expenses)
         raw_amount = d.get("amount")
         try:
             amount_val = float(raw_amount) if raw_amount not in (None, "", "null") else None
@@ -177,17 +252,23 @@ def intake():
                 entries = json.loads(raw)
             except Exception:
                 entries = []
-            for e in entries:
+            for idx, e in enumerate(entries):
                 ms = float(e.get("monthly_salary") or 0)
                 td = float(e.get("td_da") or 0)
-                db.session.add(CopperBookEmployeeEntry(
+                row = CopperBookEmployeeEntry(
                     request_id=req.id,
                     employee_id=e.get("employee_id"),
                     employee_name=e.get("employee_name") or "",
                     employee_department=e.get("employee_department") or "",
                     monthly_salary=ms, td_da=td, total_amount=ms + td,
                     status="pending",
-                ))
+                )
+                f = request.files.get(f"employee_file_{idx}")
+                if f and f.filename:
+                    row.attachment_filename = f.filename
+                    row.attachment_original_name = f.filename
+                    row.attachment_mimetype = f.mimetype or "application/octet-stream"
+                db.session.add(row)
 
         for f in request.files.getlist("attachments"):
             if f and f.filename:
@@ -196,10 +277,36 @@ def intake():
                     filename=f.filename, mimetype=f.mimetype or "application/octet-stream",
                 ))
 
+        # ── Professional email to Finance + CEO ─────────────────────
+        detail_rows = {
+            "Request Number": req.request_number,
+            "Submitted By": req.raised_by_name or "—",
+            "Department": req.department or "—",
+            "Purpose": req.purpose,
+            "Submitted On": datetime.utcnow().strftime("%d %b %Y, %I:%M %p UTC"),
+        }
+        if amount_val is not None:
+            detail_rows["Requested Amount"] = _fmt_money(amount_val)
+        if is_payroll:
+            detail_rows["Payroll Entries"] = str(len(req.employee_entries))
+
         _notify_role_async(
             ["SuperAdmin", "Corporate"],
-            f"New CopperBook {req.request_number} from {req.raised_by_name} ({req.department})",
-            related_id=None,
+            in_app_message=f"New CopperBook {req.request_number} from {req.raised_by_name} ({req.department}) — pending Finance review.",
+            related_id=req.id,
+            email_subject=f"CopperBook — New Request {req.request_number} Pending Your Review",
+            email_heading="A New CopperBook Request Requires Your Review",
+            email_intro=(
+                "Hello,\n\n"
+                "A new CopperBook request has been submitted through the Staff Portal and is now pending "
+                "Finance review. Please log in to the Finance Hub to review the full details and record a decision."
+            ),
+            email_details=detail_rows,
+            email_message=(
+                "You can approve the request, reject it with remarks, or forward it to the CEO "
+                "for a final decision — all from the CopperBook page in the Finance Hub."
+            ),
+            email_closing="Thank you for your timely attention.\n\nBest regards,\n" + BRAND,
         )
         db.session.commit()
 
@@ -212,7 +319,7 @@ def intake():
 
 
 # ─────────────────────────────────────────────────────────────────
-# LIST (paginated)
+# LIST
 # ─────────────────────────────────────────────────────────────────
 @cb_bp.route("/list", methods=["GET", "OPTIONS"])
 @jwt_required()
@@ -281,22 +388,42 @@ def finance_action(rid):
     if action == "reject" and not remarks:
         return jsonify({"error": "Rejection reason is required."}), 400
 
-    if action == "approve": r.status = "approved"
-    elif action == "reject": r.status = "rejected"
-    else: r.status = "forwarded_to_ceo"; r.assigned_to_role = "ceo"
+    if action == "approve":
+        r.status = "approved"
+    elif action == "reject":
+        r.status = "rejected"
+    else:
+        r.status = "forwarded_to_ceo"; r.assigned_to_role = "ceo"
 
     r.finance_action_by = user.name
     r.finance_action_at = datetime.utcnow()
     r.finance_remarks = remarks or None
-
-    _notify_role_async(
-        ["SuperAdmin", "Corporate"],
-        f"CopperBook {r.request_number} marked {r.status}.",
-        related_id=r.id,
-    )
     db.session.commit()
 
     _sync_to_staffportal(r)
+
+    # Notify the Finance/Corporate team a decision was made
+    verb = {"approve": "approved", "reject": "rejected", "forward_to_ceo": "forwarded to the CEO"}[action]
+    _notify_role_async(
+        ["SuperAdmin", "Corporate"],
+        in_app_message=f"CopperBook {r.request_number} was {verb} by {user.name}.",
+        related_id=r.id,
+        email_subject=f"CopperBook — Request {r.request_number} {verb.title()}",
+        email_heading=f"CopperBook Request {verb.title()}",
+        email_intro=f"Hello,\n\n{user.name} has {verb} CopperBook request {r.request_number}.",
+        email_details={
+            "Request Number": r.request_number,
+            "Department": r.department or "—",
+            "Action": verb.title(),
+            "Action By": user.name,
+            "Action On": datetime.utcnow().strftime("%d %b %Y, %I:%M %p UTC"),
+            **({"Remarks": remarks} if remarks else {}),
+        },
+        email_message=(
+            "This is a system notification. No action is required from your side."
+        ),
+        email_closing="Best regards,\n" + BRAND,
+    )
 
     return jsonify({"message": f"Marked {r.status}.", "request": _serialize(r)}), 200
 
@@ -342,20 +469,38 @@ def employee_entry_action(entry_id):
     else:
         req.status = "forwarded_to_ceo"
 
+    db.session.commit()
+    _sync_to_staffportal(req)
+
+    verb = "approved" if entry.status == "approved" else "rejected"
     _notify_role_async(
         ["SuperAdmin", "Corporate"],
-        f"Payroll entry for {entry.employee_name} in {req.request_number} was {entry.status}.",
+        in_app_message=f"Payroll entry for {entry.employee_name} in {req.request_number} was {entry.status}.",
         related_id=req.id,
+        email_subject=f"Payroll — Entry for {entry.employee_name} {verb.title()}",
+        email_heading=f"Payroll Entry {verb.title()}",
+        email_intro=(
+            f"Hello,\n\nThe payroll entry for {entry.employee_name} in request "
+            f"{req.request_number} has been {verb} by {user.name}."
+        ),
+        email_details={
+            "Request Number": req.request_number,
+            "Employee": entry.employee_name,
+            "Monthly Salary": _fmt_money(entry.monthly_salary),
+            "TD / DA": _fmt_money(entry.td_da),
+            "Total": _fmt_money(entry.total_amount),
+            "Status": entry.status.title(),
+            **({"Remarks": entry.remarks} if entry.remarks else {}),
+        },
+        email_message="This is a system notification. No action is required from your side.",
+        email_closing="Best regards,\n" + BRAND,
     )
-    db.session.commit()
-
-    _sync_to_staffportal(req)
 
     return jsonify({"message": "Entry updated.", "entry": _entry_to_dict(entry)}), 200
 
 
 # ─────────────────────────────────────────────────────────────────
-# BATCH APPROVE all pending entries
+# BATCH APPROVE
 # ─────────────────────────────────────────────────────────────────
 @cb_bp.route("/<int:rid>/approve-all-entries", methods=["POST", "OPTIONS"])
 @jwt_required()
@@ -391,15 +536,29 @@ def approve_all_entries(rid):
     req.ceo_action_by = user.name
     req.ceo_action_at = now
     req.ceo_remarks = default_remarks
+    db.session.commit()
+    _sync_to_staffportal(req)
 
     _notify_role_async(
         ["SuperAdmin", "Corporate"],
-        f"All {approved_count} payroll entries in {req.request_number} were approved by {user.name}.",
+        in_app_message=f"All {approved_count} payroll entries in {req.request_number} were approved by {user.name}.",
         related_id=req.id,
+        email_subject=f"Payroll — {approved_count} Entries Approved in {req.request_number}",
+        email_heading="Payroll Batch Approval Complete",
+        email_intro=(
+            f"Hello,\n\nAll {approved_count} pending payroll entries in request "
+            f"{req.request_number} were approved by {user.name} in a single action."
+        ),
+        email_details={
+            "Request Number": req.request_number,
+            "Entries Approved": str(approved_count),
+            "Approved By": user.name,
+            "Approved On": now.strftime("%d %b %Y, %I:%M %p UTC"),
+            **({"Remarks": default_remarks} if default_remarks else {}),
+        },
+        email_message="This is a system notification. No action is required from your side.",
+        email_closing="Best regards,\n" + BRAND,
     )
-    db.session.commit()
-
-    _sync_to_staffportal(req)
 
     return jsonify({
         "message": f"Approved {approved_count} entries.",

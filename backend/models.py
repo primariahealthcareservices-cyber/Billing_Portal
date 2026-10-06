@@ -516,6 +516,7 @@ class User(db.Model):
     role = db.Column(db.String(50), nullable=False)
     department = db.Column(db.String(100), nullable=True)
     is_active = db.Column(db.Boolean, default=True)
+    temp_otp = db.Column(db.String(10), nullable=True) 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     entries = db.relationship("FinanceEntry", backref="creator", lazy=True)
 
@@ -618,7 +619,7 @@ class FinanceEntry(db.Model):
             "purpose": self.purpose,
             "team": self.team,
             "remarks": self.remarks,
-            "invoice_url": f"/files/invoices/{self.invoice_filename}" if self.invoice_filename else None,
+            "invoice_url": f"/api/files/invoices/{self.invoice_filename}" if self.invoice_filename else None,
             "invoice_original_name": self.invoice_original_name,
             "invoice_mimetype": self.invoice_mimetype,
             "entry_date": self.entry_date.isoformat() if self.entry_date else None,
@@ -665,6 +666,11 @@ class MedTechLedger(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # ✅ NEW — invoice
+    invoice_filename = db.Column(db.String(255), nullable=True)
+    invoice_original_name = db.Column(db.String(255), nullable=True)
+    invoice_mimetype = db.Column(db.String(100), nullable=True)
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -674,6 +680,9 @@ class MedTechLedger(db.Model):
             "paid": float(self.paid or 0),
             "balance": float(self.balance or 0),
             "remarks": self.remarks,
+            "invoice_url": f"/api/files/invoices/{self.invoice_filename}" if self.invoice_filename else None,
+            "invoice_original_name": self.invoice_original_name,
+            "invoice_mimetype": self.invoice_mimetype,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -693,6 +702,11 @@ class EvergladesLedger(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # ✅ NEW — invoice
+    invoice_filename = db.Column(db.String(255), nullable=True)
+    invoice_original_name = db.Column(db.String(255), nullable=True)
+    invoice_mimetype = db.Column(db.String(100), nullable=True)
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -702,6 +716,9 @@ class EvergladesLedger(db.Model):
             "paid": float(self.paid or 0),
             "balance": float(self.balance or 0),
             "remarks": self.remarks,
+            "invoice_url": f"/api/files/invoices/{self.invoice_filename}" if self.invoice_filename else None,
+            "invoice_original_name": self.invoice_original_name,
+            "invoice_mimetype": self.invoice_mimetype,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

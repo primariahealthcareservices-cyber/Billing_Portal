@@ -1,20 +1,36 @@
+// frontend/src/components/EntryViewModal.jsx
 import React from "react";
-import { X } from "lucide-react";
+import { X, Paperclip } from "lucide-react";
+import api from "../api/axios.js";
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value || 0);
+
+const apiOrigin = (api.defaults.baseURL || "")
+  .replace(/\/api\/?$/, "")
+  .replace(/\/$/, "");
+
+const invoiceHref = (url) => {
+  if (!url) return null;
+  const token = localStorage.getItem("token") || "";
+  const sep = url.includes("?") ? "&" : "?";
+  const absolute = url.startsWith("http") ? url : `${apiOrigin}${url}`;
+  return `${absolute}${sep}token=${encodeURIComponent(token)}`;
+};
 
 export default function EntryViewModal({ entry, type, onClose }) {
   if (!entry) return null;
 
   const renderField = (label, value) => (
-    <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f0f0f0", padding: "6px 0" }}>
-      <span style={{ fontWeight: 500, color: "#475569" }}>{label}</span>
-      <span>{value ?? "—"}</span>
+    <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f0f0f0", padding: "6px 0", gap: 12 }}>
+      <span style={{ fontWeight: 500, color: "#475569", flexShrink: 0 }}>{label}</span>
+      <span style={{ textAlign: "right", wordBreak: "break-word" }}>{value ?? "—"}</span>
     </div>
   );
 
   let fields = [];
+  let invoiceUrl = null;
+  let invoiceName = null;
 
   if (type === "lab") {
     fields = [
@@ -35,6 +51,18 @@ export default function EntryViewModal({ entry, type, onClose }) {
       ["Amount", formatCurrency(entry.amount)],
       ["Remarks", entry.remarks],
     ];
+  } else if (entry._type === "ledger" || entry.category === "Ledger") {
+    // ✅ Ledger entries
+    fields = [
+      ["Date", entry.entry_date],
+      ["Customer", entry.customer_name],
+      ["Total Amount", formatCurrency(entry.total_amount || entry.amount)],
+      ["Paid", formatCurrency(entry.paid)],
+      ["Balance", formatCurrency(entry.balance)],
+      ["Remarks", entry.remarks],
+    ];
+    invoiceUrl = entry.invoice_url;
+    invoiceName = entry.invoice_original_name;
   } else {
     // Standard finance entry
     fields = [
@@ -53,6 +81,8 @@ export default function EntryViewModal({ entry, type, onClose }) {
       ["Tax Invoice No.", entry.tax_invoice_number],
       ["Remarks", entry.remarks],
     ];
+    invoiceUrl = entry.invoice_url;
+    invoiceName = entry.invoice_original_name || entry.invoice_filename;
   }
 
   return (
@@ -66,6 +96,21 @@ export default function EntryViewModal({ entry, type, onClose }) {
         </div>
         <div className="modal-body" style={{ padding: "16px 24px" }}>
           {fields.map(([label, value]) => renderField(label, value))}
+
+          {invoiceUrl && (
+            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid #e2e8f0" }}>
+              <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>Invoice / Attachment</div>
+              <a
+                href={invoiceHref(invoiceUrl)}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-secondary"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                <Paperclip size={15} /> {invoiceName || "View invoice"}
+              </a>
+            </div>
+          )}
         </div>
         <div className="modal-footer">
           <button type="button" onClick={onClose} className="btn btn-secondary">Close</button>
@@ -73,4 +118,4 @@ export default function EntryViewModal({ entry, type, onClose }) {
       </div>
     </div>
   );
-} 
+}

@@ -55,6 +55,13 @@
     Helvetica, Arial, sans-serif;
 
   --transition: 150ms ease;
+
+  /* ✅ NEW — single source of truth for content width.
+     Change this ONE value to resize the whole app.
+       1280px — original, centered with lots of margin
+       1800px — recommended for wide dashboards (default)
+       none   — edge-to-edge full-bleed */
+  --layout-max-width: 1800px;
 }
 
 /* 2. Reset & base --------------------------------------------------------- */
@@ -108,7 +115,8 @@ table {
 }
 
 .page-main {
-  max-width: 1280px;
+  /* ✅ widened — was 1280px */
+  max-width: var(--layout-max-width);
   margin: 0 auto;
   width: 100%;
   padding: 24px 24px 56px;
@@ -148,7 +156,8 @@ table {
 }
 
 .navbar-inner {
-  max-width: 1280px;
+  /* ✅ widened — was 1280px */
+  max-width: var(--layout-max-width);
   margin: 0 auto;
   padding: 14px 24px;
   display: flex;

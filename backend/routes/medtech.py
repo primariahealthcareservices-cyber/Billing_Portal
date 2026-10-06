@@ -35,6 +35,11 @@ def _parse_date(value, default=None):
         return default
 
 
+def _is_multipart():
+    ct = request.content_type or ""
+    return ct.startswith("multipart/")
+
+
 def _apply_date_filters(query):
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
@@ -150,6 +155,8 @@ def get_clients():
 @role_required("MedTech")
 def create_entry():
     is_json = request.is_json
+    is_multipart = _is_multipart()
+
     if is_json:
         data = request.get_json() or {}
     else:
@@ -208,15 +215,13 @@ def create_entry():
             return jsonify({"message": "Failed to create Capital entry.", "error": str(exc)}), 500
         return jsonify({"message": "Capital entry created.", "entry": entry.to_dict()}), 201
 
-    # ---- LEDGER HANDLING ----
+    # ---- LEDGER HANDLING (accepts JSON and multipart) ----
     category = data.get("category")
     remarks = data.get("remarks", "")
     entry_date = _parse_date(data.get("entry_date"), default=date.today())
 
     if entry_type == "Ledger":
         category = "Ledger"
-        if not is_json:
-            return jsonify({"message": "Ledger entries must be sent as JSON."}), 400
 
         customer_name = (data.get("customer_name") or "").strip()
         try:
@@ -243,6 +248,19 @@ def create_entry():
             remarks=remarks,
             created_by_id=get_jwt_identity(),
         )
+
+        # ✅ Save invoice file if uploaded
+        if is_multipart:
+            invoice_file = request.files.get("invoice")
+            if invoice_file and invoice_file.filename:
+                try:
+                    path, original, mimetype = save_invoice_file(invoice_file, DEPARTMENT)
+                    ledger.invoice_filename = path
+                    ledger.invoice_original_name = original
+                    ledger.invoice_mimetype = mimetype
+                except ValueError as e:
+                    return jsonify({"message": str(e)}), 400
+
         try:
             db.session.add(ledger)
             db.session.commit()
@@ -286,7 +304,7 @@ def create_entry():
     if category == "Goodwill" and not client_name:
         errors.append("Client name is required for Goodwill entries.")
 
-    # ---- Category‑dependent item validation ----
+    # ---- Category-dependent item validation ----
     if not is_salary:
         require_items = CONFIG["show_items"] and category in MEDTECH_ITEM_CATEGORIES
 
@@ -331,7 +349,7 @@ def create_entry():
 
     invoice_path = invoice_original = invoice_mimetype = None
     invoice_file = request.files.get("invoice")
-    if CONFIG["show_invoice"] and invoice_file and invoice_file.filename and not is_salary and category != "Goodwill":
+    if invoice_file and invoice_file.filename and not is_salary and category != "Goodwill":
         try:
             invoice_path, invoice_original, invoice_mimetype = save_invoice_file(invoice_file, DEPARTMENT)
         except ValueError as e:
@@ -442,6 +460,8 @@ def list_entries():
         d = fe.to_dict()
         d["_type"] = "finance"
         combined.append(d)
+
+    # ✅ Ledger now includes invoice fields
     for le in ledger_entries:
         combined.append({
             "id": le.id,
@@ -454,6 +474,9 @@ def list_entries():
             "customer_name": le.customer_name,
             "paid": float(le.paid or 0),
             "balance": float(le.balance or 0),
+             "invoice_url": f"/api/files/invoices/{le.invoice_filename}" if le.invoice_filename else None,
+            "invoice_original_name": le.invoice_original_name,
+            "invoice_mimetype": le.invoice_mimetype,
             "_type": "ledger",
             "created_at": le.created_at.isoformat() if le.created_at else None,
         })
@@ -531,7 +554,9 @@ def update_entry(entry_id):
     if not entry:
         ledger = MedTechLedger.query.get(entry_id)
         if ledger:
-            if request.is_json:
+            if _is_multipart():
+                data = request.form
+            elif request.is_json:
                 data = request.get_json(silent=True) or {}
             else:
                 data = request.form
@@ -559,6 +584,25 @@ def update_entry(entry_id):
             ledger.balance = ledger.total_amount - ledger.paid
             if "remarks" in data:
                 ledger.remarks = data["remarks"]
+
+            # ✅ Handle invoice replace / removal
+            if _is_multipart():
+                invoice_file = request.files.get("invoice")
+                if invoice_file and invoice_file.filename:
+                    try:
+                        new_path, new_original, new_mimetype = save_invoice_file(invoice_file, DEPARTMENT)
+                    except ValueError as e:
+                        return jsonify({"message": str(e)}), 400
+                    delete_invoice_file(ledger.invoice_filename)
+                    ledger.invoice_filename = new_path
+                    ledger.invoice_original_name = new_original
+                    ledger.invoice_mimetype = new_mimetype
+
+            if data.get("remove_invoice") == "true":
+                delete_invoice_file(ledger.invoice_filename)
+                ledger.invoice_filename = None
+                ledger.invoice_original_name = None
+                ledger.invoice_mimetype = None
 
             try:
                 db.session.commit()
@@ -741,6 +785,7 @@ def delete_entry(entry_id):
 
     ledger = MedTechLedger.query.get(entry_id)
     if ledger:
+        delete_invoice_file(ledger.invoice_filename)
         db.session.delete(ledger)
         db.session.commit()
         return jsonify({"message": "Ledger entry deleted."}), 200

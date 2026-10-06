@@ -1,3 +1,4 @@
+// frontend/src/components/FinanceTable.jsx
 import React from "react";
 import toast from "react-hot-toast";
 import { Pencil, Trash2, FileText, Eye } from "lucide-react";
@@ -13,43 +14,38 @@ const formatCurrency = (value) => {
   }).format(number);
 };
 
+// api.defaults.baseURL is like "http://localhost:5001/api" or "https://.../api".
+// We want the origin WITHOUT the trailing "/api" so we can prefix relative URLs.
 const getApiOrigin = () => {
   const base = api.defaults.baseURL || "";
   return base.replace(/\/api\/?$/, "").replace(/\/$/, "");
 };
 
-const handleViewInvoice = async (entry) => {
-  try {
-    if (!entry?.invoice_url) {
-      toast.error("Invoice file not found.");
-      return;
-    }
+// ✅ Open invoice in a new tab using the backend URL directly (no blob, no CORS).
+const handleViewInvoice = (entry) => {
+  if (!entry?.invoice_url) {
+    toast.error("Invoice file not found.");
+    return;
+  }
 
-    let fullUrl = entry.invoice_url;
-    if (!fullUrl.startsWith("http://") && !fullUrl.startsWith("https://")) {
-      const origin = getApiOrigin() || window.location.origin;
-      fullUrl = `${origin}${fullUrl}`;
-    }
+  // Build the absolute URL. Relative URLs (e.g. "/api/files/invoices/x.pdf")
+  // get prefixed with the backend origin.
+  let url = entry.invoice_url;
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    const origin = getApiOrigin() || window.location.origin;
+    url = `${origin}${url}`;
+  }
 
-    const response = await api.get(fullUrl, { responseType: "blob" });
+  // Attach JWT as a query param — a new tab can't send headers.
+  const token = localStorage.getItem("token") || "";
+  const sep = url.includes("?") ? "&" : "?";
+  const finalUrl = token
+    ? `${url}${sep}token=${encodeURIComponent(token)}`
+    : url;
 
-    const contentType = response.headers["content-type"] || "application/pdf";
-    const blob = new Blob([response.data], { type: contentType });
-    const fileUrl = window.URL.createObjectURL(blob);
-
-    const newWindow = window.open(fileUrl, "_blank");
-    if (!newWindow) {
-      toast.error("Please allow pop-ups to view the invoice.");
-    }
-
-    setTimeout(() => window.URL.revokeObjectURL(fileUrl), 60000);
-  } catch (error) {
-    console.error("Invoice open error:", error);
-    const status = error.response?.status;
-    if (status === 401) toast.error("Session expired. Please login again.");
-    else if (status === 403) toast.error("You are not authorized to view this invoice.");
-    else if (status === 404) toast.error("Invoice file not found.");
-    else toast.error("Unable to open invoice.");
+  const newWindow = window.open(finalUrl, "_blank", "noopener,noreferrer");
+  if (!newWindow) {
+    toast.error("Please allow pop-ups to view the invoice.");
   }
 };
 
@@ -85,8 +81,8 @@ export default function FinanceTable({
   const showRevenueType       = entries.some((e) => e?.revenue_type);
   const showExecDepartment    = entries.some((e) => e?.exec_department);
   const showEmployeeName      = entries.some((e) => e?.employee_name);
-  const showVehicleType       = entries.some((e) => e?.vehicle_type);          // ✅ NEW
-  const showPurpose           = entries.some((e) => e?.purpose);               // ✅ NEW
+  const showVehicleType       = entries.some((e) => e?.vehicle_type);
+  const showPurpose           = entries.some((e) => e?.purpose);
   const showSalaryAmount      = entries.some(
     (e) => e?.salary_amount !== null && e?.salary_amount !== undefined
   );
@@ -117,8 +113,8 @@ export default function FinanceTable({
             {showRevenueType && <th>Revenue Type</th>}
             {showExecDepartment && <th>Exec Dept</th>}
             {showEmployeeName && <th>Employee</th>}
-            {showVehicleType && <th>Vehicle Type</th>}              {/* ✅ NEW */}
-            {showPurpose && <th>Purpose</th>}                        {/* ✅ NEW */}
+            {showVehicleType && <th>Vehicle Type</th>}
+            {showPurpose && <th>Purpose</th>}
             {showSalaryAmount && <th className="text-right">Salary</th>}
             {showAllowanceAmount && <th className="text-right">Allowance</th>}
             {showTeam && <th>Team</th>}
@@ -184,7 +180,7 @@ export default function FinanceTable({
                 {showRevenueType && <td>{entry.revenue_type || "—"}</td>}
                 {showExecDepartment && <td>{entry.exec_department || "—"}</td>}
                 {showEmployeeName && <td>{entry.employee_name || "—"}</td>}
-                {showVehicleType && <td>{entry.vehicle_type || "—"}</td>}   {/* ✅ NEW */}
+                {showVehicleType && <td>{entry.vehicle_type || "—"}</td>}
                 {showPurpose && (
                   <td
                     style={{
@@ -196,7 +192,7 @@ export default function FinanceTable({
                   >
                     {entry.purpose || "—"}
                   </td>
-                )}                                                          {/* ✅ NEW */}
+                )}
                 {showSalaryAmount && (
                   <td className="text-right">
                     {formatCurrency(entry.salary_amount)}
