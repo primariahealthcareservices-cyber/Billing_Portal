@@ -178,7 +178,6 @@ def create_entry():
 
     entry_type = data.get("entry_type")
 
-    # ====================== CAPITAL ENTRY ======================
     if entry_type == "Capital":
         errors = []
         capital_category = (data.get("capital_category") or data.get("fund_category") or "").strip()
@@ -223,7 +222,6 @@ def create_entry():
         db.session.commit()
         return jsonify({"message": "Capital entry created.", "entry": entry.to_dict()}), 201
 
-    # ====================== INCOME / EXPENSES ======================
     resolved_category = _resolve_category(data)
     entry_date = _parse_date(data.get("entry_date"))
     amount_raw = data.get("amount")
@@ -301,7 +299,6 @@ def update_entry(entry_id):
 
     data = request.get_json(silent=True) or {}
 
-    # ====================== CAPITAL UPDATE ======================
     if entry.entry_type == "Capital":
         errors = []
         capital_category = (
@@ -349,7 +346,6 @@ def update_entry(entry_id):
         db.session.commit()
         return jsonify({"message": "Capital entry updated.", "entry": entry.to_dict()}), 200
 
-    # ====================== INCOME / EXPENSES UPDATE ======================
     if "entry_type" in data:
         if data["entry_type"] not in ENTRY_TYPES:
             return jsonify({"message": "Invalid entry_type."}), 400

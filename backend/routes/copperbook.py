@@ -2,11 +2,12 @@
 import os
 import json
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 
 from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy import or_, func
 
 from models import db, User, Notification
 from models_copperbook import (
@@ -319,7 +320,7 @@ def intake():
 
 
 # ─────────────────────────────────────────────────────────────────
-# LIST
+# LIST — supports status, scope, payroll, date range, and search
 # ─────────────────────────────────────────────────────────────────
 @cb_bp.route("/list", methods=["GET", "OPTIONS"])
 @jwt_required()
@@ -330,6 +331,9 @@ def list_all():
     status = request.args.get("status")
     scope = request.args.get("scope", "finance")
     payroll_only = request.args.get("payroll") == "1"
+    start_date_str = (request.args.get("start_date") or "").strip()
+    end_date_str = (request.args.get("end_date") or "").strip()
+    search = (request.args.get("search") or "").strip()
     page = max(1, request.args.get("page", 1, type=int))
     per_page = min(100, max(1, request.args.get("per_page", 25, type=int)))
 
@@ -341,6 +345,31 @@ def list_all():
     if payroll_only:
         q = q.filter(CopperBookRequest.is_payroll == True)  # noqa: E712
 
+    # ── Date range filter ─────────────────────────────────────────
+    if start_date_str:
+        try:
+            sd = datetime.strptime(start_date_str, "%Y-%m-%d")
+            q = q.filter(CopperBookRequest.created_at >= sd)
+        except ValueError:
+            pass
+    if end_date_str:
+        try:
+            ed = datetime.strptime(end_date_str, "%Y-%m-%d") + timedelta(days=1)
+            q = q.filter(CopperBookRequest.created_at < ed)
+        except ValueError:
+            pass
+
+    # ── Search filter ─────────────────────────────────────────────
+    if search:
+        like = f"%{search}%"
+        q = q.filter(or_(
+            CopperBookRequest.request_number.ilike(like),
+            CopperBookRequest.department.ilike(like),
+            CopperBookRequest.purpose.ilike(like),
+            CopperBookRequest.description.ilike(like),
+            CopperBookRequest.raised_by_name.ilike(like),
+        ))
+
     total = q.count()
     rows = (
         q.order_by(CopperBookRequest.created_at.desc())
@@ -350,8 +379,10 @@ def list_all():
     )
     return jsonify({
         "requests": [_serialize(r) for r in rows],
-        "pagination": {"page": page, "per_page": per_page, "total": total,
-                       "pages": (total + per_page - 1) // per_page},
+        "pagination": {
+            "page": page, "per_page": per_page, "total": total,
+            "pages": (total + per_page - 1) // per_page,
+        },
     }), 200
 
 
@@ -402,7 +433,6 @@ def finance_action(rid):
 
     _sync_to_staffportal(r)
 
-    # Notify the Finance/Corporate team a decision was made
     verb = {"approve": "approved", "reject": "rejected", "forward_to_ceo": "forwarded to the CEO"}[action]
     _notify_role_async(
         ["SuperAdmin", "Corporate"],
@@ -419,9 +449,7 @@ def finance_action(rid):
             "Action On": datetime.utcnow().strftime("%d %b %Y, %I:%M %p UTC"),
             **({"Remarks": remarks} if remarks else {}),
         },
-        email_message=(
-            "This is a system notification. No action is required from your side."
-        ),
+        email_message="This is a system notification. No action is required from your side.",
         email_closing="Best regards,\n" + BRAND,
     )
 

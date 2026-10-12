@@ -4,7 +4,7 @@ from datetime import datetime, date
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import get_jwt_identity
 
-from models import db, FinanceEntry, ENTRY_TYPES, DEPARTMENT_CONFIG
+from models import db, FinanceEntry, ENTRY_TYPES, DEPARTMENT_CONFIG, SALARY_CATEGORY
 from utils import role_required
 
 DEPARTMENT = "Adminstrationfunctionalunit"
@@ -59,7 +59,7 @@ def options():
         "show_gst_number": CONFIG["show_gst_number"],
         "show_items": CONFIG["show_items"],
         "show_invoice": CONFIG["show_invoice"],
-        "is_salary_category": CONFIG.get("is_salary_category"),
+        "is_salary_category": SALARY_CATEGORY,
         "capital_categories": list(CAPITAL_CATEGORIES),
     }), 200
 
@@ -103,7 +103,7 @@ def create_entry():
             entry_type="Capital",
             category=capital_category,
             sub_category="Capital",
-            fund_category=capital_category,  # reuse existing column
+            fund_category=capital_category,
             client_name=client_name,
             amount=amount,
             purpose=purpose,
@@ -128,11 +128,10 @@ def create_entry():
 
     errors = []
 
-    salary_category = CONFIG.get("is_salary_category")
-    if entry_type == "Expenses" and category == salary_category:
+    if entry_type == "Expenses" and category == SALARY_CATEGORY:
         return jsonify({
             "message": "Salary must be entered by Corporate Management only.",
-            "errors": ["Personnel & Payroll entries are not allowed in Office Administration."]
+            "errors": ["Salary & Payrolls entries are not allowed in Office Administration."]
         }), 403
 
     if entry_type not in ENTRY_TYPES:

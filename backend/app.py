@@ -6,7 +6,7 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 
 from config import Config
-from models import db, migrate_corporate_categories, migrate_everglades_categories
+from models import db, ensure_schema_columns, migrate_all_categories
 
 
 def create_app():
@@ -18,9 +18,14 @@ def create_app():
     db.init_app(app)
 
     # ── Data migrations (must run inside app context) ───────────────────
+    #   1. ensure_schema_columns()  → adds any missing DB columns
+    #      (fixes "Unknown column" errors caused by db.create_all() never
+    #       altering existing tables)
+    #   2. migrate_all_categories() → rewrites legacy category names
+    #      to the standardized 9 categories. Fail-safe — never blocks boot.
     with app.app_context():
-        migrate_corporate_categories()
-        migrate_everglades_categories()
+        ensure_schema_columns()
+        migrate_all_categories()
 
     JWTManager(app)
 

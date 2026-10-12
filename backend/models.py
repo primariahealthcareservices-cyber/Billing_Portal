@@ -12,41 +12,47 @@ ROLES = [
     "ResearchDevelopment", "Dental", "SalesEnterprise", "Everglades",
 ]
 
-# Master list — used by superadmin/validation code that doesn't care about dept-level filtering
-# Master list — used by superadmin/validation code that doesn't care about dept-level filtering
 ENTRY_TYPES = ["Income", "Expenses", "Capital"]
+
+# ---------- STANDARD CATEGORIES (used by ALL departments for Income & Expenses) ----------
+STANDARD_CATEGORIES = [
+    "Salary & Payrolls",
+    "Corpus Fund",
+    "Referrals & Deposits",
+    "Products & Innovation",
+    "General Operations",
+    "Camps & Events",
+    "Marketing & Promos",
+    "Travel & Hospitality",
+    "Miscellaneous",
+]
+
+CAPITAL_CATEGORIES = [
+    "Equity Infusion",
+    "Partner Contribution",
+    "Asset Capitalization",
+    "Reserve Fund Transfer",
+    "Other Capital",
+]
+
+SALARY_CATEGORY = "Salary & Payrolls"
+
+
+def _build_categories():
+    """Return a fresh dict of {Income, Expenses, Capital} lists."""
+    return {
+        "Income": list(STANDARD_CATEGORIES),
+        "Expenses": list(STANDARD_CATEGORIES),
+        "Capital": list(CAPITAL_CATEGORIES),
+    }
+
 
 # ---------- DEPARTMENT_CONFIG ----------
 DEPARTMENT_CONFIG = {
     # =================== IT ===================
     "IT": {
         "entry_types": ["Income", "Expenses", "Capital"],
-        "categories": {
-            "Income": ["Web Services", "Portal Services", "Corpus Fund", "Others"],
-            "Expenses": [
-                "Personnel & Payroll",
-                "Travel & Entertainment (T&E)",
-                "Marketing",
-                "Supplies & Equipments",
-                "Facilities & Overhead",
-                "General Operations",
-                "Innovation",
-                "Guest Concierge",
-                "Business Services Revenue",
-                "Miscellaneous",
-                "Outsourced Services",
-                "Events-Conferences-Training",
-                "Corpus Fund",
-                "Other"
-            ],
-            "Capital": [
-                "Equity Infusion",
-                "Partner Contribution",
-                "Asset Capitalization",
-                "Reserve Fund Transfer",
-                "Other Capital"
-            ],
-        },
+        "categories": _build_categories(),
         "revenue_types": ["Subscription", "One-Time", "Renewal", "Maintenance", "Other"],
         "show_generated_by": True,
         "show_revenue_type": True,
@@ -63,55 +69,14 @@ DEPARTMENT_CONFIG = {
     # =================== IT Sales ===================
     "IT Sales": {
         "entry_types": ["Income", "Expenses", "Capital"],
-        "categories": {
-            "Income": [
-                "Professional Services & Implementation",
-                "Software Licenses & SaaS Subscriptions",
-                "Managed Services & Support (MSP)",
-                "Hardware & Infrastructure Reselling",
-                "Hardware Sales",
-                "Consulting",
-                "Support & Maintenance",
-                "Internal allocations",
-                "Business Services Revenue",
-                "Corpus Fund",
-                "Others"
-            ],
-            "Expenses": [
-                "Personnel & Payroll",
-                "Sales Enablement & Tech Stack",
-                "Legal/Administrative Expenses",
-                "Outsourced Services",
-                "Facilities & Overhead",
-                "Travel & Entertainment (T&E)",
-                "Marketing",
-                "Supplies & Equipments",
-                "Guest Concierge",
-                "Events-Conferences-Training",
-                "Business Services Revenue",
-                "Miscellaneous",
-                "General Operations",
-                "Innovation",
-                "Consulting",
-                "Management Fees",
-                "Corpus Fund",
-                "Other"
-            ],
-            "Capital": [
-                "Equity Infusion",
-                "Partner Contribution",
-                "Asset Capitalization",
-                "Reserve Fund Transfer",
-                "Other Capital"
-            ],
-        },
+        "categories": _build_categories(),
         "revenue_types": ["Direct", "Recurring", "Project-based"],
         "show_generated_by": True,
         "show_revenue_type": True,
         "show_patient_fields": False,
         "show_client_name": True,
         "show_gst_number": True,
-        "gst_required_categories": ["Hardware Sales", "Hardware & Infrastructure Reselling"],
+        "gst_required_categories": ["Products & Innovation"],
         "show_items": False,
         "show_invoice": True,
         "show_gst_tax": True,
@@ -121,44 +86,7 @@ DEPARTMENT_CONFIG = {
     # =================== Dental ===================
     "Dental": {
         "entry_types": ["Income", "Expenses", "Capital"],
-        "categories": {
-            "Income": [
-                "Dental Operations",
-                "Doctor Consultation",
-                "Clinical Procedures",
-                "Diagnostics & X-Ray",
-                "Corpus Fund",
-                "Other",
-            ],
-            "Expenses": [
-                "Payroll Salaries",
-                "Personnel & Payroll",
-                "Travel & Entertainment (T&E)",
-                "Marketing",
-                "Dental Supplies & Consumables",
-                "Equipment Purchase & Maintenance",
-                "Lab Fees & Prosthetics",
-                "Facilities & Overhead",
-                "General Operations",
-                "Innovation",
-                "Guest Concierge",
-                "Business Services Revenue",
-                "Miscellaneous",
-                "Outsourced Services",
-                "Events-Conferences-Training",
-                "Consulting",
-                "Management Fees",
-                "Corpus Fund",
-                "Other",
-            ],
-            "Capital": [
-                "Equity Infusion",
-                "Partner Contribution",
-                "Asset Capitalization",
-                "Reserve Fund Transfer",
-                "Other Capital"
-            ],
-        },
+        "categories": _build_categories(),
         "revenue_types": [],
         "show_generated_by": True,
         "show_revenue_type": False,
@@ -170,43 +98,14 @@ DEPARTMENT_CONFIG = {
         "show_invoice": False,
         "show_gst_tax": False,
         "show_tax_invoice_number": False,
-        "is_salary_category": "Payroll Salaries",
+        "is_salary_category": SALARY_CATEGORY,
         "exec_departments": ["Dental"],
     },
 
     # =================== Caredx ===================
     "Caredx": {
         "entry_types": ["Income", "Expenses", "Capital"],
-        "categories": {
-            "Income": ["Lab", "Camp", "Walkin/Person", "Referral", "Corpus Fund"],
-            "Expenses": [
-                "Personnel & Payroll",
-                "Travel & Entertainment (T&E)",
-                "Marketing",
-                "Supplies & Equipments",
-                "Facilities & Overhead",
-                "Innovation",
-                "Guest Concierge",
-                "Events-Conferences-Training",
-                "Business Services Revenue",
-                "Miscellaneous",
-                "Outsourced Services",
-                "Lab Consumables",
-                "Clinical Overhead",
-                "Specimen Collection",
-                "Equipment Maintenance",
-                "Waste Management",
-                "Billing Administration",
-                "Corpus Fund",
-            ],
-            "Capital": [
-                "Equity Infusion",
-                "Partner Contribution",
-                "Asset Capitalization",
-                "Reserve Fund Transfer",
-                "Other Capital"
-            ],
-        },
+        "categories": _build_categories(),
         "revenue_types": ["Direct", "Recurring"],
         "show_generated_by": False,
         "show_revenue_type": True,
@@ -223,37 +122,7 @@ DEPARTMENT_CONFIG = {
     # =================== PCM ===================
     "PCM": {
         "entry_types": ["Income", "Expenses", "Capital"],
-        "categories": {
-            "Income": [
-                "Field Labour and Nursing Care",
-                "Digital Health",
-                "Equipment & Supplies",
-                "Back Office Logistics",
-                "Corpus Fund"
-            ],
-            "Expenses": [
-                "Personnel & Payroll",
-                "Outsourced Services",
-                "Facilities & Overhead",
-                "Marketing",
-                "Guest Concierge",
-                "Events-Conferences-Training",
-                "Business Services Revenue",
-                "Miscellaneous",
-                "General Operations",
-                "Innovation",
-                "Supplies & Equipment",
-                "Corpus Fund",
-                "Other"
-            ],
-            "Capital": [
-                "Equity Infusion",
-                "Partner Contribution",
-                "Asset Capitalization",
-                "Reserve Fund Transfer",
-                "Other Capital"
-            ],
-        },
+        "categories": _build_categories(),
         "revenue_types": [],
         "show_generated_by": False,
         "show_revenue_type": False,
@@ -270,35 +139,7 @@ DEPARTMENT_CONFIG = {
     # =================== MedTech ===================
     "MedTech": {
         "entry_types": ["Income", "Expenses", "Capital"],
-        "categories": {
-            "Income": ["B2B Revenue", "B2C Revenue", "Business Services Revenue", "Goodwill", "Corpus Fund"],
-            "Expenses": [
-                "Personnel & Payroll",
-                "Travel & Entertainment (T&E)",
-                "Marketing",
-                "Supplies & Equipments",
-                "Wholesales",
-                "Facilities & Overhead",
-                "General Operations",
-                "Innovation",
-                "Guest Concierge",
-                "Business Services Revenue",
-                "Miscellaneous",
-                "Outsourced Services",
-                "Events-Conferences-Training",
-                "Ledger",
-                "Goodwill",
-                "Corpus Fund",
-                "Other"
-            ],
-            "Capital": [
-                "Equity Infusion",
-                "Partner Contribution",
-                "Asset Capitalization",
-                "Reserve Fund Transfer",
-                "Other Capital"
-            ],
-        },
+        "categories": _build_categories(),
         "revenue_types": ["Direct", "Recurring"],
         "show_generated_by": True,
         "show_revenue_type": True,
@@ -315,51 +156,7 @@ DEPARTMENT_CONFIG = {
     # =================== Everglades (Pharmacy) ===================
     "Everglades": {
         "entry_types": ["Income", "Expenses", "Capital"],
-        "categories": {
-            "Income": [
-                "Prescription Sales",
-                "OTC Sales",
-                "Insurance Claims",
-                "Consultation Fees",
-                "Health Screenings",
-                "Vaccinations",
-                "Home Delivery",
-                "Loyalty & Subscription Revenue",
-                "B2B Wholesale",
-                "Business Services Revenue",
-                "Goodwill",
-                "Corpus Fund",
-                "Other",
-            ],
-            "Expenses": [
-                "Personnel & Payroll",
-                "Travel & Entertainment (T&E)",
-                "Marketing",
-                "Pharmaceuticals & Inventory",
-                "Supplies & Equipments",
-                "Facilities & Overhead",
-                "General Operations",
-                "Innovation",
-                "Guest Concierge",
-                "Business Services Revenue",
-                "Miscellaneous",
-                "Outsourced Services",
-                "Events-Conferences-Training",
-                "Consulting",
-                "Management Fees",
-                "Ledger",
-                "Goodwill",
-                "Corpus Fund",
-                "Other",
-            ],
-            "Capital": [
-                "Equity Infusion",
-                "Partner Contribution",
-                "Asset Capitalization",
-                "Reserve Fund Transfer",
-                "Other Capital"
-            ],
-        },
+        "categories": _build_categories(),
         "revenue_types": ["Direct", "Recurring", "Insurance"],
         "show_generated_by": True,
         "show_revenue_type": True,
@@ -376,37 +173,7 @@ DEPARTMENT_CONFIG = {
     # =================== Corporate ===================
     "Corporate": {
         "entry_types": ["Income", "Expenses", "Capital"],
-        "categories": {
-            "Income": [
-                "Consulting",
-                "Management Fees",
-                "Corpus Fund",
-                "Other"
-            ],
-            "Expenses": [
-                "Personnel & Payroll",
-                "Travel & Entertainment (T&E)",
-                "Marketing",
-                "Facilities & Overhead",
-                "General Operations",
-                "Innovation",
-                "Supplies and Equipments",
-                "Legal Governance",
-                "Guest Concierge",
-                "Business Services Revenue",
-                "Miscellaneous",
-                "Outsourced Services",
-                "Events-Conferences-Training",
-                "Corpus Fund"
-            ],
-            "Capital": [
-                "Equity Infusion",
-                "Partner Contribution",
-                "Asset Capitalization",
-                "Reserve Fund Transfer",
-                "Other Capital"
-            ]
-        },
+        "categories": _build_categories(),
         "revenue_types": [],
         "show_generated_by": True,
         "show_revenue_type": False,
@@ -418,7 +185,7 @@ DEPARTMENT_CONFIG = {
         "show_invoice": False,
         "show_gst_tax": False,
         "show_tax_invoice_number": False,
-        "is_salary_category": "Personnel & Payroll",
+        "is_salary_category": SALARY_CATEGORY,
         "exec_departments": [
             "Corporate", "Caredx", "MedTech", "IT", "IT Sales",
             "PCM", "Dental", "Adminstrationfunctionalunit", "Everglades"
@@ -428,33 +195,7 @@ DEPARTMENT_CONFIG = {
     # =================== Office Administration ===================
     "Adminstrationfunctionalunit": {
         "entry_types": ["Income", "Expenses", "Capital"],
-        "categories": {
-            "Income": ["Other"],
-            "Expenses": [
-                "Personnel & Payroll",
-                "Travel & Entertainment (T&E)",
-                "Marketing",
-                "Facilities & Overhead",
-                "General Operations",
-                "Innovation",
-                "Supplies & Equipment",
-                "Guest Concierge",
-                "Business Services Revenue",
-                "Miscellaneous",
-                "Management Fees",
-                "Outsourced Services",
-                "Events-Conferences-Training",
-                "Corpus Fund",
-                "Other"
-            ],
-            "Capital": [
-                "Equity Infusion",
-                "Partner Contribution",
-                "Asset Capitalization",
-                "Reserve Fund Transfer",
-                "Other Capital"
-            ],
-        },
+        "categories": _build_categories(),
         "revenue_types": [],
         "show_generated_by": True,
         "show_revenue_type": False,
@@ -466,30 +207,13 @@ DEPARTMENT_CONFIG = {
         "show_invoice": False,
         "show_gst_tax": False,
         "show_tax_invoice_number": False,
-        "is_salary_category": "Personnel & Payroll",
+        "is_salary_category": SALARY_CATEGORY,
     },
 
     # =================== Research & Development ===================
     "ResearchDevelopment": {
         "entry_types": ["Income", "Expenses", "Capital"],
-        "categories": {
-            "Income": ["Grants", "Funding", "Other"],
-            "Expenses": [
-                "R&D Salaries",
-                "Lab Supplies",
-                "Equipment",
-                "Testing",
-                "Corpus Fund",
-                "Other"
-            ],
-            "Capital": [
-                "Equity Infusion",
-                "Partner Contribution",
-                "Asset Capitalization",
-                "Reserve Fund Transfer",
-                "Other Capital"
-            ],
-        },
+        "categories": _build_categories(),
         "revenue_types": [],
         "show_generated_by": True,
         "show_revenue_type": False,
@@ -506,6 +230,7 @@ DEPARTMENT_CONFIG = {
 
 VALID_DEPARTMENTS = list(DEPARTMENT_CONFIG.keys())
 
+
 # ---------- User model ----------
 class User(db.Model):
     __tablename__ = "users"
@@ -516,7 +241,7 @@ class User(db.Model):
     role = db.Column(db.String(50), nullable=False)
     department = db.Column(db.String(100), nullable=True)
     is_active = db.Column(db.Boolean, default=True)
-    temp_otp = db.Column(db.String(10), nullable=True) 
+    temp_otp = db.Column(db.String(10), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     entries = db.relationship("FinanceEntry", backref="creator", lazy=True)
 
@@ -567,9 +292,7 @@ class FinanceEntry(db.Model):
 
     vehicle_type = db.Column(db.String(100), nullable=True)
     purpose = db.Column(db.Text, nullable=True)
-
     team = db.Column(db.String(100), nullable=True)
-
     remarks = db.Column(db.Text, nullable=True)
 
     invoice_filename = db.Column(db.String(255), nullable=True)
@@ -577,7 +300,6 @@ class FinanceEntry(db.Model):
     invoice_mimetype = db.Column(db.String(100), nullable=True)
 
     entry_date = db.Column(db.Date, nullable=False)
-
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -585,11 +307,8 @@ class FinanceEntry(db.Model):
     extra_data = db.Column(db.JSON, nullable=True)
 
     items = db.relationship(
-        "FinanceEntryItem",
-        backref="entry",
-        lazy=True,
-        cascade="all, delete-orphan",
-        order_by="FinanceEntryItem.id",
+        "FinanceEntryItem", backref="entry", lazy=True,
+        cascade="all, delete-orphan", order_by="FinanceEntryItem.id",
     )
 
     def to_dict(self):
@@ -654,7 +373,6 @@ class FinanceEntryItem(db.Model):
 # ---------- MedTechLedger model ----------
 class MedTechLedger(db.Model):
     __tablename__ = "medtech_ledger"
-
     id = db.Column(db.Integer, primary_key=True)
     customer_name = db.Column(db.String(150), nullable=False)
     entry_date = db.Column(db.Date, nullable=False)
@@ -665,8 +383,6 @@ class MedTechLedger(db.Model):
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # ✅ NEW — invoice
     invoice_filename = db.Column(db.String(255), nullable=True)
     invoice_original_name = db.Column(db.String(255), nullable=True)
     invoice_mimetype = db.Column(db.String(100), nullable=True)
@@ -690,7 +406,6 @@ class MedTechLedger(db.Model):
 # ---------- EvergladesLedger model ----------
 class EvergladesLedger(db.Model):
     __tablename__ = "everglades_ledger"
-
     id = db.Column(db.Integer, primary_key=True)
     customer_name = db.Column(db.String(150), nullable=False)
     entry_date = db.Column(db.Date, nullable=False)
@@ -701,8 +416,6 @@ class EvergladesLedger(db.Model):
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # ✅ NEW — invoice
     invoice_filename = db.Column(db.String(255), nullable=True)
     invoice_original_name = db.Column(db.String(255), nullable=True)
     invoice_mimetype = db.Column(db.String(100), nullable=True)
@@ -846,295 +559,9 @@ class SalesEnterpriseKPI(db.Model):
         }
 
 
-# ---------- Migration functions ----------
-def migrate_corporate_categories():
-    """Rename existing Corporate entries from old category names to new ones."""
-    from sqlalchemy import update
-    category_map = {
-        "Payroll Salaries": "Personnel & Payroll",
-        "Travel & Entertainment": "Travel & Entertainment (T&E)",
-        "Marketing Expenses": "Marketing",
-        "Assets & Infra Cost": "Office Supplies & Equipment",
-        "Office Management": "Facilities & Overhead",
-        "Service Revenue": "Business Services Revenue",
-        "Miscellaneous Categories": "Miscellaneous",
-    }
-    migrated = 0
-    for old, new in category_map.items():
-        count = db.session.query(FinanceEntry).filter(
-            FinanceEntry.department == "Corporate",
-            FinanceEntry.category == old
-        ).count()
-        if count > 0:
-            stmt = update(FinanceEntry).where(
-                FinanceEntry.department == "Corporate",
-                FinanceEntry.category == old
-            ).values(category=new)
-            db.session.execute(stmt)
-            print(f"✅ Migrated {count} entries from '{old}' to '{new}'")
-            migrated += count
-    if migrated > 0:
-        db.session.commit()
-        print(f"✅ Corporate category migration complete ({migrated} entries updated).")
-    else:
-        print("ℹ️ No Corporate category migration needed.")
-
-
-def migrate_office_admin_categories():
-    """Rename existing Office Admin entries from old category names to new ones."""
-    from sqlalchemy import update
-    category_map = {
-        "Travel & Entertainment": "Travel & Entertainment (T&E)",
-        "Marketing Expenses": "Marketing",
-        "Assets & Infra Cost": "Office Supplies & Equipment",
-        "Office Management": "Facilities & Overhead",
-        "Service Revenue": "Business Services Revenue",
-        "Miscellaneous Categories": "Miscellaneous",
-        "Legal Governance": "Miscellaneous",
-        "Supplies and Equipments": "Supplies & Equipment",
-    }
-    migrated = 0
-    for old, new in category_map.items():
-        count = db.session.query(FinanceEntry).filter(
-            FinanceEntry.department == "Adminstrationfunctionalunit",
-            FinanceEntry.category == old
-        ).count()
-        if count > 0:
-            stmt = update(FinanceEntry).where(
-                FinanceEntry.department == "Adminstrationfunctionalunit",
-                FinanceEntry.category == old
-            ).values(category=new)
-            db.session.execute(stmt)
-            print(f"✅ Migrated {count} entries from '{old}' to '{new}'")
-            migrated += count
-    if migrated > 0:
-        db.session.commit()
-        print(f"✅ Office Admin category migration complete ({migrated} entries updated).")
-    else:
-        print("ℹ️ No Office Admin category migration needed.")
-
-
-def migrate_caredx_expense_categories():
-    """Rename existing Caredx Expense entries from old category names to new ones."""
-    from sqlalchemy import update
-    category_map = {
-        "Payroll Salaries": "Personnel & Payroll",
-        "Travel & Entertainment": "Travel & Entertainment (T&E)",
-        "Marketing Expenses": "Marketing",
-        "Assets & Infra Cost": "Supplies & Equipments",
-        "Office Management": "Facilities & Overhead",
-        "Service Revenue": "Business Services Revenue",
-        "Miscellaneous Categories": "Miscellaneous",
-        "Reagents and Laboratory Consumables": "Lab Consumables",
-        "Specialized Clinical Labor": "Clinical Overhead",
-        "Logistics, Couriers, and Specimen Collection": "Specimen Collection",
-        "Equipment Maintenance, Leases, and Automation": "Equipment Maintenance",
-        "Waste Management, Compliance, and Safety": "Waste Management",
-        "Billing, Revenue Cycle, and Administration": "Billing Administration",
-        "Legal Governance": "Miscellaneous",
-        "General Operations": "Miscellaneous",
-    }
-    migrated = 0
-    for old, new in category_map.items():
-        count = db.session.query(CaredxExpense).filter(
-            CaredxExpense.category == old
-        ).count()
-        if count > 0:
-            stmt = update(CaredxExpense).where(
-                CaredxExpense.category == old
-            ).values(category=new)
-            db.session.execute(stmt)
-            print(f"✅ Migrated {count} Caredx expense entries from '{old}' to '{new}'")
-            migrated += count
-    if migrated > 0:
-        db.session.commit()
-        print(f"✅ Caredx expense category migration complete ({migrated} entries updated).")
-    else:
-        print("ℹ️ No Caredx expense category migration needed.")
-
-
-def migrate_it_categories():
-    """Rename existing IT entries from old category names to new ones."""
-    from sqlalchemy import update
-    category_map = {
-        "Payroll Salaries": "Personnel & Payroll",
-        "Travel & Entertainment": "Travel & Entertainment (T&E)",
-        "Marketing Expenses": "Marketing",
-        "Assets & Infra Cost": "Supplies & Equipments",
-        "Office Management": "Facilities & Overhead",
-        "Service Revenue": "Business Services Revenue",
-        "Miscellaneous Categories": "Miscellaneous",
-        "Legal Governance": "Miscellaneous",
-        "Supplies and Equipments": "Supplies & Equipments",
-    }
-    migrated = 0
-    for old, new in category_map.items():
-        count = db.session.query(FinanceEntry).filter(
-            FinanceEntry.department == "IT",
-            FinanceEntry.category == old
-        ).count()
-        if count > 0:
-            stmt = update(FinanceEntry).where(
-                FinanceEntry.department == "IT",
-                FinanceEntry.category == old
-            ).values(category=new)
-            db.session.execute(stmt)
-            print(f"✅ Migrated {count} IT entries from '{old}' to '{new}'")
-            migrated += count
-    if migrated > 0:
-        db.session.commit()
-        print(f"✅ IT category migration complete ({migrated} entries updated).")
-    else:
-        print("ℹ️ No IT category migration needed.")
-
-
-def migrate_itsales_categories():
-    """Rename existing IT Sales entries from old category names to new ones."""
-    from sqlalchemy import update
-    category_map = {
-        "Payroll Salaries": "Personnel & Payroll",
-        "Travel & Entertainment": "Travel & Entertainment (T&E)",
-        "Marketing Expenses": "Marketing",
-        "Assets & Infra Cost": "Supplies & Equipments",
-        "Office Management": "Facilities & Overhead",
-        "Service Revenue": "Business Services Revenue",
-        "Miscellaneous Categories": "Miscellaneous",
-        "Legal Governance": "Miscellaneous",
-    }
-    migrated = 0
-    for old, new in category_map.items():
-        count = db.session.query(FinanceEntry).filter(
-            FinanceEntry.department == "IT Sales",
-            FinanceEntry.category == old
-        ).count()
-        if count > 0:
-            stmt = update(FinanceEntry).where(
-                FinanceEntry.department == "IT Sales",
-                FinanceEntry.category == old
-            ).values(category=new)
-            db.session.execute(stmt)
-            print(f"✅ Migrated {count} IT Sales entries from '{old}' to '{new}'")
-            migrated += count
-    if migrated > 0:
-        db.session.commit()
-        print(f"✅ IT Sales category migration complete ({migrated} entries updated).")
-    else:
-        print("ℹ️ No IT Sales category migration needed.")
-
-
-def migrate_medtech_categories():
-    """Rename existing MedTech entries from old category names to new ones."""
-    from sqlalchemy import update
-    category_map = {
-        "Payroll Salaries": "Personnel & Payroll",
-        "Travel & Entertainment": "Travel & Entertainment (T&E)",
-        "Marketing Expenses": "Marketing",
-        "Assets & Infra Cost": "Supplies & Equipments",
-        "Office Management": "Facilities & Overhead",
-        "Service Revenue": "Business Services Revenue",
-        "Miscellaneous Categories": "Miscellaneous",
-        "Legal Governance": "Miscellaneous",
-    }
-    migrated = 0
-    for old, new in category_map.items():
-        count = db.session.query(FinanceEntry).filter(
-            FinanceEntry.department == "MedTech",
-            FinanceEntry.category == old
-        ).count()
-        if count > 0:
-            stmt = update(FinanceEntry).where(
-                FinanceEntry.department == "MedTech",
-                FinanceEntry.category == old
-            ).values(category=new)
-            db.session.execute(stmt)
-            print(f"✅ Migrated {count} MedTech entries from '{old}' to '{new}'")
-            migrated += count
-    if migrated > 0:
-        db.session.commit()
-        print(f"✅ MedTech category migration complete ({migrated} entries updated).")
-    else:
-        print("ℹ️ No MedTech category migration needed.")
-
-
-def migrate_pcm_categories():
-    """Rename existing PCM entries from old category names to new ones."""
-    from sqlalchemy import update
-    category_map = {
-        "Payroll Salaries": "Personnel & Payroll",
-        "Travel & Entertainment": "Miscellaneous",
-        "Marketing Expenses": "Marketing",
-        "Assets & Infra Cost": "Supplies & Equipment",
-        "Office Management": "Facilities & Overhead",
-        "Service Revenue": "Business Services Revenue",
-        "Miscellaneous Categories": "Miscellaneous",
-        "Legal Governance": "Miscellaneous",
-        "Office Supplies & Equipment": "Supplies & Equipment",
-        "Point-of-Care Technology and Telecom": "Digital Health",
-        "Home Medical Supplies and DME": "Equipment & Supplies",
-        "Intake, Scheduling, and Back-Office Logistics": "Back Office Logistics",
-        "Regulatory and Risk Management": "Miscellaneous",
-        "Supplies and Equipments": "Supplies & Equipment",
-        "Field Labor and Nursing Care": "Field Labour and Nursing Care",
-        "Travel and Mileage Reimbursement": "Back Office Logistics",
-    }
-    migrated = 0
-    for old, new in category_map.items():
-        count = db.session.query(FinanceEntry).filter(
-            FinanceEntry.department == "PCM",
-            FinanceEntry.category == old
-        ).count()
-        if count > 0:
-            stmt = update(FinanceEntry).where(
-                FinanceEntry.department == "PCM",
-                FinanceEntry.category == old
-            ).values(category=new)
-            db.session.execute(stmt)
-            print(f"✅ Migrated {count} PCM entries from '{old}' to '{new}'")
-            migrated += count
-    if migrated > 0:
-        db.session.commit()
-        print(f"✅ PCM category migration complete ({migrated} entries updated).")
-    else:
-        print("ℹ️ No PCM category migration needed.")
-
-
-def migrate_everglades_categories():
-    """Rename existing Everglades entries from old category names to new ones."""
-    from sqlalchemy import update
-    category_map = {
-        "Payroll Salaries": "Personnel & Payroll",
-        "Travel & Entertainment": "Travel & Entertainment (T&E)",
-        "Marketing Expenses": "Marketing",
-        "Assets & Infra Cost": "Supplies & Equipments",
-        "Office Management": "Facilities & Overhead",
-        "Service Revenue": "Business Services Revenue",
-        "Miscellaneous Categories": "Miscellaneous",
-        "Legal Governance": "Miscellaneous",
-    }
-    migrated = 0
-    for old, new in category_map.items():
-        count = db.session.query(FinanceEntry).filter(
-            FinanceEntry.department == "Everglades",
-            FinanceEntry.category == old
-        ).count()
-        if count > 0:
-            stmt = update(FinanceEntry).where(
-                FinanceEntry.department == "Everglades",
-                FinanceEntry.category == old
-            ).values(category=new)
-            db.session.execute(stmt)
-            print(f"✅ Migrated {count} Everglades entries from '{old}' to '{new}'")
-            migrated += count
-    if migrated > 0:
-        db.session.commit()
-        print(f"✅ Everglades category migration complete ({migrated} entries updated).")
-    else:
-        print("ℹ️ No Everglades category migration needed.")
-
-
+# ---------- Notification model ----------
 class Notification(db.Model):
     __tablename__ = "notifications"
-
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     message = db.Column(db.Text, nullable=False)
@@ -1144,3 +571,259 @@ class Notification(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship("User", backref="notifications")
+
+
+# ===========================================================================
+# SCHEMA SYNC — adds any missing columns to existing tables
+# ===========================================================================
+# db.create_all() only creates missing TABLES; it never ALTERs existing ones.
+# So when a new column is added to a model after the table already exists,
+# the DB stays missing that column and every SELECT fails with MySQL error 1054.
+#
+# ensure_schema_columns() reads information_schema and runs ALTER TABLE for any
+# missing column. It is idempotent and safe to run on every app start.
+# ===========================================================================
+
+def ensure_schema_columns():
+    """Add any missing columns to existing tables. MySQL-safe, idempotent."""
+    from sqlalchemy import text
+
+    # (table_name, column_name, column_ddl)
+    # Keep these DDLs aligned with the model definitions above.
+    required_columns = [
+        # --- users ---
+        ("users", "temp_otp", "VARCHAR(10) NULL"),
+
+        # --- finance_entries (newer optional fields) ---
+        ("finance_entries", "sub_category",           "VARCHAR(60) NULL"),
+        ("finance_entries", "fund_category",          "VARCHAR(50) NULL"),
+        ("finance_entries", "base_amount",            "DECIMAL(14,2) NULL"),
+        ("finance_entries", "gst_tax_percent",        "DECIMAL(5,2) NULL"),
+        ("finance_entries", "gst_tax_amount",         "DECIMAL(14,2) NULL DEFAULT 0"),
+        ("finance_entries", "tax_invoice_number",     "VARCHAR(50) NULL"),
+        ("finance_entries", "exec_department",        "VARCHAR(50) NULL"),
+        ("finance_entries", "employee_name",          "VARCHAR(150) NULL"),
+        ("finance_entries", "salary_amount",          "DECIMAL(14,2) NULL"),
+        ("finance_entries", "allowance_amount",       "DECIMAL(14,2) NULL"),
+        ("finance_entries", "vehicle_type",           "VARCHAR(100) NULL"),
+        ("finance_entries", "purpose",                "TEXT NULL"),
+        ("finance_entries", "team",                   "VARCHAR(100) NULL"),
+        ("finance_entries", "invoice_filename",       "VARCHAR(255) NULL"),
+        ("finance_entries", "invoice_original_name",  "VARCHAR(255) NULL"),
+        ("finance_entries", "invoice_mimetype",       "VARCHAR(100) NULL"),
+        ("finance_entries", "extra_data",             "JSON NULL"),
+
+        # --- caredx_expenses (newer fields) ---
+        ("caredx_expenses", "referral_amount", "DECIMAL(14,2) NOT NULL DEFAULT 0"),
+        ("caredx_expenses", "employee_name",   "VARCHAR(150) NULL"),
+        ("caredx_expenses", "purpose",         "TEXT NULL"),
+        ("caredx_expenses", "vehicle_type",    "VARCHAR(100) NULL"),
+
+        # --- caredx_lab_entries ---
+        ("caredx_lab_entries", "cash",               "DECIMAL(14,2) NOT NULL DEFAULT 0"),
+        ("caredx_lab_entries", "online",             "DECIMAL(14,2) NOT NULL DEFAULT 0"),
+        ("caredx_lab_entries", "paid_to_other_labs", "DECIMAL(14,2) NOT NULL DEFAULT 0"),
+        ("caredx_lab_entries", "rmp",                "DECIMAL(14,2) NOT NULL DEFAULT 0"),
+        ("caredx_lab_entries", "salaries_expense",   "DECIMAL(14,2) NOT NULL DEFAULT 0"),
+        ("caredx_lab_entries", "expense_details",    "TEXT NULL"),
+        ("caredx_lab_entries", "referral_by",        "VARCHAR(150) NULL"),
+        ("caredx_lab_entries", "referral_amount",    "DECIMAL(14,2) NOT NULL DEFAULT 0"),
+        ("caredx_lab_entries", "sales",              "DECIMAL(14,2) NOT NULL DEFAULT 0"),
+
+        # --- medtech_ledger (invoice fields) ---
+        ("medtech_ledger", "invoice_filename",      "VARCHAR(255) NULL"),
+        ("medtech_ledger", "invoice_original_name", "VARCHAR(255) NULL"),
+        ("medtech_ledger", "invoice_mimetype",      "VARCHAR(100) NULL"),
+
+        # --- everglades_ledger (invoice fields) ---
+        ("everglades_ledger", "invoice_filename",      "VARCHAR(255) NULL"),
+        ("everglades_ledger", "invoice_original_name", "VARCHAR(255) NULL"),
+        ("everglades_ledger", "invoice_mimetype",      "VARCHAR(100) NULL"),
+    ]
+
+    added = 0
+    for table, column, ddl in required_columns:
+        try:
+            exists = db.session.execute(
+                text(
+                    "SELECT COUNT(*) FROM information_schema.columns "
+                    "WHERE table_schema = DATABASE() "
+                    "AND table_name = :t AND column_name = :c"
+                ),
+                {"t": table, "c": column},
+            ).scalar()
+
+            if not exists:
+                db.session.execute(text(
+                    f"ALTER TABLE `{table}` ADD COLUMN `{column}` {ddl}"
+                ))
+                db.session.commit()
+                print(f"✅ Added column {table}.{column}")
+                added += 1
+        except Exception as exc:
+            db.session.rollback()
+            print(f"⚠️  Could not add {table}.{column}: {exc}")
+
+    if added == 0:
+        print("ℹ️  Schema already up to date — no columns added.")
+    else:
+        print(f"✅ Schema sync complete — {added} column(s) added.")
+
+
+# ===========================================================================
+# LEGACY CATEGORY MIGRATION
+# ===========================================================================
+# Maps old category names → new standardized categories.
+LEGACY_CATEGORY_MAP = {
+    # Old Personnel / Payroll variants
+    "Payroll Salaries": SALARY_CATEGORY,
+    "Personnel & Payroll": SALARY_CATEGORY,
+    "R&D Salaries": SALARY_CATEGORY,
+
+    # Travel
+    "Travel & Entertainment": "Travel & Hospitality",
+    "Travel & Entertainment (T&E)": "Travel & Hospitality",
+    "Travel and Mileage Reimbursement": "Travel & Hospitality",
+
+    # Marketing
+    "Marketing": "Marketing & Promos",
+    "Marketing Expenses": "Marketing & Promos",
+
+    # Supplies / Products
+    "Assets & Infra Cost": "Products & Innovation",
+    "Supplies & Equipments": "Products & Innovation",
+    "Supplies and Equipments": "Products & Innovation",
+    "Supplies & Equipment": "Products & Innovation",
+    "Office Supplies & Equipment": "Products & Innovation",
+    "Dental Supplies & Consumables": "Products & Innovation",
+    "Equipment Purchase & Maintenance": "Products & Innovation",
+    "Lab Fees & Prosthetics": "Products & Innovation",
+    "Pharmaceuticals & Inventory": "Products & Innovation",
+    "Lab Consumables": "Products & Innovation",
+    "Equipment": "Products & Innovation",
+    "Lab Supplies": "Products & Innovation",
+    "Testing": "Products & Innovation",
+    "Wholesales": "Products & Innovation",
+    "B2B Revenue": "Products & Innovation",
+    "B2C Revenue": "Products & Innovation",
+
+    # Facilities / General Ops
+    "Office Management": "General Operations",
+    "Facilities & Overhead": "General Operations",
+    "Clinical Overhead": "General Operations",
+    "Specimen Collection": "General Operations",
+    "Equipment Maintenance": "General Operations",
+    "Waste Management": "General Operations",
+    "Billing Administration": "General Operations",
+    "Service Revenue": "General Operations",
+    "Business Services Revenue": "General Operations",
+    "Internal allocations": "General Operations",
+    "Back Office Logistics": "General Operations",
+    "Field Labour and Nursing Care": "General Operations",
+    "Field Labor and Nursing Care": "General Operations",
+    "Digital Health": "General Operations",
+    "Equipment & Supplies": "General Operations",
+    "Home Medical Supplies and DME": "General Operations",
+    "Point-of-Care Technology and Telecom": "General Operations",
+    "Intake, Scheduling, and Back-Office Logistics": "General Operations",
+    "Regulatory and Risk Management": "General Operations",
+    "Outsourced Services": "General Operations",
+    "Innovation": "General Operations",
+
+    # Camps / Events / Guest
+    "Guest Concierge": "Camps & Events",
+    "Events-Conferences-Training": "Camps & Events",
+    "Camp": "Camps & Events",
+    "Walkin/Person": "Camps & Events",
+    "Health Screenings": "Camps & Events",
+    "Vaccinations": "Camps & Events",
+    "Consultation Fees": "Camps & Events",
+    "Consulting": "Camps & Events",
+
+    # Referrals
+    "Referral": "Referrals & Deposits",
+    "Referrals": "Referrals & Deposits",
+    "Lab": "Referrals & Deposits",
+    "Doctor Consultation": "Referrals & Deposits",
+    "Clinical Procedures": "Referrals & Deposits",
+    "Diagnostics & X-Ray": "Referrals & Deposits",
+    "Dental Operations": "Referrals & Deposits",
+    "Prescription Sales": "Referrals & Deposits",
+    "OTC Sales": "Referrals & Deposits",
+    "Insurance Claims": "Referrals & Deposits",
+    "Home Delivery": "Referrals & Deposits",
+    "Loyalty & Subscription Revenue": "Referrals & Deposits",
+    "B2B Wholesale": "Referrals & Deposits",
+    "Web Services": "Referrals & Deposits",
+    "Portal Services": "Referrals & Deposits",
+
+    # Management fees / misc
+    "Management Fees": "Miscellaneous",
+    "Legal Governance": "Miscellaneous",
+    "Legal/Administrative Expenses": "Miscellaneous",
+    "Sales Enablement & Tech Stack": "Miscellaneous",
+    "Miscellaneous Categories": "Miscellaneous",
+    "Goodwill": "Miscellaneous",
+    "Grants": "Miscellaneous",
+    "Funding": "Miscellaneous",
+    "Other": "Miscellaneous",
+    "Others": "Miscellaneous",
+    "Uncategorized": "Miscellaneous",
+}
+
+
+def migrate_all_categories():
+    """One-shot migration: rewrite any legacy categories to the new standardized ones.
+
+    Fail-safe: any error is logged but never raised — app startup must not be
+    blocked by a category migration.
+    """
+    from sqlalchemy import update
+    migrated = 0
+    try:
+        # ---- FinanceEntry ----
+        for old, new in LEGACY_CATEGORY_MAP.items():
+            if old == new:
+                continue
+            try:
+                count = db.session.query(FinanceEntry).filter(
+                    FinanceEntry.category == old
+                ).count()
+                if count > 0:
+                    db.session.execute(
+                        update(FinanceEntry)
+                        .where(FinanceEntry.category == old)
+                        .values(category=new)
+                    )
+                    migrated += count
+            except Exception as exc:
+                db.session.rollback()
+                print(f"⚠️  FinanceEntry migration skipped for '{old}': {exc}")
+
+        # ---- CaredxExpense ----
+        for old, new in LEGACY_CATEGORY_MAP.items():
+            if old == new:
+                continue
+            try:
+                count = db.session.query(CaredxExpense).filter(
+                    CaredxExpense.category == old
+                ).count()
+                if count > 0:
+                    db.session.execute(
+                        update(CaredxExpense)
+                        .where(CaredxExpense.category == old)
+                        .values(category=new)
+                    )
+                    migrated += count
+            except Exception as exc:
+                db.session.rollback()
+                print(f"⚠️  CaredxExpense migration skipped for '{old}': {exc}")
+
+        if migrated > 0:
+            db.session.commit()
+            print(f"✅ Category migration complete ({migrated} entries updated).")
+        else:
+            print("ℹ️  No category migration needed.")
+    except Exception as exc:
+        db.session.rollback()
+        print(f"⚠️  migrate_all_categories failed: {exc}")

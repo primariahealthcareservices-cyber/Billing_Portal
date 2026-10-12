@@ -1,5 +1,6 @@
 // frontend/src/components/FinanceDashboard.jsx
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { RotateCcw } from "lucide-react";
 import toast from "react-hot-toast";
 import Navbar from "./Navbar.jsx";
 import FilterBar from "./FilterBar.jsx";
@@ -10,6 +11,36 @@ import FinanceEntryForm from "./FinanceEntryForm.jsx";
 import api from "../api/axios.js";
 
 const PAGE_SIZE = 25;
+
+// ---------------------------------------------------------------
+// Standard categories — same across every department for Income & Expenses
+// ---------------------------------------------------------------
+const STANDARD_CATEGORIES = [
+  "Salary & Payrolls",
+  "Corpus Fund",
+  "Referrals & Deposits",
+  "Products & Innovation",
+  "General Operations",
+  "Camps & Events",
+  "Marketing & Promos",
+  "Travel & Hospitality",
+  "Miscellaneous",
+];
+
+// Shared style for the category buttons (box shape, centered text)
+const categoryBtnStyle = {
+  padding: "10px 12px",
+  borderRadius: 8,
+  fontSize: 13,
+  minHeight: 40,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textAlign: "center",
+  lineHeight: 1.2,
+  whiteSpace: "normal",
+  wordBreak: "break-word",
+};
 
 // ✅ Timezone-safe date formatter
 const fmtLocalDate = (d) => {
@@ -41,7 +72,7 @@ const buildPageNumbers = (current, total) => {
 };
 
 export default function FinanceDashboard({ department, title, roleColor, onCopperBook }) {
-  const apiBase = department.toLowerCase().replace(/\s/g, '');
+  const apiBase = department.toLowerCase().replace(/\s/g, "");
   const supportsExcelImportExport = department === "PCM";
   const isCorporate = department === "Corporate";
 
@@ -49,12 +80,15 @@ export default function FinanceDashboard({ department, title, roleColor, onCoppe
   const [endDate, setEndDate] = useState(todayStr());
   const [searchTerm, setSearchTerm] = useState("");
 
-  // ✅ NEW — quarter / year for FilterBar
+  // ✅ quarter / year for FilterBar
   const [quarter, setQuarter] = useState("");
   const [year, setYear] = useState(String(new Date().getFullYear()));
 
-  // ✅ NEW — transaction type filter (Income / Expenses / Capital)
+  // ✅ transaction type filter (Income / Expenses / Capital)
   const [typeFilter, setTypeFilter] = useState("");
+
+  // ✅ NEW — category filter (server-side)
+  const [selectedCategory, setSelectedCategory] = useState(null);
 
   const [entries, setEntries] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -111,10 +145,13 @@ export default function FinanceDashboard({ department, title, roleColor, onCoppe
       const params = { start_date: startDate, end_date: endDate };
       if (searchTerm) params.search = searchTerm;
       if (typeFilter) params.entry_type = typeFilter;
+      if (selectedCategory) params.category = selectedCategory;
 
       const [entriesRes, summaryRes] = await Promise.all([
         api.get(`/${apiBase}/entries`, { params }),
-        api.get(`/${apiBase}/summary`, { params: { start_date: startDate, end_date: endDate } }),
+        api.get(`/${apiBase}/summary`, {
+          params: { start_date: startDate, end_date: endDate },
+        }),
       ]);
       setEntries(entriesRes.data.entries);
       setSummary(summaryRes.data);
@@ -123,14 +160,14 @@ export default function FinanceDashboard({ department, title, roleColor, onCoppe
     } finally {
       setLoading(false);
     }
-  }, [apiBase, startDate, endDate, searchTerm, typeFilter]);
+  }, [apiBase, startDate, endDate, searchTerm, typeFilter, selectedCategory]);
 
   useEffect(() => { fetchOptions(); }, [fetchOptions]);
   useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [startDate, endDate, searchTerm, department, typeFilter]);
+  }, [startDate, endDate, searchTerm, department, typeFilter, selectedCategory]);
 
   // ✅ Split entries by type
   const incomeEntries = useMemo(() => entries.filter(e => e.entry_type === "Income"), [entries]);
@@ -167,6 +204,7 @@ export default function FinanceDashboard({ department, title, roleColor, onCoppe
     setQuarter("");
     setYear(String(new Date().getFullYear()));
     setTypeFilter("");
+    setSelectedCategory(null);
     setCurrentPage(1);
   };
 
@@ -264,9 +302,61 @@ export default function FinanceDashboard({ department, title, roleColor, onCoppe
     setFormOpen(true);
   };
 
+  // ---------------------------------------------------------------
+  // ✅ Categories Panel — 5 per row, box-style buttons, with Clear
+  // ---------------------------------------------------------------
+  const renderCategoryPanel = () => (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <p className="section-title" style={{ marginBottom: 12 }}>Categories</p>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+          gap: 10,
+        }}
+      >
+        {/* Row 1: All Categories + first 4 categories */}
+        <button
+          type="button"
+          className={`btn ${!selectedCategory ? "btn-primary" : "btn-secondary"}`}
+          onClick={() => setSelectedCategory(null)}
+          style={categoryBtnStyle}
+        >
+          All Categories
+        </button>
+
+        {STANDARD_CATEGORIES.map((cat) => (
+          <button
+            key={cat}
+            type="button"
+            className={`btn ${selectedCategory === cat ? "btn-primary" : "btn-secondary"}`}
+            onClick={() => setSelectedCategory(cat)}
+            style={categoryBtnStyle}
+          >
+            {cat}
+          </button>
+        ))}
+
+        {/* Clear — first cell of the last row */}
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => setSelectedCategory(null)}
+          style={{
+            ...categoryBtnStyle,
+            gap: 6,
+          }}
+          title="Clear category filter"
+        >
+          <RotateCcw size={14} /> Clear
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="page">
-    <Navbar title={title} roleColor={roleColor} onCopperBook={onCopperBook} />
+      <Navbar title={title} roleColor={roleColor} onCopperBook={onCopperBook} />
 
       <main className="page-main">
         <FilterBar
@@ -304,6 +394,9 @@ export default function FinanceDashboard({ department, title, roleColor, onCoppe
           </div>
         )}
 
+        {/* ✅ Categories Panel */}
+        {renderCategoryPanel()}
+
         {summary && (
           <StatCards
             totalIncome={summary.total_income}
@@ -327,6 +420,7 @@ export default function FinanceDashboard({ department, title, roleColor, onCoppe
           <p className="section-title" style={{ marginBottom: 12 }}>
             Finance Entries
             {typeFilter && <span style={{ fontSize: 14, color: "#6b7280", marginLeft: 8 }}>({typeFilter})</span>}
+            {selectedCategory && <span style={{ fontSize: 14, color: "#6b7280", marginLeft: 8 }}>— {selectedCategory}</span>}
           </p>
           {loading ? (
             <div className="card empty-state">Loading...</div>

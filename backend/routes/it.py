@@ -1,13 +1,11 @@
 # backend/routes/it.py
-"""IT department finance routes — Income/Expenses/Capital entries with categories.
-Now includes salary entries from Corporate Management.
-"""
+"""IT department finance routes."""
 from datetime import datetime, date
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import get_jwt_identity
 from sqlalchemy import or_
 
-from models import db, FinanceEntry, ENTRY_TYPES, DEPARTMENT_CONFIG
+from models import db, FinanceEntry, ENTRY_TYPES, DEPARTMENT_CONFIG, SALARY_CATEGORY
 from utils import role_required
 from file_utils import save_invoice_file, delete_invoice_file
 
@@ -44,7 +42,6 @@ def _apply_date_filters(query):
 
 
 def _read_request_data():
-    """Return a dict-like object regardless of JSON vs form-data."""
     if request.is_json:
         return request.get_json(silent=True) or {}
     return request.form
@@ -62,7 +59,7 @@ def options():
         "show_revenue_type": CONFIG["show_revenue_type"],
         "show_client_name": CONFIG["show_client_name"],
         "show_invoice": CONFIG["show_invoice"],
-        "is_salary_category": CONFIG.get("is_salary_category"),
+        "is_salary_category": SALARY_CATEGORY,
         "capital_categories": list(CAPITAL_CATEGORIES),
     }), 200
 
@@ -73,7 +70,6 @@ def create_entry():
     data = _read_request_data()
     entry_type = data.get("entry_type")
 
-    # ====================== CAPITAL ENTRY ======================
     if entry_type == "Capital":
         errors = []
         capital_category = (
@@ -123,7 +119,6 @@ def create_entry():
         db.session.commit()
         return jsonify({"message": "Capital entry created.", "entry": entry.to_dict()}), 201
 
-    # ====================== INCOME / EXPENSES ======================
     category = data.get("category")
     generated_by = (data.get("generated_by") or "").strip()
     revenue_type = data.get("revenue_type")
@@ -138,8 +133,7 @@ def create_entry():
 
     errors = []
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
-    if category == salary_category:
+    if category == SALARY_CATEGORY:
         errors.append("Salaries must be entered by Corporate Management only.")
 
     if entry_type not in ENTRY_TYPES:
@@ -162,7 +156,7 @@ def create_entry():
     except (TypeError, ValueError):
         errors.append("amount must be a number.")
 
-    if entry_type == "Expenses" and category != salary_category and not remarks:
+    if entry_type == "Expenses" and category != SALARY_CATEGORY and not remarks:
         errors.append("Remarks are required.")
 
     invoice_path = invoice_original = invoice_mimetype = None
@@ -206,12 +200,11 @@ def list_entries():
     query = FinanceEntry.query.filter_by(department=DEPARTMENT)
     query = _apply_date_filters(query)
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     salary_query = FinanceEntry.query.filter(
         FinanceEntry.department == "Corporate",
         FinanceEntry.exec_department == "IT",
         FinanceEntry.entry_type == "Expenses",
-        FinanceEntry.category == salary_category,
+        FinanceEntry.category == SALARY_CATEGORY,
     )
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
@@ -255,7 +248,6 @@ def update_entry(entry_id):
 
     data = _read_request_data()
 
-    # ====================== CAPITAL UPDATE ======================
     if entry.entry_type == "Capital":
         errors = []
         capital_category = (
@@ -304,15 +296,13 @@ def update_entry(entry_id):
         db.session.commit()
         return jsonify({"message": "Capital entry updated.", "entry": entry.to_dict()}), 200
 
-    # ====================== INCOME / EXPENSES UPDATE ======================
     new_type = data.get("entry_type", entry.entry_type)
     allowed_categories = CONFIG["categories"].get(new_type, [])
 
     errors = []
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     new_category = data.get("category", entry.category)
-    if new_category == salary_category and entry.category != salary_category:
+    if new_category == SALARY_CATEGORY and entry.category != SALARY_CATEGORY:
         errors.append("Salaries must be entered by Corporate Management only.")
 
     if "entry_type" in data and data["entry_type"] in ENTRY_TYPES:
@@ -363,7 +353,7 @@ def update_entry(entry_id):
         entry.invoice_original_name = None
         entry.invoice_mimetype = None
 
-    if entry.entry_type == "Expenses" and entry.category != salary_category and not entry.remarks:
+    if entry.entry_type == "Expenses" and entry.category != SALARY_CATEGORY and not entry.remarks:
         errors.append("Remarks are required.")
 
     if errors:
@@ -391,12 +381,11 @@ def finance_summary():
     query = FinanceEntry.query.filter_by(department=DEPARTMENT)
     query = _apply_date_filters(query)
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     salary_query = FinanceEntry.query.filter(
         FinanceEntry.department == "Corporate",
         FinanceEntry.exec_department == "IT",
         FinanceEntry.entry_type == "Expenses",
-        FinanceEntry.category == salary_category,
+        FinanceEntry.category == SALARY_CATEGORY,
     )
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
@@ -435,7 +424,7 @@ def finance_summary():
         "total_income": total_income,
         "total_expenses": total_expenses,
         "total_capital": total_capital,
-        "profit": total_income - total_expenses,   # Capital excluded from profit
+        "profit": total_income - total_expenses,
         "entry_count": len(entries),
         "trend": trend,
         "category_breakdown": list(by_category.values()),

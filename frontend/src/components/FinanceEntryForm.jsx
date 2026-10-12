@@ -79,152 +79,68 @@ const CAPITAL_CATEGORIES = [
   "Other Capital",
 ];
 
-/* ---------------- CATEGORY FIELD MAPS ---------------- */
+// Categories whose entries are item-based (used only in MedTech & Everglades)
+const ITEM_CATEGORIES = ["Products & Innovation"];
 
-const OFFICE_ADMIN_CATEGORY_FIELDS = {
-  "Travel & Entertainment (T&E)": { showEmployeeName: true, showVehicleType: true, labelName: "Employee/Person Name", labelVehicle: "Transport/Travel Type", showPurpose: true },
-  "Marketing": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Office Supplies & Equipment": { showEmployeeName: true, showVehicleType: false, labelName: "Asset/Item Name", showPurpose: true },
-  "General Operations": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Innovation": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Miscellaneous": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Business Services Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Service Name", showPurpose: false },
-  "Supplies & Equipment": { showEmployeeName: true, showVehicleType: false, labelName: "Item/Equipment Name", showPurpose: true },
-  "Guest Concierge": { showEmployeeName: true, showVehicleType: false, labelName: "Guest/Person Name", showPurpose: true },
-  "Facilities & Overhead": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Consulting": { showEmployeeName: true, showVehicleType: false, labelName: "Consultant/Company Name", showPurpose: true },
-  "Management Fees": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
-  "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
-  "Outsourced Services": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
-  "Events-Conferences-Training": { showEmployeeName: true, showVehicleType: false, labelName: "Event/Training Name", showPurpose: true },
-};
-
-const IT_CATEGORY_FIELDS = {
-  "Travel & Entertainment (T&E)": { showEmployeeName: true, showVehicleType: true, labelName: "Employee/Person Name", labelVehicle: "Transport/Travel Type", showPurpose: true },
-  "Marketing": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Supplies & Equipments": { showEmployeeName: true, showVehicleType: false, labelName: "Item/Equipment Name", showPurpose: true },
-  "General Operations": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Innovation": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Miscellaneous": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Business Services Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Service Name", showPurpose: false },
-  "Guest Concierge": { showEmployeeName: true, showVehicleType: false, labelName: "Guest/Person Name", showPurpose: true },
-  "Facilities & Overhead": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Outsourced Services": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
-  "Events-Conferences-Training": { showEmployeeName: true, showVehicleType: false, labelName: "Event/Training Name", showPurpose: true },
-  "Consulting": { showEmployeeName: true, showVehicleType: false, labelName: "Consultant/Company Name", showPurpose: true },
-  "Management Fees": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
-  "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
-};
-
-const IT_SALES_CATEGORY_FIELDS = {
-  "Travel & Entertainment (T&E)": { showEmployeeName: true, showVehicleType: true, labelName: "Employee/Person Name", labelVehicle: "Transport/Travel Type", showPurpose: true },
-  "Marketing": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Sales Enablement & Tech Stack": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Legal/Administrative Expenses": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Person Name", showPurpose: true },
-  "Outsourced Services": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
-  "Facilities & Overhead": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Supplies & Equipments": { showEmployeeName: true, showVehicleType: false, labelName: "Item/Equipment Name", showPurpose: true },
-  "Guest Concierge": { showEmployeeName: true, showVehicleType: false, labelName: "Guest/Person Name", showPurpose: true },
-  "Events-Conferences-Training": { showEmployeeName: true, showVehicleType: false, labelName: "Event/Training Name", showPurpose: true },
-  "Business Services Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Service Name", showPurpose: false },
-  "Miscellaneous": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "General Operations": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Innovation": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Consulting": { showEmployeeName: true, showVehicleType: false, labelName: "Consultant/Company Name", showPurpose: true },
-  "Management Fees": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
-  "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
-  "Hardware Sales": { showEmployeeName: true, showVehicleType: false, labelName: "Customer/Client Name", showPurpose: true },
-  "Professional Services & Implementation": { showEmployeeName: true, showVehicleType: false, labelName: "Service/Project Name", showPurpose: true },
-  "Software Licenses & SaaS Subscriptions": { showEmployeeName: true, showVehicleType: false, labelName: "Product/Service Name", showPurpose: true },
-  "Managed Services & Support (MSP)": { showEmployeeName: true, showVehicleType: false, labelName: "Client/Service Name", showPurpose: true },
-  "Hardware & Infrastructure Reselling": { showEmployeeName: true, showVehicleType: false, labelName: "Customer/Client Name", showPurpose: true },
-  "Support & Maintenance": { showEmployeeName: true, showVehicleType: false, labelName: "Client/Service Name", showPurpose: true },
-  "Internal allocations": { showEmployeeName: true, showVehicleType: false, labelName: "Department/Team Name", showPurpose: true },
-};
-
-const MEDTECH_CATEGORY_FIELDS = {
-  "Travel & Entertainment (T&E)": { showEmployeeName: true, showVehicleType: true, labelName: "Employee/Person Name", labelVehicle: "Transport/Travel Type", showPurpose: true },
-  "Marketing": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Supplies & Equipments": { showEmployeeName: true, showVehicleType: false, labelName: "Item/Equipment Name", showPurpose: true },
-  "Wholesales": { showEmployeeName: true, showVehicleType: false, labelName: "Wholesaler / Party Name", showPurpose: true },
-  "Facilities & Overhead": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "General Operations": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Innovation": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Guest Concierge": { showEmployeeName: true, showVehicleType: false, labelName: "Guest/Person Name", showPurpose: true },
-  "Business Services Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Service Name", showPurpose: false },
-  "Miscellaneous": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Outsourced Services": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
-  "Events-Conferences-Training": { showEmployeeName: true, showVehicleType: false, labelName: "Event/Training Name", showPurpose: true },
-  "B2B Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Client/Business Name", showPurpose: true },
-  "B2C Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Customer/Client Name", showPurpose: true },
-  "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
-};
-
-const PCM_CATEGORY_FIELDS = {
-  "Personnel & Payroll": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Outsourced Services": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
-  "Facilities & Overhead": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Marketing": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Guest Concierge": { showEmployeeName: true, showVehicleType: false, labelName: "Guest/Person Name", showPurpose: true },
-  "Events-Conferences-Training": { showEmployeeName: true, showVehicleType: false, labelName: "Event/Training Name", showPurpose: true },
-  "Business Services Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Service Name", showPurpose: false },
-  "Miscellaneous": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "General Operations": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Innovation": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Supplies & Equipment": { showEmployeeName: true, showVehicleType: false, labelName: "Item/Equipment Name", showPurpose: true },
-  "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
-};
-
-const DENTAL_CATEGORY_FIELDS = {
-  "Travel & Entertainment (T&E)": { showEmployeeName: true, showVehicleType: true, labelName: "Employee/Person Name", labelVehicle: "Transport/Travel Type", showPurpose: true },
-  "Marketing": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Dental Supplies & Consumables": { showEmployeeName: true, showVehicleType: false, labelName: "Item/Supply Name", showPurpose: true },
-  "Equipment Purchase & Maintenance": { showEmployeeName: true, showVehicleType: false, labelName: "Equipment/Vendor Name", showPurpose: true },
-  "Lab Fees & Prosthetics": { showEmployeeName: true, showVehicleType: false, labelName: "Lab/Vendor Name", showPurpose: true },
-  "Facilities & Overhead": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "General Operations": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Innovation": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Guest Concierge": { showEmployeeName: true, showVehicleType: false, labelName: "Guest/Person Name", showPurpose: true },
-  "Business Services Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Service Name", showPurpose: false },
-  "Miscellaneous": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Outsourced Services": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
-  "Events-Conferences-Training": { showEmployeeName: true, showVehicleType: false, labelName: "Event/Training Name", showPurpose: true },
-  "Consulting": { showEmployeeName: true, showVehicleType: false, labelName: "Consultant/Company Name", showPurpose: true },
-  "Management Fees": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
-  "Personnel & Payroll": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Dental Operations": { showEmployeeName: true, showVehicleType: false, labelName: "Doctor/Staff Name", showPurpose: true },
-  "Doctor Consultation": { showEmployeeName: true, showVehicleType: false, labelName: "Doctor Name", showPurpose: true },
-  "Clinical Procedures": { showEmployeeName: true, showVehicleType: false, labelName: "Doctor/Staff Name", showPurpose: true },
-  "Diagnostics & X-Ray": { showEmployeeName: true, showVehicleType: false, labelName: "Technician Name", showPurpose: true },
-  "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
-};
-
-const EVERGLADES_CATEGORY_FIELDS = {
-  "Travel & Entertainment (T&E)": { showEmployeeName: true, showVehicleType: true, labelName: "Employee/Person Name", labelVehicle: "Transport/Travel Type", showPurpose: true },
-  "Marketing": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Pharmaceuticals & Inventory": { showEmployeeName: true, showVehicleType: false, labelName: "Supplier/Vendor Name", showPurpose: true },
-  "Supplies & Equipments": { showEmployeeName: true, showVehicleType: false, labelName: "Item/Equipment Name", showPurpose: true },
-  "Facilities & Overhead": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "General Operations": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Innovation": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Guest Concierge": { showEmployeeName: true, showVehicleType: false, labelName: "Guest/Person Name", showPurpose: true },
-  "Business Services Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Service Name", showPurpose: false },
-  "Miscellaneous": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Outsourced Services": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
-  "Events-Conferences-Training": { showEmployeeName: true, showVehicleType: false, labelName: "Event/Training Name", showPurpose: true },
-  "Consulting": { showEmployeeName: true, showVehicleType: false, labelName: "Consultant/Company Name", showPurpose: true },
-  "Management Fees": { showEmployeeName: true, showVehicleType: false, labelName: "Vendor/Company Name", showPurpose: true },
-  "Personnel & Payroll": { showEmployeeName: true, showVehicleType: false, labelName: "Employee/Person Name", showPurpose: true },
-  "Prescription Sales": { showEmployeeName: true, showVehicleType: false, labelName: "Pharmacist/Staff Name", showPurpose: true },
-  "OTC Sales": { showEmployeeName: true, showVehicleType: false, labelName: "Cashier/Staff Name", showPurpose: true },
-  "Insurance Claims": { showEmployeeName: true, showVehicleType: false, labelName: "Insurance Provider", showPurpose: true },
-  "Consultation Fees": { showEmployeeName: true, showVehicleType: false, labelName: "Pharmacist Name", showPurpose: true },
-  "Health Screenings": { showEmployeeName: true, showVehicleType: false, labelName: "Technician Name", showPurpose: true },
-  "Vaccinations": { showEmployeeName: true, showVehicleType: false, labelName: "Pharmacist Name", showPurpose: true },
-  "Home Delivery": { showEmployeeName: true, showVehicleType: true, labelName: "Delivery Person", labelVehicle: "Vehicle Type", showPurpose: true },
-  "Loyalty & Subscription Revenue": { showEmployeeName: true, showVehicleType: false, labelName: "Customer/Client Name", showPurpose: false },
-  "B2B Wholesale": { showEmployeeName: true, showVehicleType: false, labelName: "Client/Business Name", showPurpose: true },
-  "Other": { showEmployeeName: true, showVehicleType: false, labelName: "Name/Item", showPurpose: true },
+/* ---------------- SHARED CATEGORY FIELD MAP ----------------
+   One map. Used by every department for both Income and Expenses.
+   Each category decides which of the extra fields to show.
+------------------------------------------------------------ */
+const STANDARD_CATEGORY_FIELDS = {
+  "Salary & Payrolls": {
+    showEmployeeName: true,
+    showVehicleType: false,
+    labelName: "Employee Name",
+    showPurpose: true,
+  },
+  "Corpus Fund": {
+    showEmployeeName: false,
+    showVehicleType: false,
+    showPurpose: true,
+  },
+  "Referrals & Deposits": {
+    showEmployeeName: true,
+    showVehicleType: false,
+    labelName: "Referral / Depositor Name",
+    showPurpose: true,
+  },
+  "Products & Innovation": {
+    showEmployeeName: true,
+    showVehicleType: false,
+    labelName: "Product / Item Name",
+    showPurpose: true,
+  },
+  "General Operations": {
+    showEmployeeName: true,
+    showVehicleType: false,
+    labelName: "Employee Name",
+    showPurpose: true,
+  },
+  "Camps & Events": {
+    showEmployeeName: true,
+    showVehicleType: false,
+    labelName: "Event / Camp Name",
+    showPurpose: true,
+  },
+  "Marketing & Promos": {
+    showEmployeeName: true,
+    showVehicleType: false,
+    labelName: "Employee Name",
+    showPurpose: true,
+  },
+  "Travel & Hospitality": {
+    showEmployeeName: true,
+    showVehicleType: true,
+    labelName: "Employee Name",
+    labelVehicle: "Travel Type",
+    showPurpose: true,
+  },
+  "Miscellaneous": {
+    showEmployeeName: true,
+    showVehicleType: false,
+    labelName: "Name / Item",
+    showPurpose: true,
+  },
 };
 
 export default function FinanceEntryForm({
@@ -237,20 +153,12 @@ export default function FinanceEntryForm({
 }) {
   const apiBase = String(department || "").toLowerCase().replace(/\s/g, "");
 
-  const isOfficeAdmin = department === "Adminstrationfunctionalunit";
-  const isIT = department === "IT";
-  const isITSales = department === "IT Sales";
-  const isMedTech = department === "MedTech";
-  const isPCM = department === "PCM";
-  const isDental = department === "Dental";
-  const isEverglades = department === "Everglades";
   const isCorporate = department === "Corporate";
+  const isMedTech = department === "MedTech";
+  const isEverglades = department === "Everglades";
 
-  const salaryCategoryName = options?.is_salary_category || "Payroll Salaries";
+  const salaryCategoryName = options?.is_salary_category || "Salary & Payrolls";
   const ledgerCategoryName = "Ledger";
-
-  const MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Revenue", "B2C Revenue"];
-  const EVERGLADES_ITEM_CATEGORIES = ["Pharmaceuticals & Inventory", "Supplies & Equipments"];
 
   const createEmptyForm = () => ({
     entry_type: "Income",
@@ -296,67 +204,28 @@ export default function FinanceEntryForm({
   const [clientSuggestions, setClientSuggestions] = useState([]);
 
   const isCapital = form.entry_type === "Capital";
-
-  const isSalaryCategory =
-    !isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isDental && !isEverglades &&
-    form.category === salaryCategoryName;
-
   const isLedger = (isMedTech || isEverglades) && form.category === ledgerCategoryName;
-  const isGoodwill = (isMedTech || isEverglades) && form.category === "Goodwill";
 
-  // ✅ NEW — always show invoice for non-special entries
-  const showInvoiceField = !isCapital && !isLedger && !isGoodwill && !isSalaryCategory;
+  const isSalaryCategory = form.category === salaryCategoryName;
+
+  // Item-based categories only for MedTech & Everglades
+  const requireItemsForCategory =
+    (isMedTech || isEverglades) && ITEM_CATEGORIES.includes(form.category);
+
+  const showInvoiceField = !isCapital && !isLedger && !isSalaryCategory;
 
   const isEditingSalaryEntry =
     isSalaryCategory && !!(editingEntry && editingEntry.id !== undefined && editingEntry.id !== null);
 
-  const itFieldConfig = isIT ? IT_CATEGORY_FIELDS[form.category] : null;
-  const showITFields = isIT && itFieldConfig && form.category !== salaryCategoryName;
-  const isITSalaryCategory = isIT && form.category === salaryCategoryName;
+  // Shared field config for the current category
+  const categoryFieldConfig = STANDARD_CATEGORY_FIELDS[form.category] || null;
+  const showCategoryFields =
+    !isCapital && !isLedger && !isSalaryCategory && categoryFieldConfig;
 
-  const itSalesFieldConfig = isITSales ? IT_SALES_CATEGORY_FIELDS[form.category] : null;
-  const showITSalesFields = isITSales && itSalesFieldConfig && form.category !== salaryCategoryName;
-  const isITSalesSalaryCategory = isITSales && form.category === salaryCategoryName;
-
-  const medTechFieldConfig = isMedTech ? MEDTECH_CATEGORY_FIELDS[form.category] : null;
-  const showMedTechFields =
-    isMedTech && medTechFieldConfig &&
-    form.category !== salaryCategoryName &&
-    form.category !== ledgerCategoryName &&
-    form.category !== "Goodwill";
-  const isMedTechSalaryCategory = isMedTech && form.category === salaryCategoryName;
-
-  const pcmFieldConfig = isPCM ? PCM_CATEGORY_FIELDS[form.category] : null;
-  const showPCMFields = isPCM && pcmFieldConfig && form.category !== salaryCategoryName;
-  const isPCMSalaryCategory = isPCM && form.category === salaryCategoryName;
-
-  const officeFieldConfig = isOfficeAdmin ? OFFICE_ADMIN_CATEGORY_FIELDS[form.category] : null;
-  const showOfficeFields = isOfficeAdmin && officeFieldConfig;
-
-  const dentalFieldConfig = isDental ? DENTAL_CATEGORY_FIELDS[form.category] : null;
-  const showDentalFields = isDental && dentalFieldConfig && form.category !== salaryCategoryName;
-  const isDentalSalaryCategory = isDental && form.category === salaryCategoryName;
-
-  const evergladesFieldConfig = isEverglades ? EVERGLADES_CATEGORY_FIELDS[form.category] : null;
-  const showEvergladesFields =
-    isEverglades && evergladesFieldConfig &&
-    form.category !== salaryCategoryName &&
-    form.category !== ledgerCategoryName &&
-    form.category !== "Goodwill";
-  const isEvergladesSalaryCategory = isEverglades && form.category === salaryCategoryName;
-
-  const requireItemsForCategory =
-    (isMedTech && MEDTECH_ITEM_CATEGORIES.includes(form.category)) ||
-    (isEverglades && EVERGLADES_ITEM_CATEGORIES.includes(form.category)) ||
-    (!isMedTech && !isEverglades && options?.show_items);
-
-  const usingCategoryFields =
-    showOfficeFields || showITFields || showITSalesFields ||
-    showMedTechFields || showPCMFields || showDentalFields ||
-    showEvergladesFields;
-
+  // Client suggestions for Miscellaneous (was Goodwill)
   useEffect(() => {
-    if (isGoodwill) {
+    if (!open) return;
+    if (form.category === "Miscellaneous" && form.entry_type === "Income") {
       const fetchClients = async () => {
         try {
           const res = await api.get(`/${apiBase}/clients`);
@@ -367,7 +236,7 @@ export default function FinanceEntryForm({
       };
       fetchClients();
     }
-  }, [isGoodwill, apiBase]);
+  }, [form.category, form.entry_type, apiBase, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -405,12 +274,9 @@ export default function FinanceEntryForm({
         return;
       }
 
-      const categoryList = options?.categories?.[entry.entry_type] || [];
-      const isCustomCategory = categoryList.includes("Others") && !categoryList.includes(entry.category);
-
       setForm({
         entry_type: entry.entry_type || "Income",
-        category: isCustomCategory ? "Others" : entry.category || "",
+        category: entry.category || "",
         sub_category: entry.sub_category || "",
         generated_by: entry.generated_by || "",
         revenue_type: entry.revenue_type || options?.revenue_types?.[0] || "",
@@ -431,7 +297,7 @@ export default function FinanceEntryForm({
         team: entry.team || "",
         purpose: entry.purpose || "",
       });
-      setOtherCategory(isCustomCategory ? entry.category : "");
+      setOtherCategory("");
 
       if (Array.isArray(entry.items) && entry.items.length > 0) {
         setItems(entry.items.map((item) => ({
@@ -444,8 +310,7 @@ export default function FinanceEntryForm({
         setItems([emptyItem()]);
       }
 
-      const isSalary = entry.category === salaryCategoryName;
-      if (isSalary) {
+      if (entry.category === salaryCategoryName) {
         setEmployees([{
           _key: nextItemKey(),
           exec_department: entry.exec_department || "",
@@ -553,78 +418,64 @@ export default function FinanceEntryForm({
   const revenueTypes = options?.revenue_types || [];
   const gstRequired = (options?.gst_required_categories || []).includes(form.category);
   const isOthersCategory = form.category === "Others";
-  const isOfficeAdminSalary = isOfficeAdmin && form.category === salaryCategoryName;
 
   const handleTypeChange = (event) => {
-  const newType = event.target.value;
+    const newType = event.target.value;
 
-  // ─────────────────────────────────────────────────────────────
-  // ✅ Ledger — force category="Ledger" so renderLedgerFields() shows
-  // the same Customer Name / Outstanding / New Amount / Paid / Total /
-  // Balance / Date / Remarks / Invoice fields that Expenses + Ledger shows.
-  // ─────────────────────────────────────────────────────────────
-  if (newType === "Ledger") {
+    if (newType === "Ledger") {
+      setForm((prev) => ({
+        ...prev,
+        entry_type: "Ledger",
+        category: "Ledger",
+        sub_category: "Ledger",
+      }));
+      setOtherCategory("");
+      setEmployees([emptyEmployee()]);
+      setItems([emptyItem()]);
+      setLedgerCustomer("");
+      setLedgerNewAmount("");
+      setLedgerPaid("");
+      setLedgerBalance(0);
+      setLedgerHistory([]);
+      setLedgerOutstanding(0);
+      setLedgerTotalAmount(0);
+      setInvoiceFile(null);
+      setRemoveInvoice(false);
+      return;
+    }
+
+    if (newType === "Capital") {
+      const capitalList =
+        (options?.categories?.Capital && options.categories.Capital.length > 0)
+          ? options.categories.Capital
+          : CAPITAL_CATEGORIES;
+      setForm((prev) => ({
+        ...prev,
+        entry_type: "Capital",
+        category: capitalList[0] || CAPITAL_CATEGORIES[0],
+        sub_category: "Capital",
+        client_name: "",
+        amount: "",
+        purpose: "",
+        remarks: "",
+        entry_date: prev.entry_date || today(),
+      }));
+      setOtherCategory("");
+      setEmployees([emptyEmployee()]);
+      setItems([emptyItem()]);
+      return;
+    }
+
+    const firstCategory = options?.categories?.[newType]?.[0] || "";
     setForm((prev) => ({
       ...prev,
-      entry_type: "Ledger",
-      category: "Ledger",
-      sub_category: "Ledger",
+      entry_type: newType,
+      category: firstCategory,
+      sub_category: "",
     }));
     setOtherCategory("");
-    setEmployees([emptyEmployee()]);
-    setItems([emptyItem()]);
-
-    // Reset all ledger-specific state so the form starts clean
-    setLedgerCustomer("");
-    setLedgerNewAmount("");
-    setLedgerPaid("");
-    setLedgerBalance(0);
-    setLedgerHistory([]);
-    setLedgerOutstanding(0);
-    setLedgerTotalAmount(0);
-    setInvoiceFile(null);
-    setRemoveInvoice(false);
-    return;
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Capital — seed first capital category
-  // ─────────────────────────────────────────────────────────────
-  if (newType === "Capital") {
-    const capitalList =
-      (options?.categories?.Capital && options.categories.Capital.length > 0)
-        ? options.categories.Capital
-        : CAPITAL_CATEGORIES;
-    setForm((prev) => ({
-      ...prev,
-      entry_type: "Capital",
-      category: capitalList[0] || CAPITAL_CATEGORIES[0],
-      sub_category: "Capital",
-      client_name: "",
-      amount: "",
-      purpose: "",
-      remarks: "",
-      entry_date: prev.entry_date || today(),
-    }));
-    setOtherCategory("");
-    setEmployees([emptyEmployee()]);
-    setItems([emptyItem()]);
-    return;
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Everything else — seed first category for that entry type
-  // ─────────────────────────────────────────────────────────────
-  let firstCategory = options?.categories?.[newType]?.[0] || "";
-  setForm((prev) => ({
-    ...prev,
-    entry_type: newType,
-    category: firstCategory,
-    sub_category: "",
-  }));
-  setOtherCategory("");
-  if (!isSalaryCategory) setEmployees([emptyEmployee()]);
-};
+    if (!isSalaryCategory) setEmployees([emptyEmployee()]);
+  };
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -634,7 +485,6 @@ export default function FinanceEntryForm({
   const handleCategoryChange = (event) => {
     const value = event.target.value;
     setForm((prev) => ({ ...prev, category: value }));
-    if (value !== "Others") setOtherCategory("");
     if (value !== salaryCategoryName) {
       setEmployees([emptyEmployee()]);
     } else {
@@ -677,17 +527,10 @@ export default function FinanceEntryForm({
 
   const handleItemChange = (key, field, value) => {
     setItems((prev) =>
-      prev.map((item) => {
-        if (item._key !== key) return item;
-        return { ...item, [field]: value };
-      })
+      prev.map((item) => (item._key !== key ? item : { ...item, [field]: value }))
     );
   };
-
-  const handleAddItem = () => {
-    setItems((prev) => [...prev, emptyItem()]);
-  };
-
+  const handleAddItem = () => setItems((prev) => [...prev, emptyItem()]);
   const handleRemoveItem = (key) => {
     if (items.length === 1) {
       toast.error("At least one item is required.");
@@ -720,7 +563,6 @@ export default function FinanceEntryForm({
     setRemoveInvoice(false);
   };
 
-  // ✅ NEW — reusable invoice field renderer
   const renderInvoiceField = () => {
     if (!showInvoiceField) return null;
     return (
@@ -765,29 +607,13 @@ export default function FinanceEntryForm({
     );
   };
 
-  /* ---------------- CAPITAL SUBMIT ---------------- */
   const submitCapitalEntry = async () => {
-    if (!form.category) {
-      toast.error("Please select a Capital Category.");
-      return;
-    }
-    if (!form.client_name.trim()) {
-      toast.error("Name is required for Capital entries.");
-      return;
-    }
-    if (!form.purpose.trim()) {
-      toast.error("Purpose is required for Capital entries.");
-      return;
-    }
+    if (!form.category) { toast.error("Please select a Capital Category."); return; }
+    if (!form.client_name.trim()) { toast.error("Name is required for Capital entries."); return; }
+    if (!form.purpose.trim()) { toast.error("Purpose is required for Capital entries."); return; }
     const amount = Number(form.amount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error("Please enter a valid amount.");
-      return;
-    }
-    if (!form.entry_date) {
-      toast.error("Please select the entry date.");
-      return;
-    }
+    if (!Number.isFinite(amount) || amount <= 0) { toast.error("Please enter a valid amount."); return; }
+    if (!form.entry_date) { toast.error("Please select the entry date."); return; }
 
     setSaving(true);
     try {
@@ -803,7 +629,6 @@ export default function FinanceEntryForm({
         remarks: form.remarks || "",
         entry_date: form.entry_date,
       };
-
       const url = `/${apiBase}/entries`;
       if (editingEntry && editingEntry.id) {
         await api.put(`${url}/${editingEntry.id}`, body);
@@ -822,41 +647,25 @@ export default function FinanceEntryForm({
     }
   };
 
-  /* ---------------- SUBMIT HANDLER ---------------- */
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (isCapital) {
-      return submitCapitalEntry();
-    }
+    if (isCapital) return submitCapitalEntry();
 
-    if (!form.entry_date) {
-      toast.error("Please select the entry date.");
-      return;
-    }
-    if (!form.category) {
-      toast.error("Please select a category.");
-      return;
-    }
+    if (!form.entry_date) { toast.error("Please select the entry date."); return; }
+    if (!form.category) { toast.error("Please select a category."); return; }
 
     // ---- LEDGER ----
     if (isLedger) {
-      if (!ledgerCustomer.trim()) {
-        toast.error("Customer name is required.");
-        return;
-      }
+      if (!ledgerCustomer.trim()) { toast.error("Customer name is required."); return; }
       const isEditingLedger = editingEntry && editingEntry._type === "ledger";
       let totalAmount;
-      if (isEditingLedger) {
-        totalAmount = ledgerTotalAmount;
-      } else {
+      if (isEditingLedger) totalAmount = ledgerTotalAmount;
+      else {
         const newAmt = parseFloat(ledgerNewAmount) || 0;
         totalAmount = ledgerOutstanding + newAmt;
       }
-      if (totalAmount <= 0) {
-        toast.error("Total amount must be greater than 0.");
-        return;
-      }
+      if (totalAmount <= 0) { toast.error("Total amount must be greater than 0."); return; }
       const paid = parseFloat(ledgerPaid) || 0;
 
       setSaving(true);
@@ -911,28 +720,11 @@ export default function FinanceEntryForm({
       return;
     }
 
-    if (isGoodwill) {
-      if (!form.client_name.trim()) {
-        toast.error("Client name is required for Goodwill entries.");
-        return;
-      }
-      const amount = Number(form.amount);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        toast.error("Please enter a valid amount.");
-        return;
-      }
-    }
-
-    if (isOfficeAdmin && form.category === salaryCategoryName) {
-      toast.error("Salary must be entered by Corporate Management only.");
+    // Salary must be entered by Corporate only
+    if (isSalaryCategory && !isCorporate) {
+      toast.error("Salaries must be entered by Corporate Management only.");
       return;
     }
-    if (isITSalaryCategory) { toast.error("Salaries must be entered by Corporate Management only."); return; }
-    if (isITSalesSalaryCategory) { toast.error("Salaries must be entered by Corporate Management only."); return; }
-    if (isMedTechSalaryCategory) { toast.error("Salaries must be entered by Corporate Management only."); return; }
-    if (isPCMSalaryCategory) { toast.error("Salaries must be entered by Corporate Management only."); return; }
-    if (isDentalSalaryCategory) { toast.error("Salaries must be entered by Corporate Management only."); return; }
-    if (isEvergladesSalaryCategory) { toast.error("Salaries must be entered by Corporate Management only."); return; }
 
     if (isSalaryCategory) {
       let valid = true;
@@ -950,118 +742,33 @@ export default function FinanceEntryForm({
       return submitSalaryEntries();
     }
 
-    if (isOfficeAdmin && officeFieldConfig) {
-      if (officeFieldConfig.showEmployeeName && !form.employee_name.trim()) { toast.error(`Please enter ${officeFieldConfig.labelName || "name"}.`); return; }
-      if (officeFieldConfig.showVehicleType && !form.vehicle_type.trim()) { toast.error(`Please enter ${officeFieldConfig.labelVehicle || "vehicle type"}.`); return; }
-      if (officeFieldConfig.showPurpose && !form.remarks.trim()) { toast.error("Please enter the purpose."); return; }
-      if (!requireItemsForCategory) {
-        const amount = Number(form.amount);
-        if (!Number.isFinite(amount) || amount <= 0) { toast.error("Please enter a valid amount."); return; }
+    // Category-specific validation
+    if (showCategoryFields) {
+      if (categoryFieldConfig.showEmployeeName && !form.employee_name.trim()) {
+        toast.error(`Please enter ${categoryFieldConfig.labelName || "name"}.`); return;
+      }
+      if (categoryFieldConfig.showVehicleType && !form.vehicle_type.trim()) {
+        toast.error(`Please enter ${categoryFieldConfig.labelVehicle || "vehicle type"}.`); return;
+      }
+      if (categoryFieldConfig.showPurpose && !form.remarks.trim()) {
+        toast.error("Please enter the purpose."); return;
       }
     }
 
-    if (isIT && showITFields) {
-      if (itFieldConfig.showEmployeeName && !form.employee_name.trim()) { toast.error(`Please enter ${itFieldConfig.labelName || "name"}.`); return; }
-      if (itFieldConfig.showVehicleType && !form.vehicle_type.trim()) { toast.error(`Please enter ${itFieldConfig.labelVehicle || "vehicle type"}.`); return; }
-      if (itFieldConfig.showPurpose && !form.remarks.trim()) { toast.error("Please enter the purpose."); return; }
-      if (!form.remarks.trim()) { toast.error("Remarks are required."); return; }
-      if (!requireItemsForCategory) {
-        const amount = Number(form.amount);
-        if (!Number.isFinite(amount) || amount <= 0) { toast.error("Please enter a valid amount."); return; }
+    if (!showCategoryFields && !isSalaryCategory && !isLedger) {
+      if (options.show_generated_by && !form.generated_by.trim()) {
+        toast.error("Please enter the employee name (Generated By)."); return;
       }
-    }
-
-    if (isITSales && showITSalesFields) {
-      if (itSalesFieldConfig.showEmployeeName && !form.employee_name.trim()) { toast.error(`Please enter ${itSalesFieldConfig.labelName || "name"}.`); return; }
-      if (itSalesFieldConfig.showVehicleType && !form.vehicle_type.trim()) { toast.error(`Please enter ${itSalesFieldConfig.labelVehicle || "vehicle type"}.`); return; }
-      if (itSalesFieldConfig.showPurpose && !form.remarks.trim()) { toast.error("Please enter the purpose."); return; }
-      if (!form.remarks.trim()) { toast.error("Remarks are required."); return; }
-      if (!requireItemsForCategory) {
-        const amount = Number(form.amount);
-        if (!Number.isFinite(amount) || amount <= 0) { toast.error("Please enter a valid amount."); return; }
+      if (options.show_patient_fields && !form.patient_name.trim()) {
+        toast.error("Please enter the patient name."); return;
       }
-      if (form.entry_type === "Income" && !form.generated_by.trim()) {
-        toast.error("Please enter the employee name (Generated By) for Income entries.");
-        return;
-      }
-    }
-
-    if (isMedTech && showMedTechFields) {
-      if (medTechFieldConfig.showEmployeeName && !form.employee_name.trim()) { toast.error(`Please enter ${medTechFieldConfig.labelName || "name"}.`); return; }
-      if (medTechFieldConfig.showVehicleType && !form.vehicle_type.trim()) { toast.error(`Please enter ${medTechFieldConfig.labelVehicle || "vehicle type"}.`); return; }
-      if (medTechFieldConfig.showPurpose && !form.remarks.trim()) { toast.error("Please enter the purpose."); return; }
-      if (!form.remarks.trim()) { toast.error("Remarks are required."); return; }
-      if (!requireItemsForCategory) {
-        const amount = Number(form.amount);
-        if (!Number.isFinite(amount) || amount <= 0) { toast.error("Please enter a valid amount."); return; }
-      }
-      if (form.entry_type === "Income" && !form.generated_by.trim()) {
-        toast.error("Please enter the employee name (Generated By) for Income entries.");
-        return;
-      }
-    }
-
-    if (isPCM && showPCMFields) {
-      if (pcmFieldConfig.showEmployeeName && !form.employee_name.trim()) { toast.error(`Please enter ${pcmFieldConfig.labelName || "name"}.`); return; }
-      if (pcmFieldConfig.showVehicleType && !form.vehicle_type.trim()) { toast.error(`Please enter ${pcmFieldConfig.labelVehicle || "vehicle type"}.`); return; }
-      if (pcmFieldConfig.showPurpose && !form.remarks.trim()) { toast.error("Please enter the purpose."); return; }
-      if (!form.remarks.trim()) { toast.error("Remarks are required."); return; }
-      if (!requireItemsForCategory) {
-        const amount = Number(form.amount);
-        if (!Number.isFinite(amount) || amount <= 0) { toast.error("Please enter a valid amount."); return; }
-      }
-    }
-
-    if (isDental && showDentalFields) {
-      if (dentalFieldConfig.showEmployeeName && !form.employee_name.trim()) { toast.error(`Please enter ${dentalFieldConfig.labelName || "name"}.`); return; }
-      if (dentalFieldConfig.showVehicleType && !form.vehicle_type.trim()) { toast.error(`Please enter ${dentalFieldConfig.labelVehicle || "vehicle type"}.`); return; }
-      if (dentalFieldConfig.showPurpose && !form.remarks.trim()) { toast.error("Please enter the purpose."); return; }
-      if (!form.remarks.trim()) { toast.error("Remarks are required."); return; }
-      if (!requireItemsForCategory) {
-        const amount = Number(form.amount);
-        if (!Number.isFinite(amount) || amount <= 0) { toast.error("Please enter a valid amount."); return; }
-      }
-      if (form.entry_type === "Income" && !form.generated_by.trim()) {
-        toast.error("Please enter the employee name (Generated By) for Income entries.");
-        return;
-      }
-    }
-
-    if (isEverglades && showEvergladesFields) {
-      if (evergladesFieldConfig.showEmployeeName && !form.employee_name.trim()) { toast.error(`Please enter ${evergladesFieldConfig.labelName || "name"}.`); return; }
-      if (evergladesFieldConfig.showVehicleType && !form.vehicle_type.trim()) { toast.error(`Please enter ${evergladesFieldConfig.labelVehicle || "vehicle type"}.`); return; }
-      if (evergladesFieldConfig.showPurpose && !form.remarks.trim()) { toast.error("Please enter the purpose."); return; }
-      if (!form.remarks.trim()) { toast.error("Remarks are required."); return; }
-      if (!requireItemsForCategory) {
-        const amount = Number(form.amount);
-        if (!Number.isFinite(amount) || amount <= 0) { toast.error("Please enter a valid amount."); return; }
-      }
-      if (form.entry_type === "Income" && !form.generated_by.trim()) {
-        toast.error("Please enter the employee name (Generated By) for Income entries.");
-        return;
-      }
-    }
-
-    if (!isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isDental && !isEverglades && !usingCategoryFields && options.show_generated_by && !form.generated_by.trim()) {
-      toast.error("Please enter the employee name (Generated By).");
-      return;
-    }
-    if (!usingCategoryFields && options.show_patient_fields && !form.patient_name.trim()) {
-      toast.error("Please enter the patient name.");
-      return;
     }
     if (options.show_gst_number && gstRequired && !form.gst_number.trim()) {
-      toast.error(`GST Number is required for ${form.category} entries.`);
-      return;
-    }
-    if (isOthersCategory && !otherCategory.trim()) {
-      toast.error("Please enter a category name.");
-      return;
+      toast.error(`GST Number is required for ${form.category} entries.`); return;
     }
 
     let cleanItems = [];
-
-    if (requireItemsForCategory && !isGoodwill) {
+    if (requireItemsForCategory) {
       cleanItems = items
         .map((item) => {
           const qty = Number(item.quantity);
@@ -1070,21 +777,18 @@ export default function FinanceEntryForm({
         })
         .filter((item) => item.item_name);
       if (cleanItems.length === 0) {
-        toast.error("Add at least one item (name, quantity, unit price).");
-        return;
+        toast.error("Add at least one item (name, quantity, unit price)."); return;
       }
-    } else if (!isGoodwill) {
+    } else {
       const amount = Number(form.amount);
       if (!Number.isFinite(amount) || amount <= 0) {
-        toast.error("Please enter a valid amount.");
-        return;
+        toast.error("Please enter a valid amount."); return;
       }
     }
 
     submitSingleEntry(cleanItems);
   };
 
-  /* ---------------- submitSingleEntry ---------------- */
   const submitSingleEntry = async (cleanItems) => {
     setSaving(true);
     try {
@@ -1102,70 +806,23 @@ export default function FinanceEntryForm({
       const isEditing =
         editingEntry && editingEntry.id !== undefined && editingEntry.id !== null;
 
-      // ✅ NEW — use FormData if the department always used it OR a file is attached OR a file is being removed
       const useFormData = options.show_invoice || !!invoiceFile || removeInvoice;
 
       if (useFormData) {
         const formData = new FormData();
-
         Object.keys(form).forEach((key) => {
           if (form[key] !== null && form[key] !== undefined) {
             formData.append(key, form[key]);
           }
         });
 
-        if (isOthersCategory) {
-          formData.append("other_category", otherCategory.trim());
+        if (showCategoryFields) {
+          formData.append("employee_name", form.employee_name || "");
+          formData.append("purpose", form.purpose || "");
+          formData.append("vehicle_type", form.vehicle_type || "");
         }
 
-        if (isOfficeAdmin) {
-          formData.append("employee_name", form.employee_name || "");
-          formData.append("vehicle_type", form.vehicle_type || "");
-        }
-        if (isIT && showITFields) {
-          formData.append("employee_name", form.employee_name || "");
-          formData.append("purpose", form.purpose || "");
-          formData.append("vehicle_type", form.vehicle_type || "");
-        }
-        if (isITSales && showITSalesFields) {
-          formData.append("employee_name", form.employee_name || "");
-          formData.append("purpose", form.purpose || "");
-          formData.append("vehicle_type", form.vehicle_type || "");
-          formData.append("client_name", form.client_name || "");
-          formData.append("gst_number", form.gst_number || "");
-          formData.append("generated_by", form.generated_by || "");
-        }
-        if (isMedTech && showMedTechFields) {
-          formData.append("employee_name", form.employee_name || "");
-          formData.append("purpose", form.purpose || "");
-          formData.append("vehicle_type", form.vehicle_type || "");
-          formData.append("generated_by", form.generated_by || "");
-          formData.append("client_name", form.client_name || "");
-          formData.append("gst_number", form.gst_number || "");
-        }
-        if (isPCM && showPCMFields) {
-          formData.append("employee_name", form.employee_name || "");
-          formData.append("purpose", form.purpose || "");
-          formData.append("vehicle_type", form.vehicle_type || "");
-        }
-        if (isDental && showDentalFields) {
-          formData.append("employee_name", form.employee_name || "");
-          formData.append("purpose", form.purpose || "");
-          formData.append("vehicle_type", form.vehicle_type || "");
-          formData.append("client_name", form.client_name || "");
-          formData.append("gst_number", form.gst_number || "");
-          formData.append("generated_by", form.generated_by || "");
-        }
-        if (isEverglades && showEvergladesFields) {
-          formData.append("employee_name", form.employee_name || "");
-          formData.append("purpose", form.purpose || "");
-          formData.append("vehicle_type", form.vehicle_type || "");
-          formData.append("client_name", form.client_name || "");
-          formData.append("gst_number", form.gst_number || "");
-          formData.append("generated_by", form.generated_by || "");
-        }
-
-        if (requireItemsForCategory && !isGoodwill) {
+        if (requireItemsForCategory) {
           formData.append("items", JSON.stringify(cleanItems || []));
           formData.append("amount", itemsTotalCalc);
         } else {
@@ -1173,7 +830,6 @@ export default function FinanceEntryForm({
         }
 
         if (invoiceFile) formData.append("invoice", invoiceFile);
-        if (isITSales) formData.append("team", form.team || "");
         if (removeInvoice && isEditing) formData.append("remove_invoice", "true");
 
         body = formData;
@@ -1182,45 +838,11 @@ export default function FinanceEntryForm({
         body = { ...form };
         body.amount = parseFloat(form.amount) || 0;
 
-        if (isOthersCategory) body.other_category = otherCategory.trim();
-
-        if (isOfficeAdmin) {
-          body.employee_name = form.employee_name || null;
-          body.vehicle_type = form.vehicle_type || null;
-        }
-        if (isIT && showITFields) {
+        if (showCategoryFields) {
           body.employee_name = form.employee_name || null;
           body.purpose = form.purpose || null;
           body.vehicle_type = form.vehicle_type || null;
         }
-        if (isITSales && showITSalesFields) {
-          body.employee_name = form.employee_name || null;
-          body.purpose = form.purpose || null;
-          body.vehicle_type = form.vehicle_type || null;
-        }
-        if (isMedTech && showMedTechFields) {
-          body.employee_name = form.employee_name || null;
-          body.purpose = form.purpose || null;
-          body.generated_by = form.generated_by || null;
-          body.vehicle_type = form.vehicle_type || null;
-        }
-        if (isPCM && showPCMFields) {
-          body.employee_name = form.employee_name || null;
-          body.purpose = form.purpose || null;
-          body.vehicle_type = form.vehicle_type || null;
-        }
-        if (isDental && showDentalFields) {
-          body.employee_name = form.employee_name || null;
-          body.purpose = form.purpose || null;
-          body.vehicle_type = form.vehicle_type || null;
-        }
-        if (isEverglades && showEvergladesFields) {
-          body.employee_name = form.employee_name || null;
-          body.purpose = form.purpose || null;
-          body.vehicle_type = form.vehicle_type || null;
-          body.generated_by = form.generated_by || null;
-        }
-        if (isITSales) body.team = form.team || null;
 
         if (!options.show_generated_by) delete body.generated_by;
         if (!options.show_revenue_type) delete body.revenue_type;
@@ -1233,7 +855,7 @@ export default function FinanceEntryForm({
         if (!options.show_gst_tax) delete body.gst_tax_percent;
         if (!options.show_tax_invoice_number) delete body.tax_invoice_number;
 
-        if (requireItemsForCategory && !isGoodwill) {
+        if (requireItemsForCategory) {
           body.items = cleanItems || [];
           body.amount = itemsTotalCalc;
         } else {
@@ -1265,11 +887,8 @@ export default function FinanceEntryForm({
         } else if (responseData.message) {
           errorMessage = responseData.message;
         } else {
-          try {
-            errorMessage = JSON.stringify(responseData);
-          } catch {
-            errorMessage = "An unknown error occurred.";
-          }
+          try { errorMessage = JSON.stringify(responseData); }
+          catch { errorMessage = "An unknown error occurred."; }
         }
       }
       toast.error(errorMessage);
@@ -1278,7 +897,6 @@ export default function FinanceEntryForm({
     }
   };
 
-  /* ---------------- submitSalaryEntries ---------------- */
   const submitSalaryEntries = async () => {
     setSaving(true);
     try {
@@ -1330,7 +948,7 @@ export default function FinanceEntryForm({
     }
   };
 
-  /* ---------------- CAPITAL FIELDS RENDERER ---------------- */
+  /* ---------------- CAPITAL FIELDS ---------------- */
   const renderCapitalFields = () => {
     const capitalList =
       (options?.categories?.Capital && options.categories.Capital.length > 0)
@@ -1340,111 +958,59 @@ export default function FinanceEntryForm({
     return (
       <>
         <div className="form-group">
-          <label className="form-label">
-            Capital Category <span style={{ color: "red" }}>*</span>
-          </label>
-          <select
-            name="category"
-            value={form.category || capitalList[0]}
-            onChange={handleChange}
-            className="form-control"
-            required
-          >
-            {capitalList.map((cat) => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
+          <label className="form-label">Capital Category <span style={{ color: "red" }}>*</span></label>
+          <select name="category" value={form.category || capitalList[0]} onChange={handleChange} className="form-control" required>
+            {capitalList.map((cat) => (<option key={cat} value={cat}>{cat}</option>))}
           </select>
         </div>
-
         <div className="form-group">
-          <label className="form-label">
-            Name <span style={{ color: "red" }}>*</span>
-          </label>
-          <input
-            name="client_name"
-            value={form.client_name || ""}
-            onChange={handleChange}
-            placeholder="Enter name of person, organization, or source"
-            className="form-control"
-            required
-          />
+          <label className="form-label">Name <span style={{ color: "red" }}>*</span></label>
+          <input name="client_name" value={form.client_name || ""} onChange={handleChange}
+                 placeholder="Enter name of person, organization, or source" className="form-control" required />
         </div>
-
         <div className="form-row">
           <div className="form-group">
-            <label className="form-label">
-              Amount (₹) <span style={{ color: "red" }}>*</span>
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              name="amount"
-              value={form.amount}
-              onChange={handleChange}
-              placeholder="0.00"
-              className="form-control"
-              required
-            />
+            <label className="form-label">Amount (₹) <span style={{ color: "red" }}>*</span></label>
+            <input type="number" step="0.01" min="0" name="amount" value={form.amount}
+                   onChange={handleChange} placeholder="0.00" className="form-control" required />
           </div>
           <div className="form-group">
-            <label className="form-label">
-              Date <span style={{ color: "red" }}>*</span>
-            </label>
-            <input
-              type="date"
-              name="entry_date"
-              value={form.entry_date}
-              onChange={handleChange}
-              className="form-control"
-              required
-            />
+            <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
+            <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
+                   className="form-control" required />
           </div>
         </div>
-
         <div className="form-group">
-          <label className="form-label">
-            Purpose <span style={{ color: "red" }}>*</span>
-          </label>
-          <textarea
-            name="purpose"
-            value={form.purpose || ""}
-            onChange={handleChange}
-            rows={3}
-            placeholder="Reason or purpose for which the capital is being added"
-            className="form-control"
-            required
-          />
+          <label className="form-label">Purpose <span style={{ color: "red" }}>*</span></label>
+          <textarea name="purpose" value={form.purpose || ""} onChange={handleChange} rows={3}
+                    placeholder="Reason or purpose for which the capital is being added" className="form-control" required />
         </div>
-
         <div className="form-group">
           <label className="form-label">Remarks</label>
-          <textarea
-            name="remarks"
-            value={form.remarks}
-            onChange={handleChange}
-            rows={2}
-            placeholder="Optional notes"
-            className="form-control"
-          />
+          <textarea name="remarks" value={form.remarks} onChange={handleChange} rows={2}
+                    placeholder="Optional notes" className="form-control" />
         </div>
       </>
     );
   };
 
-  /* ---------------- Standard fields renderer ---------------- */
+  /* ---------------- STANDARD (shared) fields renderer ---------------- */
   const renderStandardFields = () => (
     <>
       {options.show_client_name && (
         <div className="form-row">
           <div className="form-group">
             <label className="form-label">Client Name</label>
-            <input name="client_name" value={form.client_name} onChange={handleChange} placeholder="Enter the client name" className="form-control" />
+            <input name="client_name" value={form.client_name} onChange={handleChange}
+                   placeholder="Enter the client name" className="form-control" />
           </div>
           {options.show_gst_number && (
             <div className="form-group">
-              <label className="form-label">GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}</label>
-              <input name="gst_number" value={form.gst_number} onChange={handleChange} placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
+              <label className="form-label">
+                GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}
+              </label>
+              <input name="gst_number" value={form.gst_number} onChange={handleChange}
+                     placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
             </div>
           )}
         </div>
@@ -1455,13 +1021,16 @@ export default function FinanceEntryForm({
           {options.show_gst_tax && (
             <div className="form-group">
               <label className="form-label">GST Tax (%)</label>
-              <input type="number" min="0" max="100" step="0.01" name="gst_tax_percent" value={form.gst_tax_percent} onChange={handleChange} placeholder="e.g. 18" className="form-control" />
+              <input type="number" min="0" max="100" step="0.01" name="gst_tax_percent"
+                     value={form.gst_tax_percent} onChange={handleChange}
+                     placeholder="e.g. 18" className="form-control" />
             </div>
           )}
           {options.show_tax_invoice_number && (
             <div className="form-group">
               <label className="form-label">Tax Invoice Number</label>
-              <input name="tax_invoice_number" value={form.tax_invoice_number} onChange={handleChange} placeholder="e.g. INV-2026-0142" className="form-control" />
+              <input name="tax_invoice_number" value={form.tax_invoice_number}
+                     onChange={handleChange} placeholder="e.g. INV-2026-0142" className="form-control" />
             </div>
           )}
         </div>
@@ -1471,11 +1040,13 @@ export default function FinanceEntryForm({
         <div className="form-row">
           <div className="form-group">
             <label className="form-label">Patient Name</label>
-            <input name="patient_name" value={form.patient_name} onChange={handleChange} placeholder="e.g. Ramesh Kumar" className="form-control" />
+            <input name="patient_name" value={form.patient_name} onChange={handleChange}
+                   placeholder="e.g. Ramesh Kumar" className="form-control" />
           </div>
           <div className="form-group">
             <label className="form-label">Patient Place</label>
-            <input name="patient_place" value={form.patient_place} onChange={handleChange} placeholder="e.g. Guntur" className="form-control" />
+            <input name="patient_place" value={form.patient_place} onChange={handleChange}
+                   placeholder="e.g. Guntur" className="form-control" />
           </div>
         </div>
       )}
@@ -1485,7 +1056,8 @@ export default function FinanceEntryForm({
           {options.show_generated_by && (
             <div className="form-group">
               <label className="form-label">Generated By</label>
-              <input name="generated_by" value={form.generated_by} onChange={handleChange} placeholder="e.g. John Mathew" className="form-control" />
+              <input name="generated_by" value={form.generated_by} onChange={handleChange}
+                     placeholder="e.g. John Mathew" className="form-control" />
             </div>
           )}
           {options.show_revenue_type && (
@@ -1499,309 +1071,89 @@ export default function FinanceEntryForm({
         </div>
       )}
 
-      {/* ✅ NEW — always show upload field */}
       {renderInvoiceField()}
 
       <div className="form-group">
         <label className="form-label">Remarks</label>
-        <textarea name="remarks" value={form.remarks} onChange={handleChange} rows={3} placeholder="Optional notes about this entry" className="form-control" />
+        <textarea name="remarks" value={form.remarks} onChange={handleChange} rows={3}
+                  placeholder="Optional notes about this entry" className="form-control" />
       </div>
     </>
   );
 
-  const renderOfficeAdminFields = () => {
-    if (!showOfficeFields) return null;
-    const config = officeFieldConfig;
+  /* ---------------- Category-driven fields renderer ---------------- */
+  const renderCategoryFields = () => {
+    if (!showCategoryFields) return null;
+    const config = categoryFieldConfig;
     return (
       <>
         {config.showEmployeeName && (
           <div className="form-group">
-            <label className="form-label">{config.labelName || "Name"}</label>
-            <input name="employee_name" value={form.employee_name || ""} onChange={handleChange} placeholder={`Enter ${config.labelName || "name"}`} className="form-control" />
+            <label className="form-label">{config.labelName || "Name"} <span style={{ color: "red" }}>*</span></label>
+            <input name="employee_name" value={form.employee_name || ""} onChange={handleChange}
+                   placeholder={`Enter ${config.labelName || "name"}`} className="form-control" />
           </div>
         )}
         {config.showVehicleType && (
           <div className="form-group">
-            <label className="form-label">{config.labelVehicle || "Vehicle Type"}</label>
-            <input name="vehicle_type" value={form.vehicle_type || ""} onChange={handleChange} placeholder="e.g. Car, Bike, Cab" className="form-control" />
+            <label className="form-label">{config.labelVehicle || "Vehicle Type"} <span style={{ color: "red" }}>*</span></label>
+            <input name="vehicle_type" value={form.vehicle_type || ""} onChange={handleChange}
+                   placeholder="e.g. Car, Bike, Cab" className="form-control" />
           </div>
         )}
-        {config.showPurpose && (
-          <div className="form-group">
-            <label className="form-label">Purpose / Remarks</label>
-            <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Enter purpose or additional notes" className="form-control" />
-          </div>
-        )}
-        {!config.showPurpose && (
-          <div className="form-group">
-            <label className="form-label">Remarks</label>
-            <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Optional notes" className="form-control" />
-          </div>
-        )}
-        {renderInvoiceField()}
-      </>
-    );
-  };
 
-  const renderITFields = () => {
-    if (!showITFields) return null;
-    const config = itFieldConfig;
-    return (
-      <>
-        {config.showEmployeeName && (
-          <div className="form-group">
-            <label className="form-label">{config.labelName || "Name"}</label>
-            <input name="employee_name" value={form.employee_name || ""} onChange={handleChange} placeholder={`Enter ${config.labelName || "name"}`} className="form-control" />
-          </div>
-        )}
-        {config.showVehicleType && (
-          <div className="form-group">
-            <label className="form-label">{config.labelVehicle || "Vehicle Type"}</label>
-            <input name="vehicle_type" value={form.vehicle_type || ""} onChange={handleChange} placeholder="e.g. Car, Bike, Cab" className="form-control" />
-          </div>
-        )}
-        {config.showPurpose && (
-          <div className="form-group">
-            <label className="form-label">Purpose</label>
-            <input name="purpose" value={form.purpose || ""} onChange={handleChange} placeholder="Brief purpose" className="form-control" />
-          </div>
-        )}
-        <div className="form-group">
-          <label className="form-label">Remarks <span style={{ color: "red" }}>*</span></label>
-          <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Detailed remarks (required)" className="form-control" required />
-        </div>
-        {renderInvoiceField()}
-      </>
-    );
-  };
-
-  const renderITSalesFields = () => {
-    if (!showITSalesFields) return null;
-    const config = itSalesFieldConfig;
-    return (
-      <>
-        {config.showEmployeeName && (
-          <div className="form-group">
-            <label className="form-label">{config.labelName || "Name"}</label>
-            <input name="employee_name" value={form.employee_name || ""} onChange={handleChange} placeholder={`Enter ${config.labelName || "name"}`} className="form-control" />
-          </div>
-        )}
-        {config.showVehicleType && (
-          <div className="form-group">
-            <label className="form-label">{config.labelVehicle || "Vehicle Type"}</label>
-            <input name="vehicle_type" value={form.vehicle_type || ""} onChange={handleChange} placeholder="e.g. Car, Bike, Cab" className="form-control" />
-          </div>
-        )}
-        <div className="form-group">
-          <label className="form-label">Generated By {form.entry_type === "Income" && <span style={{ color: "red" }}>*</span>}</label>
-          <input name="generated_by" value={form.generated_by || ""} onChange={handleChange} placeholder="Enter employee name" className="form-control" />
-        </div>
         <div className="form-row">
           {options.show_client_name && (
             <div className="form-group">
               <label className="form-label">Client Name</label>
-              <input name="client_name" value={form.client_name || ""} onChange={handleChange} placeholder="Enter the client name" className="form-control" />
+              <input name="client_name" value={form.client_name || ""} onChange={handleChange}
+                     placeholder="Enter the client name" className="form-control" />
             </div>
           )}
           {options.show_gst_number && (
             <div className="form-group">
-              <label className="form-label">GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}</label>
-              <input name="gst_number" value={form.gst_number || ""} onChange={handleChange} placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
+              <label className="form-label">
+                GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}
+              </label>
+              <input name="gst_number" value={form.gst_number || ""} onChange={handleChange}
+                     placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
             </div>
           )}
         </div>
-        {config.showPurpose && (
-          <div className="form-group">
-            <label className="form-label">Purpose</label>
-            <input name="purpose" value={form.purpose || ""} onChange={handleChange} placeholder="Brief purpose" className="form-control" />
-          </div>
-        )}
-        <div className="form-group">
-          <label className="form-label">Remarks <span style={{ color: "red" }}>*</span></label>
-          <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Detailed remarks (required)" className="form-control" required />
-        </div>
-        {renderInvoiceField()}
-      </>
-    );
-  };
 
-  const renderMedTechFields = () => {
-    if (!showMedTechFields) return null;
-    const config = medTechFieldConfig;
-    return (
-      <>
-        {config.showEmployeeName && (
+        {options.show_generated_by && (
           <div className="form-group">
-            <label className="form-label">{config.labelName || "Name"}</label>
-            <input name="employee_name" value={form.employee_name || ""} onChange={handleChange} placeholder={`Enter ${config.labelName || "name"}`} className="form-control" />
+            <label className="form-label">
+              Generated By {form.entry_type === "Income" && <span style={{ color: "red" }}>*</span>}
+            </label>
+            <input name="generated_by" value={form.generated_by || ""} onChange={handleChange}
+                   placeholder="Enter employee name" className="form-control" />
           </div>
         )}
-        {config.showVehicleType && (
-          <div className="form-group">
-            <label className="form-label">{config.labelVehicle || "Vehicle Type"}</label>
-            <input name="vehicle_type" value={form.vehicle_type || ""} onChange={handleChange} placeholder="e.g. Car, Bike, Cab" className="form-control" />
-          </div>
-        )}
-        <div className="form-group">
-          <label className="form-label">Generated By {form.entry_type === "Income" && <span style={{ color: "red" }}>*</span>}</label>
-          <input name="generated_by" value={form.generated_by || ""} onChange={handleChange} placeholder="Enter employee name" className="form-control" />
-        </div>
-        <div className="form-row">
-          {options.show_client_name && (
-            <div className="form-group">
-              <label className="form-label">Client Name</label>
-              <input name="client_name" value={form.client_name || ""} onChange={handleChange} placeholder="Enter the client name" className="form-control" />
-            </div>
-          )}
-          {options.show_gst_number && (
-            <div className="form-group">
-              <label className="form-label">GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}</label>
-              <input name="gst_number" value={form.gst_number || ""} onChange={handleChange} placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
-            </div>
-          )}
-        </div>
-        {config.showPurpose && (
-          <div className="form-group">
-            <label className="form-label">Purpose</label>
-            <input name="purpose" value={form.purpose || ""} onChange={handleChange} placeholder="Brief purpose" className="form-control" />
-          </div>
-        )}
-        <div className="form-group">
-          <label className="form-label">Remarks <span style={{ color: "red" }}>*</span></label>
-          <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Detailed remarks (required)" className="form-control" required />
-        </div>
-        {renderInvoiceField()}
-      </>
-    );
-  };
 
-  const renderPCMFields = () => {
-    if (!showPCMFields) return null;
-    const config = pcmFieldConfig;
-    return (
-      <>
-        {config.showEmployeeName && (
+        {options.show_revenue_type && (
           <div className="form-group">
-            <label className="form-label">{config.labelName || "Name"}</label>
-            <input name="employee_name" value={form.employee_name || ""} onChange={handleChange} placeholder={`Enter ${config.labelName || "name"}`} className="form-control" />
+            <label className="form-label">Revenue Type</label>
+            <select name="revenue_type" value={form.revenue_type} onChange={handleChange} className="form-control">
+              {revenueTypes.map((rt) => (<option key={rt} value={rt}>{rt}</option>))}
+            </select>
           </div>
         )}
-        {config.showVehicleType && (
-          <div className="form-group">
-            <label className="form-label">{config.labelVehicle || "Vehicle Type"}</label>
-            <input name="vehicle_type" value={form.vehicle_type || ""} onChange={handleChange} placeholder="e.g. Car, Bike, Cab" className="form-control" />
-          </div>
-        )}
-        {config.showPurpose && (
-          <div className="form-group">
-            <label className="form-label">Purpose</label>
-            <input name="purpose" value={form.purpose || ""} onChange={handleChange} placeholder="Brief purpose" className="form-control" />
-          </div>
-        )}
-        <div className="form-group">
-          <label className="form-label">Remarks <span style={{ color: "red" }}>*</span></label>
-          <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Detailed remarks (required)" className="form-control" required />
-        </div>
-        {renderInvoiceField()}
-      </>
-    );
-  };
 
-  const renderDentalFields = () => {
-    if (!showDentalFields) return null;
-    const config = dentalFieldConfig;
-    return (
-      <>
-        {config.showEmployeeName && (
-          <div className="form-group">
-            <label className="form-label">{config.labelName || "Name"}</label>
-            <input name="employee_name" value={form.employee_name || ""} onChange={handleChange} placeholder={`Enter ${config.labelName || "name"}`} className="form-control" />
-          </div>
-        )}
-        {config.showVehicleType && (
-          <div className="form-group">
-            <label className="form-label">{config.labelVehicle || "Vehicle Type"}</label>
-            <input name="vehicle_type" value={form.vehicle_type || ""} onChange={handleChange} placeholder="e.g. Car, Bike, Cab" className="form-control" />
-          </div>
-        )}
-        <div className="form-group">
-          <label className="form-label">Generated By {form.entry_type === "Income" && <span style={{ color: "red" }}>*</span>}</label>
-          <input name="generated_by" value={form.generated_by || ""} onChange={handleChange} placeholder="Enter employee name" className="form-control" />
-        </div>
-        <div className="form-row">
-          {options.show_client_name && (
-            <div className="form-group">
-              <label className="form-label">Client Name</label>
-              <input name="client_name" value={form.client_name || ""} onChange={handleChange} placeholder="Enter the client name" className="form-control" />
-            </div>
-          )}
-          {options.show_gst_number && (
-            <div className="form-group">
-              <label className="form-label">GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}</label>
-              <input name="gst_number" value={form.gst_number || ""} onChange={handleChange} placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
-            </div>
-          )}
-        </div>
         {config.showPurpose && (
           <div className="form-group">
-            <label className="form-label">Purpose</label>
-            <input name="purpose" value={form.purpose || ""} onChange={handleChange} placeholder="Brief purpose" className="form-control" />
+            <label className="form-label">Purpose <span style={{ color: "red" }}>*</span></label>
+            <input name="purpose" value={form.purpose || ""} onChange={handleChange}
+                   placeholder="Brief purpose" className="form-control" />
           </div>
         )}
-        <div className="form-group">
-          <label className="form-label">Remarks <span style={{ color: "red" }}>*</span></label>
-          <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Detailed remarks (required)" className="form-control" required />
-        </div>
-        {renderInvoiceField()}
-      </>
-    );
-  };
 
-  const renderEvergladesFields = () => {
-    if (!showEvergladesFields) return null;
-    const config = evergladesFieldConfig;
-    return (
-      <>
-        {config.showEmployeeName && (
-          <div className="form-group">
-            <label className="form-label">{config.labelName || "Name"}</label>
-            <input name="employee_name" value={form.employee_name || ""} onChange={handleChange} placeholder={`Enter ${config.labelName || "name"}`} className="form-control" />
-          </div>
-        )}
-        {config.showVehicleType && (
-          <div className="form-group">
-            <label className="form-label">{config.labelVehicle || "Vehicle Type"}</label>
-            <input name="vehicle_type" value={form.vehicle_type || ""} onChange={handleChange} placeholder="e.g. Car, Bike, Cab" className="form-control" />
-          </div>
-        )}
-        <div className="form-group">
-          <label className="form-label">Generated By {form.entry_type === "Income" && <span style={{ color: "red" }}>*</span>}</label>
-          <input name="generated_by" value={form.generated_by || ""} onChange={handleChange} placeholder="Enter employee name" className="form-control" />
-        </div>
-        <div className="form-row">
-          {options.show_client_name && (
-            <div className="form-group">
-              <label className="form-label">Client Name</label>
-              <input name="client_name" value={form.client_name || ""} onChange={handleChange} placeholder="Enter the client name" className="form-control" />
-            </div>
-          )}
-          {options.show_gst_number && (
-            <div className="form-group">
-              <label className="form-label">GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}</label>
-              <input name="gst_number" value={form.gst_number || ""} onChange={handleChange} placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
-            </div>
-          )}
-        </div>
-        {config.showPurpose && (
-          <div className="form-group">
-            <label className="form-label">Purpose</label>
-            <input name="purpose" value={form.purpose || ""} onChange={handleChange} placeholder="Brief purpose" className="form-control" />
-          </div>
-        )}
         <div className="form-group">
           <label className="form-label">Remarks <span style={{ color: "red" }}>*</span></label>
-          <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3} placeholder="Detailed remarks (required)" className="form-control" required />
+          <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3}
+                    placeholder="Detailed remarks (required)" className="form-control" required />
         </div>
+
         {renderInvoiceField()}
       </>
     );
@@ -1830,7 +1182,8 @@ export default function FinanceEntryForm({
       <>
         <div className="form-group">
           <label className="form-label">Customer Name</label>
-          <input type="text" value={ledgerCustomer} onChange={(e) => setLedgerCustomer(e.target.value)} placeholder="Enter customer name" className="form-control" required />
+          <input type="text" value={ledgerCustomer} onChange={(e) => setLedgerCustomer(e.target.value)}
+                 placeholder="Enter customer name" className="form-control" required />
         </div>
 
         {ledgerCustomer.trim() && (
@@ -1844,7 +1197,13 @@ export default function FinanceEntryForm({
               <div style={{ maxHeight: "200px", overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: "4px", padding: "8px" }}>
                 <table style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
                   <thead>
-                    <tr style={{ borderBottom: "1px solid #d1d5db" }}><th style={{ textAlign: "left", padding: "4px 8px" }}>Date</th><th style={{ textAlign: "left", padding: "4px 8px" }}>Particulars</th><th style={{ textAlign: "right", padding: "4px 8px" }}>Debit (₹)</th><th style={{ textAlign: "right", padding: "4px 8px" }}>Credit (₹)</th><th style={{ textAlign: "right", padding: "4px 8px" }}>Balance (₹)</th></tr>
+                    <tr style={{ borderBottom: "1px solid #d1d5db" }}>
+                      <th style={{ textAlign: "left", padding: "4px 8px" }}>Date</th>
+                      <th style={{ textAlign: "left", padding: "4px 8px" }}>Particulars</th>
+                      <th style={{ textAlign: "right", padding: "4px 8px" }}>Debit (₹)</th>
+                      <th style={{ textAlign: "right", padding: "4px 8px" }}>Credit (₹)</th>
+                      <th style={{ textAlign: "right", padding: "4px 8px" }}>Balance (₹)</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {enhancedHistory.map((entry) => (
@@ -1868,46 +1227,33 @@ export default function FinanceEntryForm({
         <div className="form-row">
           <div className="form-group">
             <label className="form-label">{isEditingLedger ? "Total Amount (₹)" : "New Amount to Add (₹)"}</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={isEditingLedger ? ledgerTotalAmount : ledgerNewAmount}
-              onChange={(e) => {
-                if (isEditingLedger) {
-                  const val = parseFloat(e.target.value) || 0;
-                  setLedgerTotalAmount(val);
-                  const paid = parseFloat(ledgerPaid) || 0;
-                  setLedgerBalance(val - paid);
-                } else {
-                  setLedgerNewAmount(e.target.value);
-                }
-              }}
-              placeholder="0.00"
-              className="form-control"
-              required
-            />
+            <input type="number" step="0.01" min="0"
+                   value={isEditingLedger ? ledgerTotalAmount : ledgerNewAmount}
+                   onChange={(e) => {
+                     if (isEditingLedger) {
+                       const val = parseFloat(e.target.value) || 0;
+                       setLedgerTotalAmount(val);
+                       const paid = parseFloat(ledgerPaid) || 0;
+                       setLedgerBalance(val - paid);
+                     } else {
+                       setLedgerNewAmount(e.target.value);
+                     }
+                   }}
+                   placeholder="0.00" className="form-control" required />
           </div>
           <div className="form-group">
             <label className="form-label">Paid (₹)</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={ledgerPaid}
-              onChange={(e) => {
-                const paid = parseFloat(e.target.value) || 0;
-                setLedgerPaid(e.target.value);
-                if (isEditingLedger) {
-                  setLedgerBalance(ledgerTotalAmount - paid);
-                } else {
-                  const total = ledgerOutstanding + parseFloat(ledgerNewAmount) || 0;
-                  setLedgerBalance(total - paid);
-                }
-              }}
-              placeholder="0.00"
-              className="form-control"
-            />
+            <input type="number" step="0.01" min="0" value={ledgerPaid}
+                   onChange={(e) => {
+                     const paid = parseFloat(e.target.value) || 0;
+                     setLedgerPaid(e.target.value);
+                     if (isEditingLedger) setLedgerBalance(ledgerTotalAmount - paid);
+                     else {
+                       const total = ledgerOutstanding + parseFloat(ledgerNewAmount) || 0;
+                       setLedgerBalance(total - paid);
+                     }
+                   }}
+                   placeholder="0.00" className="form-control" />
           </div>
         </div>
 
@@ -1930,29 +1276,20 @@ export default function FinanceEntryForm({
 
         <div className="form-group">
           <label className="form-label">Remarks</label>
-          <textarea name="remarks" value={form.remarks} onChange={handleChange} rows={2} placeholder="Optional notes" className="form-control" />
+          <textarea name="remarks" value={form.remarks} onChange={handleChange} rows={2}
+                    placeholder="Optional notes" className="form-control" />
         </div>
 
-        {/* ✅ Invoice upload for Ledger */}
         <div className="form-group">
           <label className="form-label">Invoice / Attachment (optional)</label>
           {isEditingLedger && editingEntry.invoice_url && !removeInvoice && (
             <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
-              <a
-                href={invoiceHref(editingEntry)}
-                target="_blank"
-                rel="noreferrer"
-                className="btn btn-secondary"
-                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-              >
+              <a href={invoiceHref(editingEntry)} target="_blank" rel="noreferrer"
+                 className="btn btn-secondary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <FileText size={15} /> <span>View current invoice</span>
               </a>
-              <button
-                type="button"
-                className="btn-icon btn-icon--danger"
-                onClick={() => setRemoveInvoice(true)}
-                title="Remove invoice"
-              >
+              <button type="button" className="btn-icon btn-icon--danger"
+                      onClick={() => setRemoveInvoice(true)} title="Remove invoice">
                 <Trash2 size={15} />
               </button>
             </div>
@@ -1962,15 +1299,9 @@ export default function FinanceEntryForm({
               Current invoice will be removed when you save.
             </p>
           )}
-          <input
-            type="file"
-            accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.csv"
-            onChange={handleInvoiceChange}
-            className="form-control"
-          />
-          <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-            Accepted: PDF, Word, Excel, CSV, JPG, PNG, GIF, WEBP.
-          </p>
+          <input type="file"
+                 accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.csv"
+                 onChange={handleInvoiceChange} className="form-control" />
         </div>
 
         <div style={{ marginTop: 12, background: "#f0f9ff", padding: "8px", borderRadius: "4px" }}>
@@ -2015,83 +1346,81 @@ export default function FinanceEntryForm({
                   <input value="Ledger" disabled className="form-control" />
                 ) : (
                   <select name="category" value={form.category} onChange={handleCategoryChange} className="form-control">
-                    {categoryOptionsForType
-                      .filter((cat) => !(isOfficeAdmin && cat === salaryCategoryName))
-                      .map((cat) => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
+                    {categoryOptionsForType.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
                   </select>
                 )}
               </div>
             )}
           </div>
 
-          {isOthersCategory && !isCapital && (
-            <div className="form-group">
-              <label className="form-label">Other Category Name</label>
-              <input value={otherCategory} onChange={(e) => setOtherCategory(e.target.value)} placeholder="Enter a category name" className="form-control" />
-            </div>
-          )}
-
           {isCapital && renderCapitalFields()}
 
-          {!isCapital && requireItemsForCategory && !isGoodwill && (
+          {!isCapital && requireItemsForCategory && (
             <div className="form-group">
               <label className="form-label">Items</label>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {items.map((item) => {
-                  const lineTotal =
-                    (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
+                  const lineTotal = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
                   return (
-                    <div
-                      key={item._key}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 90px 120px 100px 32px",
-                        gap: 8,
-                        alignItems: "center",
-                      }}
-                    >
-                      <input value={item.item_name} onChange={(e) => handleItemChange(item._key, "item_name", e.target.value)} placeholder="Item name" className="form-control" />
-                      <input type="number" min="0" step="0.01" value={item.quantity} onChange={(e) => handleItemChange(item._key, "quantity", e.target.value)} placeholder="Qty" className="form-control" />
-                      <input type="number" min="0" step="0.01" value={item.unit_price} onChange={(e) => handleItemChange(item._key, "unit_price", e.target.value)} placeholder="Unit price" className="form-control" />
+                    <div key={item._key}
+                         style={{ display: "grid", gridTemplateColumns: "1fr 90px 120px 100px 32px", gap: 8, alignItems: "center" }}>
+                      <input value={item.item_name} onChange={(e) => handleItemChange(item._key, "item_name", e.target.value)}
+                             placeholder="Item name" className="form-control" />
+                      <input type="number" min="0" step="0.01" value={item.quantity}
+                             onChange={(e) => handleItemChange(item._key, "quantity", e.target.value)}
+                             placeholder="Qty" className="form-control" />
+                      <input type="number" min="0" step="0.01" value={item.unit_price}
+                             onChange={(e) => handleItemChange(item._key, "unit_price", e.target.value)}
+                             placeholder="Unit price" className="form-control" />
                       <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>
                         {formatCurrency(lineTotal)}
                       </span>
-                      <button type="button" className="btn-icon btn-icon--danger" onClick={() => handleRemoveItem(item._key)} title="Remove item" disabled={items.length === 1}>
+                      <button type="button" className="btn-icon btn-icon--danger"
+                              onClick={() => handleRemoveItem(item._key)} title="Remove item"
+                              disabled={items.length === 1}>
                         <Trash2 size={15} />
                       </button>
                     </div>
                   );
                 })}
               </div>
-              <button type="button" onClick={handleAddItem} className="btn btn-secondary" style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <button type="button" onClick={handleAddItem} className="btn btn-secondary"
+                      style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <Plus size={15} /> Add New Item
               </button>
 
               <div className="form-row" style={{ marginTop: 12 }}>
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
-                  <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange} className="form-control" required />
+                  <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
+                         className="form-control" required />
                 </div>
                 {options.show_gst_tax && (
                   <div className="form-group" style={{ flex: 1 }}>
-                    <label className="form-label">GST Tax (%) <span style={{ color: "#9ca3af", fontWeight: 400 }}>— applies to subtotal</span></label>
-                    <input type="number" min="0" max="100" step="0.01" name="gst_tax_percent" value={form.gst_tax_percent} onChange={handleChange} placeholder="e.g. 18" className="form-control" />
+                    <label className="form-label">GST Tax (%)</label>
+                    <input type="number" min="0" max="100" step="0.01" name="gst_tax_percent"
+                           value={form.gst_tax_percent} onChange={handleChange}
+                           placeholder="e.g. 18" className="form-control" />
                   </div>
                 )}
                 {options.show_tax_invoice_number && (
                   <div className="form-group" style={{ flex: 1 }}>
                     <label className="form-label">Tax Invoice Number</label>
-                    <input name="tax_invoice_number" value={form.tax_invoice_number} onChange={handleChange} placeholder="e.g. INV-2026-0142" className="form-control" />
+                    <input name="tax_invoice_number" value={form.tax_invoice_number}
+                           onChange={handleChange} placeholder="e.g. INV-2026-0142" className="form-control" />
                   </div>
                 )}
               </div>
 
               {options.show_gst_number && (
                 <div className="form-group">
-                  <label className="form-label">GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}</label>
-                  <input name="gst_number" value={form.gst_number} onChange={handleChange} placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
+                  <label className="form-label">
+                    GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}
+                  </label>
+                  <input name="gst_number" value={form.gst_number} onChange={handleChange}
+                         placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
                 </div>
               )}
 
@@ -2107,25 +1436,26 @@ export default function FinanceEntryForm({
                 )}
               </div>
 
-              {/* ✅ Upload field for item-based categories */}
               {renderInvoiceField()}
             </div>
           )}
 
-          {!isCapital && !requireItemsForCategory && !isLedger && !isGoodwill && !isSalaryCategory && (
+          {!isCapital && !requireItemsForCategory && !isLedger && !isSalaryCategory && (
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Amount (₹)</label>
-                <input type="number" step="0.01" min="0" name="amount" value={form.amount} onChange={handleChange} placeholder="0.00" className="form-control" required />
+                <input type="number" step="0.01" min="0" name="amount" value={form.amount}
+                       onChange={handleChange} placeholder="0.00" className="form-control" required />
               </div>
               <div className="form-group">
                 <label className="form-label">Date</label>
-                <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange} className="form-control" />
+                <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
+                       className="form-control" />
               </div>
             </div>
           )}
 
-          {!isCapital && !requireItemsForCategory && options.show_gst_tax && !isLedger && !isGoodwill && !isSalaryCategory && (
+          {!isCapital && !requireItemsForCategory && options.show_gst_tax && !isLedger && !isSalaryCategory && (
             <p className="text-muted" style={{ textAlign: "right", fontSize: 13, marginTop: -8 }}>
               GST Tax ({gstTaxPercentValue || 0}%): {formatCurrency(gstTaxAmount)}
               {" · "}
@@ -2133,66 +1463,27 @@ export default function FinanceEntryForm({
             </p>
           )}
 
-          {!isCapital && isOfficeAdmin && form.category === salaryCategoryName && (
+          {!isCapital && isSalaryCategory && !isCorporate && (
             <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salary must be entered by Corporate Management only.</strong>
-              <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for Office Administration employees.</p>
+              <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>
+                Please use the Corporate Management dashboard to add salary records.
+              </p>
             </div>
           )}
 
-          {!isCapital && isITSales && !isITSalesSalaryCategory && (
-            <div className="form-group">
-              <label className="form-label">Team</label>
-              <input name="team" value={form.team || ""} onChange={handleChange} placeholder="e.g. Sales Team, Enterprise Sales, B2B Team" className="form-control" />
-            </div>
-          )}
-
-          {!isCapital && isITSalaryCategory && (
-            <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
-              <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
-              <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for IT Development employees.</p>
-            </div>
-          )}
-          {!isCapital && isITSalesSalaryCategory && (
-            <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
-              <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
-              <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for IT Sales employees.</p>
-            </div>
-          )}
-          {!isCapital && isMedTechSalaryCategory && (
-            <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
-              <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
-              <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for MedTech employees.</p>
-            </div>
-          )}
-          {!isCapital && isPCMSalaryCategory && (
-            <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
-              <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
-              <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for PCM employees.</p>
-            </div>
-          )}
-          {!isCapital && isDentalSalaryCategory && (
-            <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
-              <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
-              <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for Dental employees.</p>
-            </div>
-          )}
-          {!isCapital && isEvergladesSalaryCategory && (
-            <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
-              <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
-              <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>Please use the Corporate Management dashboard to add salary records for Everglades employees.</p>
-            </div>
-          )}
-
-          {!isCapital && isSalaryCategory && (
+          {!isCapital && isSalaryCategory && isCorporate && (
             <div className="form-group">
               <label className="form-label">Employees</label>
               {employees.map((emp) => (
-                <div key={emp._key} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12, marginBottom: 12, position: "relative" }}>
+                <div key={emp._key}
+                     style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12, marginBottom: 12, position: "relative" }}>
                   <div className="form-row">
                     <div className="form-group" style={{ flex: 1 }}>
                       <label className="form-label">Department</label>
-                      <select value={emp.exec_department} onChange={(e) => handleEmployeeChange(emp._key, "exec_department", e.target.value)} className="form-control">
+                      <select value={emp.exec_department}
+                              onChange={(e) => handleEmployeeChange(emp._key, "exec_department", e.target.value)}
+                              className="form-control">
                         <option value="">Select Department</option>
                         {(options.exec_departments || []).map((deptKey) => {
                           const deptLabel = DEPARTMENTS_CONFIG.find((d) => d.value === deptKey)?.label || deptKey;
@@ -2202,38 +1493,50 @@ export default function FinanceEntryForm({
                     </div>
                     <div className="form-group" style={{ flex: 1 }}>
                       <label className="form-label">Employee Name</label>
-                      <input value={emp.employee_name} onChange={(e) => handleEmployeeChange(emp._key, "employee_name", e.target.value)} placeholder="Employee name" className="form-control" />
+                      <input value={emp.employee_name}
+                             onChange={(e) => handleEmployeeChange(emp._key, "employee_name", e.target.value)}
+                             placeholder="Employee name" className="form-control" />
                     </div>
                   </div>
                   <div className="form-row">
                     <div className="form-group" style={{ flex: 1 }}>
                       <label className="form-label">Salary (₹)</label>
-                      <input type="number" min="0" step="0.01" value={emp.salary_amount} onChange={(e) => handleEmployeeChange(emp._key, "salary_amount", e.target.value)} placeholder="0.00" className="form-control" />
+                      <input type="number" min="0" step="0.01" value={emp.salary_amount}
+                             onChange={(e) => handleEmployeeChange(emp._key, "salary_amount", e.target.value)}
+                             placeholder="0.00" className="form-control" />
                     </div>
                     <div className="form-group" style={{ flex: 1 }}>
                       <label className="form-label">TADA (₹)</label>
-                      <input type="number" min="0" step="0.01" value={emp.allowance_amount} onChange={(e) => handleEmployeeChange(emp._key, "allowance_amount", e.target.value)} placeholder="0.00" className="form-control" />
+                      <input type="number" min="0" step="0.01" value={emp.allowance_amount}
+                             onChange={(e) => handleEmployeeChange(emp._key, "allowance_amount", e.target.value)}
+                             placeholder="0.00" className="form-control" />
                     </div>
                   </div>
                   <div className="form-row">
                     <div className="form-group" style={{ flex: 1 }}>
                       <label className="form-label">Total (Salary + TADA)</label>
-                      <input value={formatCurrency(emp.total)} disabled className="form-control" style={{ backgroundColor: "#f3f4f6" }} />
+                      <input value={formatCurrency(emp.total)} disabled className="form-control"
+                             style={{ backgroundColor: "#f3f4f6" }} />
                     </div>
                     <div className="form-group" style={{ flex: 1 }}>
                       <label className="form-label">Remarks</label>
-                      <input value={emp.remarks || ""} onChange={(e) => handleEmployeeChange(emp._key, "remarks", e.target.value)} placeholder="Optional" className="form-control" />
+                      <input value={emp.remarks || ""}
+                             onChange={(e) => handleEmployeeChange(emp._key, "remarks", e.target.value)}
+                             placeholder="Optional" className="form-control" />
                     </div>
                   </div>
                   {!isEditingSalaryEntry && (
-                    <button type="button" className="btn-icon btn-icon--danger" onClick={() => handleRemoveEmployee(emp._key)} style={{ position: "absolute", top: 8, right: 8 }} title="Remove employee">
+                    <button type="button" className="btn-icon btn-icon--danger"
+                            onClick={() => handleRemoveEmployee(emp._key)}
+                            style={{ position: "absolute", top: 8, right: 8 }} title="Remove employee">
                       <Trash2 size={15} />
                     </button>
                   )}
                 </div>
               ))}
               {!isEditingSalaryEntry && (
-                <button type="button" onClick={handleAddEmployee} className="btn btn-secondary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <button type="button" onClick={handleAddEmployee} className="btn btn-secondary"
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <Plus size={15} /> Add Employee
                 </button>
               )}
@@ -2241,7 +1544,8 @@ export default function FinanceEntryForm({
               <div className="form-row" style={{ marginTop: 12 }}>
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
-                  <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange} className="form-control" required />
+                  <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
+                         className="form-control" required />
                 </div>
               </div>
               <div style={{ marginTop: 12, textAlign: "right", fontWeight: "bold" }}>
@@ -2252,55 +1556,15 @@ export default function FinanceEntryForm({
 
           {!isCapital && isLedger && renderLedgerFields()}
 
-          {!isCapital && isGoodwill && (
-            <>
-              <div className="form-group">
-                <label className="form-label">Client Name <span style={{ color: "red" }}>*</span></label>
-                <input list="clientList" name="client_name" value={form.client_name || ""} onChange={handleChange} placeholder="Search or enter client name" className="form-control" required />
-                <datalist id="clientList">
-                  {clientSuggestions.map((c) => <option key={c} value={c} />)}
-                </datalist>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Amount (₹) <span style={{ color: "red" }}>*</span></label>
-                  <input type="number" step="0.01" min="0" name="amount" value={form.amount} onChange={handleChange} placeholder="0.00" className="form-control" required />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
-                  <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange} className="form-control" required />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Remarks</label>
-                <textarea name="remarks" value={form.remarks} onChange={handleChange} rows={3} placeholder="Optional notes" className="form-control" />
-              </div>
-            </>
+          {!isCapital && !isSalaryCategory && !isLedger && (
+            showCategoryFields ? renderCategoryFields() : renderStandardFields()
           )}
-
-          {!isCapital && isOfficeAdmin && !isOfficeAdminSalary && !isLedger && renderOfficeAdminFields()}
-          {!isCapital && isIT && !isITSalaryCategory && !isLedger && (showITFields ? renderITFields() : renderStandardFields())}
-          {!isCapital && isITSales && !isITSalesSalaryCategory && !isLedger && (showITSalesFields ? renderITSalesFields() : renderStandardFields())}
-          {!isCapital && isMedTech && !isMedTechSalaryCategory && !isLedger && !isGoodwill && (showMedTechFields ? renderMedTechFields() : renderStandardFields())}
-          {!isCapital && isPCM && !isPCMSalaryCategory && !isLedger && (showPCMFields ? renderPCMFields() : renderStandardFields())}
-          {!isCapital && isDental && !isDentalSalaryCategory && !isLedger && (showDentalFields ? renderDentalFields() : renderStandardFields())}
-          {!isCapital && isEverglades && !isEvergladesSalaryCategory && !isLedger && !isGoodwill && (showEvergladesFields ? renderEvergladesFields() : renderStandardFields())}
-          {!isCapital && !isSalaryCategory && !isOfficeAdmin && !isIT && !isITSales && !isMedTech && !isPCM && !isDental && !isEverglades && !isLedger && !isGoodwill && renderStandardFields()}
 
           <div className="modal-footer">
             <button type="button" onClick={onClose} className="btn btn-secondary" disabled={saving}>Cancel</button>
             <button
               type="submit"
-              disabled={
-                saving ||
-                isITSalaryCategory ||
-                isITSalesSalaryCategory ||
-                isMedTechSalaryCategory ||
-                isPCMSalaryCategory ||
-                isDentalSalaryCategory ||
-                isEvergladesSalaryCategory ||
-                isOfficeAdminSalary
-              }
+              disabled={saving || (isSalaryCategory && !isCorporate)}
               className="btn btn-primary"
             >
               {saving ? "Saving..." : editingEntry ? "Update Entry" : "Save Entry"}

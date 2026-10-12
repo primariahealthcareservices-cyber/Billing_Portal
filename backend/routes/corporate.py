@@ -5,7 +5,7 @@ from datetime import datetime, date
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import get_jwt_identity
 
-from models import db, FinanceEntry, ENTRY_TYPES, DEPARTMENT_CONFIG
+from models import db, FinanceEntry, ENTRY_TYPES, DEPARTMENT_CONFIG, SALARY_CATEGORY
 from utils import role_required
 
 DEPARTMENT = "Corporate"
@@ -62,7 +62,7 @@ def options():
         "show_gst_tax": CONFIG["show_gst_tax"],
         "show_tax_invoice_number": CONFIG["show_tax_invoice_number"],
         "exec_departments": EXEC_DEPARTMENTS,
-        "is_salary_category": CONFIG.get("is_salary_category"),
+        "is_salary_category": SALARY_CATEGORY,
     }), 200
 
 
@@ -134,14 +134,13 @@ def create_entry():
         if category not in allowed_categories:
             errors.append(f"category must be one of: {', '.join(allowed_categories)}.")
 
-        salary_category = CONFIG.get("is_salary_category")
-        if entry_type == "Expenses" and category == salary_category:
+        if entry_type == "Expenses" and category == SALARY_CATEGORY:
             if not exec_department:
-                errors.append("exec_department is required for Payroll Salaries.")
+                errors.append("exec_department is required for Salary & Payrolls.")
             elif exec_department not in EXEC_DEPARTMENTS:
                 errors.append(f"exec_department must be one of: {', '.join(EXEC_DEPARTMENTS)}.")
             if not employee_name:
-                errors.append("employee_name is required for Payroll Salaries.")
+                errors.append("employee_name is required for Salary & Payrolls.")
             sal = salary_amount or 0
             allow = allowance_amount or 0
             if sal <= 0 and allow <= 0:
@@ -186,7 +185,6 @@ def create_entry():
 
 
 def _create_capital_entry(data):
-    """Create a Capital entry with validation."""
     errors = []
 
     client_name = (data.get("client_name") or "").strip()
@@ -260,7 +258,7 @@ def _create_single_salary_entry(emp_data):
     entry = FinanceEntry(
         department="Corporate",
         entry_type="Expenses",
-        category=CONFIG.get("is_salary_category"),
+        category=SALARY_CATEGORY,
         generated_by=None,
         client_name=None,
         amount=total,
@@ -321,7 +319,6 @@ def update_entry(entry_id):
     data = request.get_json(silent=True) or {}
     print(f"📝 Updating entry {entry_id} with data:", data)
 
-    # ===== CAPITAL ENTRY UPDATE =====
     if entry.entry_type == "Capital":
         if "client_name" in data:
             entry.client_name = (data["client_name"] or "").strip() or None
@@ -348,7 +345,6 @@ def update_entry(entry_id):
         db.session.commit()
         return jsonify({"message": "Capital entry updated.", "entry": entry.to_dict()}), 200
 
-    # ===== REGULAR ENTRY UPDATE =====
     if "entry_type" in data and data["entry_type"] in ENTRY_TYPES:
         entry.entry_type = data["entry_type"]
     if "category" in data:

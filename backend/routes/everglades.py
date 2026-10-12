@@ -6,7 +6,7 @@ from flask_jwt_extended import get_jwt_identity
 
 from models import (
     db, FinanceEntry, FinanceEntryItem, ENTRY_TYPES,
-    DEPARTMENT_CONFIG, EvergladesLedger,
+    DEPARTMENT_CONFIG, EvergladesLedger, SALARY_CATEGORY,
 )
 from utils import role_required
 from file_utils import save_invoice_file, delete_invoice_file
@@ -14,7 +14,6 @@ from file_utils import save_invoice_file, delete_invoice_file
 DEPARTMENT = "Everglades"
 CONFIG = DEPARTMENT_CONFIG[DEPARTMENT]
 
-# ✅ Capital categories
 CAPITAL_CATEGORIES = (
     "Equity Infusion",
     "Partner Contribution",
@@ -25,8 +24,8 @@ CAPITAL_CATEGORIES = (
 
 everglades_bp = Blueprint("everglades", __name__, url_prefix="/api/everglades")
 
-# Categories that require item-level details for Everglades
-EVERGLADES_ITEM_CATEGORIES = ["Pharmaceuticals & Inventory", "Supplies & Equipments"]
+# Only "Products & Innovation" supports item-level details.
+EVERGLADES_ITEM_CATEGORIES = ["Products & Innovation"]
 
 
 # ==================== HELPERS ====================
@@ -100,7 +99,6 @@ def _parse_gst_tax_percent(raw_value):
 
 
 def _parse_items_field(raw_items):
-    """Handle items that arrive either as a JSON string (FormData) or a list (JSON body)."""
     if raw_items is None or raw_items == "":
         return []
     if isinstance(raw_items, list):
@@ -116,9 +114,6 @@ def _parse_items_field(raw_items):
 @everglades_bp.route("/options", methods=["GET"])
 @role_required("Everglades")
 def options():
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
-        "is_salary_category", "Personnel & Payroll"
-    )
     return jsonify({
         "department": DEPARTMENT,
         "entry_types": ["Income", "Expenses", "Capital", "Ledger"],
@@ -133,13 +128,12 @@ def options():
         "show_invoice": CONFIG["show_invoice"],
         "show_gst_tax": CONFIG["show_gst_tax"],
         "show_tax_invoice_number": CONFIG["show_tax_invoice_number"],
-        "is_salary_category": salary_category,
+        "is_salary_category": SALARY_CATEGORY,
         "is_ledger_category": "Ledger",
         "capital_categories": list(CAPITAL_CATEGORIES),
     }), 200
 
 
-# ==================== CLIENT SUGGESTIONS ====================
 @everglades_bp.route("/clients", methods=["GET"])
 @role_required("Everglades")
 def get_clients():
@@ -150,7 +144,6 @@ def get_clients():
     return jsonify({"clients": client_list}), 200
 
 
-# ==================== CREATE ENTRY ====================
 @everglades_bp.route("/entries", methods=["POST"])
 @role_required("Everglades")
 def create_entry():
@@ -261,7 +254,7 @@ def create_entry():
             "entry": ledger.to_dict(),
         }), 201
 
-    # ---- REGULAR FINANCE ENTRY (non-Ledger) ----
+    # ---- REGULAR FINANCE ENTRY ----
     if is_json:
         return jsonify({"message": "Non-Ledger entries must be sent as form data."}), 400
 
@@ -275,10 +268,7 @@ def create_entry():
     vehicle_type = (data.get("vehicle_type") or "").strip() or None
     amount = data.get("amount")
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
-        "is_salary_category", "Personnel & Payroll"
-    )
-    is_salary = (entry_type == "Expenses" and category == salary_category)
+    is_salary = (entry_type == "Expenses" and category == SALARY_CATEGORY)
 
     errors = []
     if entry_type not in ENTRY_TYPES:
@@ -289,16 +279,12 @@ def create_entry():
     if is_salary:
         errors.append("Salaries must be entered by Corporate Management only.")
 
-    # ---- Goodwill validation ----
-    if category == "Goodwill" and not client_name:
-        errors.append("Client name is required for Goodwill entries.")
-
     if not is_salary:
         require_items = CONFIG["show_items"] and category in EVERGLADES_ITEM_CATEGORIES
 
-        if entry_type == "Income" and not generated_by and category != "Goodwill":
+        if entry_type == "Income" and not generated_by:
             errors.append("generated_by (employee name) is required for Income entries.")
-        if CONFIG["show_revenue_type"] and revenue_type not in CONFIG["revenue_types"] and category != "Goodwill":
+        if CONFIG["show_revenue_type"] and revenue_type not in CONFIG["revenue_types"]:
             errors.append(f"revenue_type must be one of: {', '.join(CONFIG['revenue_types'])}.")
         if CONFIG["show_gst_number"] and category in CONFIG["gst_required_categories"] and not gst_number:
             errors.append(f"gst_number is required for {category} entries.")
@@ -322,7 +308,7 @@ def create_entry():
                 base_amount = float(data.get("amount") or 0)
             except (TypeError, ValueError):
                 base_amount = 0
-            if base_amount <= 0 and not is_salary and category != "Goodwill":
+            if base_amount <= 0:
                 errors.append("Amount must be greater than 0.")
     else:
         clean_items = []
@@ -337,7 +323,7 @@ def create_entry():
 
     invoice_path = invoice_original = invoice_mimetype = None
     invoice_file = request.files.get("invoice")
-    if CONFIG["show_invoice"] and invoice_file and invoice_file.filename and not is_salary and category != "Goodwill":
+    if CONFIG["show_invoice"] and invoice_file and invoice_file.filename and not is_salary:
         try:
             invoice_path, invoice_original, invoice_mimetype = save_invoice_file(invoice_file, DEPARTMENT)
         except ValueError as e:
@@ -346,7 +332,7 @@ def create_entry():
     if errors:
         return jsonify({"message": "Validation failed.", "errors": errors}), 400
 
-    if not is_salary and category != "Goodwill":
+    if not is_salary:
         gst_tax_amount = round(base_amount * gst_tax_percent / 100, 2) if gst_tax_percent else 0
         total_amount = round(base_amount + gst_tax_amount, 2)
     else:
@@ -364,9 +350,7 @@ def create_entry():
         client_name=client_name,
         gst_number=gst_number if not is_salary else None,
         tax_invoice_number=tax_invoice_number if not is_salary else None,
-        amount=total_amount if not is_salary and category != "Goodwill" else (
-            float(amount) if category == "Goodwill" else 0
-        ),
+        amount=total_amount if not is_salary else 0,
         base_amount=base_amount,
         gst_tax_percent=gst_tax_percent,
         gst_tax_amount=gst_tax_amount,
@@ -380,7 +364,7 @@ def create_entry():
         created_by_id=get_jwt_identity(),
     )
 
-    if not is_salary and clean_items and category != "Goodwill":
+    if not is_salary and clean_items:
         for item in clean_items:
             entry.items.append(FinanceEntryItem(**item))
 
@@ -395,7 +379,6 @@ def create_entry():
     return jsonify({"message": "Entry created.", "entry": entry.to_dict()}), 201
 
 
-# ==================== LIST ENTRIES ====================
 @everglades_bp.route("/entries", methods=["GET"])
 @role_required("Everglades")
 def list_entries():
@@ -473,13 +456,11 @@ def list_entries():
     return jsonify({"entries": combined}), 200
 
 
-# ==================== UPDATE ENTRY ====================
 @everglades_bp.route("/entries/<int:entry_id>", methods=["PUT"])
 @role_required("Everglades")
 def update_entry(entry_id):
     entry = FinanceEntry.query.filter_by(id=entry_id, department=DEPARTMENT).first()
 
-    # ====================== CAPITAL UPDATE ======================
     if entry and entry.entry_type == "Capital":
         if request.is_json:
             data = request.get_json(silent=True) or {}
@@ -538,7 +519,6 @@ def update_entry(entry_id):
             return jsonify({"message": "Failed to update Capital entry.", "error": str(exc)}), 500
         return jsonify({"message": "Capital entry updated.", "entry": entry.to_dict()}), 200
 
-    # ---- Ledger / not-found fallback ----
     if not entry:
         ledger = EvergladesLedger.query.get(entry_id)
         if ledger:
@@ -582,7 +562,6 @@ def update_entry(entry_id):
         else:
             return jsonify({"message": "Entry not found."}), 404
 
-    # ---- Regular finance entry update ----
     if request.is_json:
         data = request.get_json(silent=True) or {}
     else:
@@ -590,130 +569,90 @@ def update_entry(entry_id):
 
     errors = []
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
-        "is_salary_category", "Personnel & Payroll"
-    )
     new_category = data.get("category", entry.category) or entry.category
     new_entry_type = data.get("entry_type", entry.entry_type) or entry.entry_type
 
     require_items = CONFIG["show_items"] and new_category in EVERGLADES_ITEM_CATEGORIES
 
-    # ---- Goodwill client_name validation ----
-    if new_category == "Goodwill":
-        client_name = (data.get("client_name") or "").strip()
-        if not client_name:
-            errors.append("Client name is required for Goodwill entries.")
-        else:
-            entry.client_name = client_name
-
-    # ---- Update simple fields ----
     if "entry_type" in data and data["entry_type"] in ENTRY_TYPES:
         entry.entry_type = data["entry_type"]
     if "category" in data:
         allowed_categories = CONFIG["categories"].get(entry.entry_type, [])
         if data["category"] in allowed_categories:
             entry.category = data["category"]
-            if data["category"] == "Goodwill":
-                entry.generated_by = None
-                entry.revenue_type = None
-                entry.gst_number = None
-                entry.gst_tax_percent = 0.0
-                entry.gst_tax_amount = 0.0
-                entry.employee_name = None
-                entry.vehicle_type = None
-                for old_item in list(entry.items):
-                    db.session.delete(old_item)
-                entry.items = []
         else:
             errors.append(f"category must be one of: {', '.join(allowed_categories)}")
 
-    if new_category != "Goodwill":
-        if "generated_by" in data and data["generated_by"].strip():
-            entry.generated_by = data["generated_by"].strip()
-        elif "generated_by" in data and not data["generated_by"].strip() and new_entry_type == "Income":
-            errors.append("generated_by (employee name) is required for Income entries.")
-        if "revenue_type" in data and data["revenue_type"] in CONFIG["revenue_types"]:
-            entry.revenue_type = data["revenue_type"]
-        if "client_name" in data:
-            entry.client_name = (data["client_name"] or "").strip() or None
-        if "gst_number" in data:
-            entry.gst_number = (data["gst_number"] or "").strip() or None
-        if "tax_invoice_number" in data:
-            entry.tax_invoice_number = (data["tax_invoice_number"] or "").strip() or None
-        if "employee_name" in data:
-            entry.employee_name = (data["employee_name"] or "").strip() or None
-        if "vehicle_type" in data:
-            entry.vehicle_type = (data["vehicle_type"] or "").strip() or None
-    else:
-        if "remarks" in data:
-            entry.remarks = data["remarks"]
-        if "entry_date" in data:
-            parsed = _parse_date(data["entry_date"])
-            if parsed:
-                entry.entry_date = parsed
+    if "generated_by" in data and data["generated_by"].strip():
+        entry.generated_by = data["generated_by"].strip()
+    elif "generated_by" in data and not data["generated_by"].strip() and new_entry_type == "Income":
+        errors.append("generated_by (employee name) is required for Income entries.")
+    if "revenue_type" in data and data["revenue_type"] in CONFIG["revenue_types"]:
+        entry.revenue_type = data["revenue_type"]
+    if "client_name" in data:
+        entry.client_name = (data["client_name"] or "").strip() or None
+    if "gst_number" in data:
+        entry.gst_number = (data["gst_number"] or "").strip() or None
+    if "tax_invoice_number" in data:
+        entry.tax_invoice_number = (data["tax_invoice_number"] or "").strip() or None
+    if "employee_name" in data:
+        entry.employee_name = (data["employee_name"] or "").strip() or None
+    if "vehicle_type" in data:
+        entry.vehicle_type = (data["vehicle_type"] or "").strip() or None
+    if "remarks" in data:
+        entry.remarks = data["remarks"]
+    if "entry_date" in data:
+        parsed = _parse_date(data["entry_date"])
+        if parsed:
+            entry.entry_date = parsed
 
-    # ---- Amount and Items handling ----
     amount_from_request = data.get("amount")
-    if new_category == "Goodwill":
-        if amount_from_request is not None and amount_from_request != "":
-            try:
-                amount_val = float(amount_from_request)
-                if amount_val < 0:
-                    errors.append("amount must be >= 0.")
-                else:
-                    entry.amount = amount_val
-            except (TypeError, ValueError):
-                errors.append("amount must be a valid number.")
-        else:
-            errors.append("amount is required for Goodwill entries.")
-    else:
-        if amount_from_request is not None and amount_from_request != "":
-            try:
-                base_amount = float(amount_from_request)
-                if base_amount < 0:
-                    errors.append("amount must be >= 0.")
-            except (TypeError, ValueError):
-                errors.append("amount must be a valid number.")
-                base_amount = float(entry.base_amount) if entry.base_amount is not None else 0.0
-        else:
+    if amount_from_request is not None and amount_from_request != "":
+        try:
+            base_amount = float(amount_from_request)
+            if base_amount < 0:
+                errors.append("amount must be >= 0.")
+        except (TypeError, ValueError):
+            errors.append("amount must be a valid number.")
             base_amount = float(entry.base_amount) if entry.base_amount is not None else 0.0
+    else:
+        base_amount = float(entry.base_amount) if entry.base_amount is not None else 0.0
 
-        if require_items:
-            items_changed = "items" in data
-            if items_changed:
-                items_data = _parse_items_field(data.get("items"))
-                if items_data is None:
-                    items_data = []
-                    errors.append("Items data could not be read.")
-                clean_items, items_total, item_errors = _validate_items(items_data)
-                errors.extend(item_errors)
-                if not item_errors:
-                    for old_item in list(entry.items):
-                        db.session.delete(old_item)
-                    entry.items = [FinanceEntryItem(**item) for item in clean_items]
-                    base_amount = items_total
-        else:
-            if entry.items:
+    if require_items:
+        items_changed = "items" in data
+        if items_changed:
+            items_data = _parse_items_field(data.get("items"))
+            if items_data is None:
+                items_data = []
+                errors.append("Items data could not be read.")
+            clean_items, items_total, item_errors = _validate_items(items_data)
+            errors.extend(item_errors)
+            if not item_errors:
                 for old_item in list(entry.items):
                     db.session.delete(old_item)
-                entry.items = []
+                entry.items = [FinanceEntryItem(**item) for item in clean_items]
+                base_amount = items_total
+    else:
+        if entry.items:
+            for old_item in list(entry.items):
+                db.session.delete(old_item)
+            entry.items = []
 
-        if "gst_tax_percent" in data:
-            gst_tax_percent, gst_tax_error = _parse_gst_tax_percent(data.get("gst_tax_percent"))
-            if gst_tax_error:
-                errors.append(gst_tax_error)
-        else:
-            gst_tax_percent = float(entry.gst_tax_percent) if entry.gst_tax_percent is not None else 0.0
+    if "gst_tax_percent" in data:
+        gst_tax_percent, gst_tax_error = _parse_gst_tax_percent(data.get("gst_tax_percent"))
+        if gst_tax_error:
+            errors.append(gst_tax_error)
+    else:
+        gst_tax_percent = float(entry.gst_tax_percent) if entry.gst_tax_percent is not None else 0.0
 
-        if not errors:
-            gst_tax_amount = round(base_amount * gst_tax_percent / 100, 2) if gst_tax_percent else 0
-            entry.base_amount = base_amount
-            entry.gst_tax_percent = gst_tax_percent
-            entry.gst_tax_amount = gst_tax_amount
-            entry.amount = round(base_amount + gst_tax_amount, 2)
+    if not errors:
+        gst_tax_amount = round(base_amount * gst_tax_percent / 100, 2) if gst_tax_percent else 0
+        entry.base_amount = base_amount
+        entry.gst_tax_percent = gst_tax_percent
+        entry.gst_tax_amount = gst_tax_amount
+        entry.amount = round(base_amount + gst_tax_amount, 2)
 
-    # ---- Invoice file (skip for Goodwill) ----
-    if request.files and new_category != "Goodwill":
+    if request.files:
         invoice_file = request.files.get("invoice")
         if invoice_file and invoice_file.filename:
             try:
@@ -745,7 +684,6 @@ def update_entry(entry_id):
     return jsonify({"message": "Entry updated.", "entry": entry.to_dict()}), 200
 
 
-# ==================== DELETE ENTRY ====================
 @everglades_bp.route("/entries/<int:entry_id>", methods=["DELETE"])
 @role_required("Everglades")
 def delete_entry(entry_id):
@@ -765,7 +703,6 @@ def delete_entry(entry_id):
     return jsonify({"message": "Entry not found."}), 404
 
 
-# ==================== LEDGER HISTORY ====================
 @everglades_bp.route("/ledger/history", methods=["GET"])
 @role_required("Everglades")
 def get_ledger_history():
@@ -778,7 +715,6 @@ def get_ledger_history():
     return jsonify({"history": [e.to_dict() for e in entries]}), 200
 
 
-# ==================== SUMMARY ====================
 @everglades_bp.route("/summary", methods=["GET"])
 @role_required("Everglades")
 def finance_summary():

@@ -1,14 +1,50 @@
 // frontend/src/components/AllEmployeesPage.jsx
 import React, { useEffect, useState, useCallback } from "react";
 import toast from "react-hot-toast";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Search, RotateCcw } from "lucide-react";
 import api from "../api/axios.js";
 
 const STATUS_LABEL = { pending: "Pending", approved: "Approved", rejected: "Rejected" };
 const STATUS_COLOR = { pending: "#b45309", approved: "#16a34a", rejected: "#e11d48" };
 
-const PAGE_SIZE = 25;        // requests per page (lazy)
-const ENTRIES_CHUNK = 50;    // entries shown per "Load more" click
+const PAGE_SIZE = 25;
+const ENTRIES_CHUNK = 50;
+
+// ── Date helpers ────────────────────────────────────────────────
+const fmtLocalDate = (d) => {
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+};
+
+const getPeriodRange = (period) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let start, end;
+
+  if (period === "week") {
+    const day = today.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    start = new Date(today);
+    start.setDate(today.getDate() + diff);
+    end = new Date(start);
+    end.setDate(start.getDate() + 6);
+  } else if (period === "month") {
+    start = new Date(today.getFullYear(), today.getMonth(), 1);
+    end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  } else if (period === "quarter") {
+    const q = Math.floor(today.getMonth() / 3);
+    start = new Date(today.getFullYear(), q * 3, 1);
+    end = new Date(today.getFullYear(), q * 3 + 3, 0);
+  } else if (period === "year") {
+    start = new Date(today.getFullYear(), 0, 1);
+    end = new Date(today.getFullYear(), 11, 31);
+  } else {
+    return { start: "", end: "" };
+  }
+  return { start: fmtLocalDate(start), end: fmtLocalDate(end) };
+};
 
 export default function AllEmployeesPage({ onBack }) {
   const [requests, setRequests] = useState([]);
@@ -17,20 +53,36 @@ export default function AllEmployeesPage({ onBack }) {
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
 
+  // ── Applied filters ─────────────────────────────────────────
+  const [period, setPeriod] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+
   const [activeRequest, setActiveRequest] = useState(null);
-  const [actingId, setActingId] = useState(null);      // per-entry acting indicator
+  const [actingId, setActingId] = useState(null);
   const [bulkActing, setBulkActing] = useState(false);
   const [remarks, setRemarks] = useState({});
   const [visibleCount, setVisibleCount] = useState(ENTRIES_CHUNK);
 
-  // Load a page of payroll requests
+  // ── Debounce search input ───────────────────────────────────
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // ── Load a page of payroll requests ─────────────────────────
   const loadPage = useCallback(async (pageNum = 1, append = false) => {
     if (pageNum === 1) setLoading(true);
     else setLoadingMore(true);
     try {
-      const res = await api.get("/copperbook/list", {
-        params: { payroll: "1", page: pageNum, per_page: PAGE_SIZE },
-      });
+      const params = { payroll: "1", page: pageNum, per_page: PAGE_SIZE };
+      if (fromDate) params.start_date = fromDate;
+      if (toDate) params.end_date = toDate;
+      if (search) params.search = search;
+
+      const res = await api.get("/copperbook/list", { params });
       const data = res.data;
       setPages(data.pagination?.pages || 1);
       setPage(data.pagination?.page || 1);
@@ -41,16 +93,42 @@ export default function AllEmployeesPage({ onBack }) {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, []);
+  }, [fromDate, toDate, search]);
 
   useEffect(() => { loadPage(1, false); }, [loadPage]);
+
+  // ── Filter handlers ─────────────────────────────────────────
+  const handlePeriodChange = (newPeriod) => {
+    setPeriod(newPeriod);
+    if (newPeriod === "custom") return;
+    const { start, end } = getPeriodRange(newPeriod);
+    setFromDate(start);
+    setToDate(end);
+  };
+
+  const handleFromChange = (v) => {
+    setFromDate(v);
+    setPeriod("custom");
+  };
+
+  const handleToChange = (v) => {
+    setToDate(v);
+    setPeriod("custom");
+  };
+
+  const resetFilters = () => {
+    setPeriod("all");
+    setFromDate("");
+    setToDate("");
+    setSearchInput("");
+    setSearch("");
+  };
 
   // ── Per-entry approve/reject with optimistic UI ────────────────
   const act = async (entryId, action) => {
     if (!activeRequest) return;
     setActingId(entryId);
 
-    // Optimistic flip
     const prevRequest = activeRequest;
     const nextEntries = activeRequest.employee_entries.map((e) =>
       e.id === entryId
@@ -67,11 +145,9 @@ export default function AllEmployeesPage({ onBack }) {
         remarks: remarks[entryId] || "",
       });
       toast.success(`Entry ${action === "approve" ? "approved" : "rejected"}.`);
-      // Refresh from server in background to get canonical state
       const fresh = await api.get(`/copperbook/${activeRequest.id}`);
       setActiveRequest(fresh.data);
     } catch (err) {
-      // Roll back on failure
       setActiveRequest(prevRequest);
       toast.error(err.response?.data?.error || "Action failed.");
     } finally {
@@ -84,7 +160,6 @@ export default function AllEmployeesPage({ onBack }) {
     if (!activeRequest) return;
     setBulkActing(true);
 
-    // Optimistic: mark all pending as approved locally
     const prevRequest = activeRequest;
     setActiveRequest({
       ...activeRequest,
@@ -99,7 +174,6 @@ export default function AllEmployeesPage({ onBack }) {
       toast.success(res.data.message || "All approved.");
       const fresh = await api.get(`/copperbook/${activeRequest.id}`);
       setActiveRequest(fresh.data);
-      // Also update list row status
       setRequests((prev) => prev.map((r) =>
         r.id === activeRequest.id ? { ...r, status: "approved" } : r
       ));
@@ -123,6 +197,66 @@ export default function AllEmployeesPage({ onBack }) {
           <h2 style={{ margin: 0 }}>👥 All Employees — Payroll Requests</h2>
         </div>
 
+        {/* ── Filter Panel ─────────────────────────────────────── */}
+        <p className="section-title" style={{ marginBottom: 8 }}>Filter Panel</p>
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div className="form-group" style={{ marginBottom: 0, minWidth: 150 }}>
+              <label className="form-label">Period</label>
+              <select
+                className="form-control"
+                value={period}
+                onChange={(e) => handlePeriodChange(e.target.value)}
+              >
+                <option value="all">All Time</option>
+                <option value="week">This Week</option>
+                <option value="month">This Month</option>
+                <option value="quarter">This Quarter</option>
+                <option value="year">This Year</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">From</label>
+              <input
+                type="date"
+                className="form-control"
+                value={fromDate}
+                onChange={(e) => handleFromChange(e.target.value)}
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">To</label>
+              <input
+                type="date"
+                className="form-control"
+                value={toDate}
+                onChange={(e) => handleToChange(e.target.value)}
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 0, flex: 1, minWidth: 220 }}>
+              <label className="form-label">Search</label>
+              <div style={{ position: "relative" }}>
+                <Search size={15} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", opacity: 0.5 }} />
+                <input
+                  className="form-control"
+                  style={{ paddingLeft: 32 }}
+                  placeholder="Request #, purpose, department, raiser…"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <button type="button" className="btn btn-secondary" onClick={resetFilters} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <RotateCcw size={15} /> Reset
+            </button>
+          </div>
+        </div>
+
         {loading ? (
           <div className="card empty-state">Loading…</div>
         ) : requests.length === 0 ? (
@@ -138,7 +272,6 @@ export default function AllEmployeesPage({ onBack }) {
                   setVisibleCount(ENTRIES_CHUNK);
                   setRemarks({});
                   setActiveRequest(r);
-                  // Fire-and-forget detail fetch for employee_entries
                   api.get(`/copperbook/${r.id}`).then((res) => setActiveRequest(res.data)).catch(() => {});
                 }}
               >
@@ -164,7 +297,6 @@ export default function AllEmployeesPage({ onBack }) {
               </div>
             ))}
 
-            {/* Lazy load more */}
             {page < pages && (
               <button
                 className="btn btn-secondary"
@@ -291,7 +423,6 @@ export default function AllEmployeesPage({ onBack }) {
                 </tbody>
               </table>
 
-              {/* Lazy load more entries */}
               {activeRequest.employee_entries?.length > visibleCount && (
                 <button
                   className="btn btn-secondary"

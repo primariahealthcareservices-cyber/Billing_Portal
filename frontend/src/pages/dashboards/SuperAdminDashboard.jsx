@@ -15,7 +15,7 @@ import StatCards from "../../components/StatCards.jsx";
 import FinanceCharts from "../../components/FinanceCharts.jsx";
 import FinanceTable from "../../components/FinanceTable.jsx";
 import EntryViewModal from "../../components/EntryViewModal.jsx";
-import CopperBookPage from "../../components/CopperBookPage.jsx";   // ✅ NEW
+import CopperBookPage from "../../components/CopperBookPage.jsx";
 import api from "../../api/axios.js";
 
 const DEPARTMENTS_CONFIG = [
@@ -58,6 +58,51 @@ const SUB_DEPT_TO_MAIN = {
   "MedTech": "MedTech",
   "PCM": "PCM",
   "Research Development": "ResearchDevelopment",
+};
+
+/* ---------------- FIXED CATEGORIES (used by every department) ---------------- */
+const STANDARD_CATEGORIES = [
+  "Salary & Payrolls",
+  "Corpus Fund",
+  "Referrals & Deposits",
+  "Products & Innovation",
+  "General Operations",
+  "Camps & Events",
+  "Marketing & Promos",
+  "Travel & Hospitality",
+  "Miscellaneous",
+];
+
+/* ---------------------------------------------------------------------------
+   Shared style for the category buttons.
+   Rounded pill edges (borderRadius: 22), light outline, generous padding.
+--------------------------------------------------------------------------- */
+const categoryBtnStyle = {
+  padding: "10px 20px",
+  borderRadius: 22,
+  fontSize: 13,
+  fontWeight: 500,
+  minHeight: 42,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textAlign: "center",
+  lineHeight: 1.2,
+  whiteSpace: "normal",
+  wordBreak: "break-word",
+  border: "1px solid #d1d5db",
+  background: "#ffffff",
+  transition: "all 0.15s ease",
+  cursor: "pointer",
+};
+
+/* Same shape, but for the active (selected) state */
+const categoryBtnActiveStyle = {
+  ...categoryBtnStyle,
+  background: "#2f5dd4",
+  borderColor: "#2f5dd4",
+  color: "#ffffff",
+  fontWeight: 600,
 };
 
 const KPI_DISPLAY_NAMES = {
@@ -149,20 +194,6 @@ const matchesDataView = (entry, view) => {
   return kind === view;
 };
 
-const excludeOtherCategory = (c) => {
-  const lower = (c || "").trim().toLowerCase();
-  return lower !== "others" && lower !== "other";
-};
-
-const excludeCorpusFund = (c) => {
-  const lower = (c || "").trim().toLowerCase();
-  return lower !== "corpus fund";
-};
-
-const filterIncomeCategory = (c) => excludeOtherCategory(c) && excludeCorpusFund(c);
-const filterExpenseCategory = (c) => excludeOtherCategory(c);
-const filterCapitalCategory = (c) => excludeOtherCategory(c);
-
 export default function SuperAdminDashboard() {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -215,7 +246,6 @@ export default function SuperAdminDashboard() {
 
   const [viewEntry, setViewEntry] = useState(null);
 
-  // ✅ NEW — controls CopperBook view
   const [showCopperBook, setShowCopperBook] = useState(false);
 
   useEffect(() => {
@@ -598,30 +628,8 @@ export default function SuperAdminDashboard() {
 
   const currentDeptLabel = DEPARTMENTS_CONFIG.find(d => d.value === activeDept)?.label || activeDept;
 
-  const categoryPanelOptions = React.useMemo(() => {
-    if (activeDept === "overview" || activeDept === "SalesEnterprise") return [];
-    if (!departmentOptions?.categories) return [];
-
-    const cats = departmentOptions.categories;
-
-    if (activeDept === "Caredx") {
-      if (dataView === "income") return [];
-      if (dataView === "capital") {
-        return (cats.Capital || []).filter(filterCapitalCategory);
-      }
-      return (cats.Expenses || []).filter(filterExpenseCategory);
-    }
-
-    if (dataView === "income")   return (cats.Income   || []).filter(filterIncomeCategory);
-    if (dataView === "expenses") return (cats.Expenses || []).filter(filterExpenseCategory);
-    if (dataView === "capital")  return (cats.Capital  || []).filter(filterCapitalCategory);
-
-    const allCats = new Set();
-    (cats.Income   || []).filter(filterIncomeCategory).forEach(c => allCats.add(c));
-    (cats.Expenses || []).filter(filterExpenseCategory).forEach(c => allCats.add(c));
-    (cats.Capital  || []).filter(filterCapitalCategory).forEach(c => allCats.add(c));
-    return Array.from(allCats);
-  }, [activeDept, dataView, departmentOptions]);
+  /* ---------------- FIXED category list — same for all departments ---------------- */
+  const categoryPanelOptions = React.useMemo(() => STANDARD_CATEGORIES, []);
 
   const sortedDepartments = React.useMemo(() => {
     if (!overview?.by_department) return [];
@@ -667,27 +675,44 @@ export default function SuperAdminDashboard() {
     return caredxExpenses;
   }, [caredxExpenses, dataView]);
 
+  /* ---------------------------------------------------------------------------
+     Category panel:
+       Row 1 → All Categories · Salary & Payrolls · Corpus Fund ·
+               Referrals & Deposits · Products & Innovation
+       Row 2 → General Operations · Camps & Events · Marketing & Promos ·
+               Travel & Hospitality · Miscellaneous
+     All buttons use the same rounded "pill + light outline" style as the
+     reference image.
+  --------------------------------------------------------------------------- */
   const renderCategoryPanel = () => {
     if (categoryPanelOptions.length === 0) return null;
+
+    const gridStyle = {
+      display: "grid",
+      gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+      gap: 12,
+    };
+
     return (
       <div className="card" style={{ marginBottom: 16 }}>
         <p className="section-title" style={{ marginBottom: 12 }}>Categories</p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <div style={gridStyle}>
+          {/* Row 1, cell 1: All Categories */}
           <button
             type="button"
-            className={`btn ${!selectedCategory ? "btn-primary" : "btn-secondary"}`}
             onClick={() => handleCategorySelect(null)}
-            style={{ padding: "8px 16px", borderRadius: 20, fontSize: 14 }}
+            style={!selectedCategory ? categoryBtnActiveStyle : categoryBtnStyle}
           >
             All Categories
           </button>
-          {categoryPanelOptions.map(cat => (
+
+          {/* Row 1, cells 2–5 + Row 2, cells 1–5: the 9 standard categories */}
+          {categoryPanelOptions.map((cat) => (
             <button
               key={cat}
               type="button"
-              className={`btn ${selectedCategory === cat ? "btn-primary" : "btn-secondary"}`}
               onClick={() => handleCategorySelect(cat)}
-              style={{ padding: "8px 16px", borderRadius: 20, fontSize: 14 }}
+              style={selectedCategory === cat ? categoryBtnActiveStyle : categoryBtnStyle}
             >
               {cat}
             </button>
@@ -742,7 +767,6 @@ export default function SuperAdminDashboard() {
     );
   };
 
-  // ✅ NEW — early return for CopperBook view
   if (showCopperBook) {
     return <CopperBookPage onBack={() => setShowCopperBook(false)} />;
   }
@@ -750,28 +774,10 @@ export default function SuperAdminDashboard() {
   return (
     <div className="page">
       <Navbar
-  title="CEO Governance Dashboard"
-  roleColor="#7c3aed"
-  onCopperBook={() => setShowCopperBook(true)}
-/>
-
-      {/* ✅ NEW — Floating CopperBook button */}
-   { /*  <button
-        onClick={() => setShowCopperBook(true)}
-        className="btn btn-primary"
-        style={{
-          position: "fixed",
-          bottom: 28,
-          right: 28,
-          zIndex: 900,
-          boxShadow: "0 8px 20px rgba(124, 58, 237, 0.35)",
-          padding: "12px 20px",
-          fontSize: 15,
-          fontWeight: 600,
-        }}
-      >
-        📘 CopperBook
-      </button> */}
+        title="CEO Governance Dashboard"
+        roleColor="#7c3aed"
+        onCopperBook={() => setShowCopperBook(true)}
+      />
 
       <main className="page-main">
         {/* ========== MAIN FILTER PANEL ========== */}

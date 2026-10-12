@@ -5,8 +5,7 @@ CareDx routes.
 Modules:
 1. Lab Data Entry
 2. Expenses (with Referral Amount)
-3. Capital (Equity Infusion, Partner Contribution, Asset Capitalization,
-   Reserve Fund Transfer, Other Capital)
+3. Capital
 4. Combined dashboard summary
 5. Excel import/export for lab entries
 """
@@ -25,6 +24,7 @@ from models import (
     CaredxExpense,
     FinanceEntry,
     DEPARTMENT_CONFIG,
+    SALARY_CATEGORY,
 )
 
 from utils import role_required
@@ -138,13 +138,12 @@ def _lab_entry_from_payload(data, existing=None):
 
 
 # ===========================================================================
-# 1. LAB DATA ENTRY  —  GET + POST on the same rule
+# 1. LAB DATA ENTRY
 # ===========================================================================
 
 @caredx_bp.route("/lab-entries", methods=["GET", "POST"])
 @role_required("Caredx")
 def lab_entries():
-    # ---------- POST: create ----------
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
         kwargs, errors = _lab_entry_from_payload(data)
@@ -164,7 +163,6 @@ def lab_entries():
 
         return jsonify({"message": "Lab entry created.", "entry": entry.to_dict()}), 201
 
-    # ---------- GET: list ----------
     query = _apply_date_filters(CaredxLabEntry.query, CaredxLabEntry.entry_date)
 
     search = (request.args.get("search") or "").strip()
@@ -310,13 +308,12 @@ def export_lab_entries():
 
 
 # ===========================================================================
-# 2. EXPENSES  —  GET + POST on the same rule
+# 2. EXPENSES
 # ===========================================================================
 
 @caredx_bp.route("/expenses", methods=["GET", "POST"])
 @role_required("Caredx")
 def expenses():
-    # ---------- POST: create ----------
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
 
@@ -334,10 +331,7 @@ def expenses():
         if not category:
             errors.append("category is required.")
 
-        salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
-            "is_salary_category", "Personnel & Payroll"
-        )
-        if category == salary_category:
+        if category == SALARY_CATEGORY:
             errors.append("Salaries must be entered by Corporate Management only.")
 
         try:
@@ -381,7 +375,6 @@ def expenses():
 
         return jsonify({"message": "Expense added.", "expense": expense.to_dict()}), 201
 
-    # ---------- GET: list ----------
     query = _apply_date_filters(CaredxExpense.query, CaredxExpense.expense_date)
 
     search = (request.args.get("search") or "").strip()
@@ -398,11 +391,8 @@ def expenses():
         CaredxExpense.id.desc(),
     ).all()
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
-        "is_salary_category", "Personnel & Payroll"
-    )
     salary_query = FinanceEntry.query.filter(
-        FinanceEntry.category == salary_category,
+        FinanceEntry.category == SALARY_CATEGORY,
         or_(
             FinanceEntry.department == "Caredx",
             (FinanceEntry.department == "Corporate") & (FinanceEntry.exec_department == "Caredx"),
@@ -432,7 +422,7 @@ def expenses():
         salary_items.append({
             "id": -s.id,
             "expense_date": s.entry_date.isoformat(),
-            "category": salary_category,
+            "category": SALARY_CATEGORY,
             "amount": float(s.amount),
             "referral_amount": 0,
             "remarks": f"Salary for {s.employee_name} ({s.exec_department}) - {s.remarks or ''}",
@@ -461,10 +451,7 @@ def update_expense(expense_id):
         if "category" in data:
             category = (data.get("category") or "").strip()
             if category:
-                salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
-                    "is_salary_category", "Personnel & Payroll"
-                )
-                if category == salary_category:
+                if category == SALARY_CATEGORY:
                     return jsonify({"message": "Salaries must be entered by Corporate Management only."}), 400
                 expense.category = category
 
@@ -528,7 +515,7 @@ def delete_expense(expense_id):
 
 
 # ===========================================================================
-# 3. CAPITAL  —  GET + POST on the same rule
+# 3. CAPITAL
 # ===========================================================================
 
 @caredx_bp.route("/capital/options", methods=["GET"])
@@ -543,7 +530,6 @@ def capital_options():
 @caredx_bp.route("/capital", methods=["GET", "POST"])
 @role_required("Caredx")
 def capital():
-    # ---------- POST: create ----------
     if request.method == "POST":
         data = request.get_json(silent=True) if request.is_json else request.form
         data = data or {}
@@ -582,7 +568,7 @@ def capital():
             entry_type="Capital",
             category=capital_category,
             sub_category="Capital",
-            fund_category=capital_category,  # reuse existing column
+            fund_category=capital_category,
             client_name=client_name,
             amount=amount,
             purpose=purpose,
@@ -602,7 +588,6 @@ def capital():
 
         return jsonify({"message": "Capital entry created.", "capital": entry.to_dict()}), 201
 
-    # ---------- GET: list ----------
     query = FinanceEntry.query.filter_by(
         department="Caredx",
         entry_type="Capital",
@@ -778,11 +763,8 @@ def lab_entries_summary():
     exp_query = _apply_date_filters(CaredxExpense.query, CaredxExpense.expense_date)
     caredx_expenses = exp_query.all()
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
-        "is_salary_category", "Personnel & Payroll"
-    )
     salary_query = FinanceEntry.query.filter(
-        FinanceEntry.category == salary_category,
+        FinanceEntry.category == SALARY_CATEGORY,
         or_(
             FinanceEntry.department == "Caredx",
             (FinanceEntry.department == "Corporate") & (FinanceEntry.exec_department == "Caredx"),
@@ -862,8 +844,8 @@ def lab_entries_summary():
         )
 
     if salary_total > 0:
-        by_category.setdefault(salary_category, {"category": salary_category, "amount": 0})
-        by_category[salary_category]["amount"] += salary_total
+        by_category.setdefault(SALARY_CATEGORY, {"category": SALARY_CATEGORY, "amount": 0})
+        by_category[SALARY_CATEGORY]["amount"] += salary_total
 
     if total_paid_to_other_labs > 0:
         by_category.setdefault("Paid to Other Labs", {"category": "Paid to Other Labs", "amount": 0})

@@ -1,7 +1,7 @@
 // frontend/src/components/CopperBookPage.jsx
 import React, { useEffect, useState, useCallback } from "react";
 import toast from "react-hot-toast";
-import { ArrowLeft, Paperclip, Loader2 } from "lucide-react";
+import { ArrowLeft, Paperclip, Loader2, Search, RotateCcw } from "lucide-react";
 import api from "../api/axios.js";
 import AllEmployeesPage from "./AllEmployeesPage.jsx";
 
@@ -20,6 +20,42 @@ const STATUS_COLOR = {
 };
 
 const PAGE_SIZE = 25;
+
+// ── Date helpers ────────────────────────────────────────────────
+const fmtLocalDate = (d) => {
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+};
+
+const getPeriodRange = (period) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let start, end;
+
+  if (period === "week") {
+    const day = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const diff = day === 0 ? -6 : 1 - day; // Monday-start week
+    start = new Date(today);
+    start.setDate(today.getDate() + diff);
+    end = new Date(start);
+    end.setDate(start.getDate() + 6);
+  } else if (period === "month") {
+    start = new Date(today.getFullYear(), today.getMonth(), 1);
+    end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  } else if (period === "quarter") {
+    const q = Math.floor(today.getMonth() / 3);
+    start = new Date(today.getFullYear(), q * 3, 1);
+    end = new Date(today.getFullYear(), q * 3 + 3, 0);
+  } else if (period === "year") {
+    start = new Date(today.getFullYear(), 0, 1);
+    end = new Date(today.getFullYear(), 11, 31);
+  } else {
+    return { start: "", end: "" };
+  }
+  return { start: fmtLocalDate(start), end: fmtLocalDate(end) };
+};
 
 const fmtDate = (d) => {
   if (!d) return "—";
@@ -46,13 +82,39 @@ const attachmentHref = (id) => {
   return token ? `${url}?token=${encodeURIComponent(token)}` : url;
 };
 
+// ── Filter button style ─────────────────────────────────────────
+const chipStyle = {
+  padding: "8px 16px",
+  borderRadius: 20,
+  fontSize: 13,
+  fontWeight: 500,
+  border: "1px solid #d1d5db",
+  background: "#ffffff",
+  cursor: "pointer",
+  transition: "all 0.15s ease",
+};
+
+const chipActiveStyle = {
+  ...chipStyle,
+  background: "#2f5dd4",
+  borderColor: "#2f5dd4",
+  color: "#ffffff",
+  fontWeight: 600,
+};
+
 export default function CopperBookPage({ onBack }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
+
+  // ── Applied filters ─────────────────────────────────────────
   const [statusFilter, setStatusFilter] = useState("all");
+  const [period, setPeriod] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
 
   const [openId, setOpenId] = useState(null);
@@ -72,6 +134,12 @@ export default function CopperBookPage({ onBack }) {
   const isCEO = role === "SuperAdmin";
   const isSuperAdmin = role === "SuperAdmin" || role === "admin";
 
+  // ── Debounce search input ───────────────────────────────────
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
   // ── Paginated load ────────────────────────────────────────────
   const load = useCallback(async (pageNum = 1, append = false) => {
     if (!append) setLoading(true);
@@ -79,7 +147,11 @@ export default function CopperBookPage({ onBack }) {
     try {
       const params = { page: pageNum, per_page: PAGE_SIZE };
       if (statusFilter !== "all") params.status = statusFilter;
-      const res = await api.get("/copperbook/list", { params, scope: "finance" });
+      if (fromDate) params.start_date = fromDate;
+      if (toDate) params.end_date = toDate;
+      if (search) params.search = search;
+
+      const res = await api.get("/copperbook/list", { params });
       const data = res.data;
       setPages(data.pagination?.pages || 1);
       setPage(data.pagination?.page || 1);
@@ -90,7 +162,7 @@ export default function CopperBookPage({ onBack }) {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, fromDate, toDate, search]);
 
   useEffect(() => { load(1, false); }, [load]);
 
@@ -101,6 +173,34 @@ export default function CopperBookPage({ onBack }) {
       .then((r) => { setDetail(r.data); setDetailLoading(false); })
       .catch(() => setDetailLoading(false));
   }, [openId]);
+
+  // ── Filter handlers ─────────────────────────────────────────
+  const handlePeriodChange = (newPeriod) => {
+    setPeriod(newPeriod);
+    if (newPeriod === "custom") return;
+    const { start, end } = getPeriodRange(newPeriod);
+    setFromDate(start);
+    setToDate(end);
+  };
+
+  const handleFromChange = (v) => {
+    setFromDate(v);
+    setPeriod("custom");
+  };
+
+  const handleToChange = (v) => {
+    setToDate(v);
+    setPeriod("custom");
+  };
+
+  const resetFilters = () => {
+    setStatusFilter("all");
+    setPeriod("all");
+    setFromDate("");
+    setToDate("");
+    setSearchInput("");
+    setSearch("");
+  };
 
   // ── Optimistic approve / reject / forward ─────────────────────
   const doAction = async (endpoint, action) => {
@@ -147,19 +247,6 @@ export default function CopperBookPage({ onBack }) {
     rejected: rows.filter((r) => r.status === "rejected").length,
   };
 
-  const filtered = rows.filter((r) => {
-    const matchStatus = statusFilter === "all" || r.status === statusFilter;
-    const q = search.toLowerCase();
-    const matchSearch =
-      !q ||
-      r.request_number?.toLowerCase().includes(q) ||
-      r.department?.toLowerCase().includes(q) ||
-      r.purpose?.toLowerCase().includes(q) ||
-      r.description?.toLowerCase().includes(q) ||
-      r.raised_by_name?.toLowerCase().includes(q);
-    return matchStatus && matchSearch;
-  });
-
   if (showAllEmployees) {
     return <AllEmployeesPage onBack={() => setShowAllEmployees(false)} />;
   }
@@ -179,136 +266,192 @@ export default function CopperBookPage({ onBack }) {
           </span>
         </div>
 
-        <div className="card" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-          {["all", "pending", "forwarded_to_ceo", "approved", "rejected"].map((s) => {
-            if (s !== "all" && counts[s] === 0) return null;
-            return (
+        {/* ── Filter Panel ─────────────────────────────────────── */}
+        <p className="section-title" style={{ marginBottom: 8 }}>Filter Panel</p>
+        <div className="card" style={{ marginBottom: 16 }}>
+
+          {/* Row 1 — Status chips */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+            {["all", "pending", "forwarded_to_ceo", "approved", "rejected"].map((s) => {
+              if (s !== "all" && counts[s] === 0) return null;
+              const label = s === "all" ? `All (${counts.all})` : `${STATUS_LABEL[s]} (${counts[s]})`;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setStatusFilter(s)}
+                  style={statusFilter === s ? chipActiveStyle : chipStyle}
+                >
+                  {label}
+                </button>
+              );
+            })}
+
+            {isSuperAdmin && (
               <button
-                key={s}
-                className={`btn ${statusFilter === s ? "btn-primary" : "btn-secondary"}`}
-                onClick={() => setStatusFilter(s)}
+                className="btn btn-primary"
+                onClick={() => setShowAllEmployees(true)}
+                style={{ marginLeft: "auto" }}
               >
-                {s === "all" ? `All (${counts.all})` : `${STATUS_LABEL[s]} (${counts[s]})`}
+                Salaries
               </button>
-            );
-          })}
+            )}
+          </div>
 
-          {isSuperAdmin && (
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowAllEmployees(true)}
-              style={{ marginLeft: 12 }}
-            >
-              Salaries
+          {/* Row 2 — Period + date range + search */}
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div className="form-group" style={{ marginBottom: 0, minWidth: 150 }}>
+              <label className="form-label">Period</label>
+              <select
+                className="form-control"
+                value={period}
+                onChange={(e) => handlePeriodChange(e.target.value)}
+              >
+                <option value="all">All Time</option>
+                <option value="week">This Week</option>
+                <option value="month">This Month</option>
+                <option value="quarter">This Quarter</option>
+                <option value="year">This Year</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">From</label>
+              <input
+                type="date"
+                className="form-control"
+                value={fromDate}
+                onChange={(e) => handleFromChange(e.target.value)}
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">To</label>
+              <input
+                type="date"
+                className="form-control"
+                value={toDate}
+                onChange={(e) => handleToChange(e.target.value)}
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 0, flex: 1, minWidth: 220 }}>
+              <label className="form-label">Search</label>
+              <div style={{ position: "relative" }}>
+                <Search size={15} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", opacity: 0.5 }} />
+                <input
+                  className="form-control"
+                  style={{ paddingLeft: 32 }}
+                  placeholder="Request #, purpose, department, raiser…"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <button type="button" className="btn btn-secondary" onClick={resetFilters} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <RotateCcw size={15} /> Reset
             </button>
-          )}
-
-          <input
-            className="form-control"
-            style={{ marginLeft: "auto", maxWidth: 300 }}
-            placeholder="Search request #, purpose, department…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+          </div>
         </div>
 
         {loading ? (
           <div className="card empty-state">Loading CopperBook requests…</div>
-        ) : filtered.length === 0 ? (
+        ) : rows.length === 0 ? (
           <div className="card empty-state">No CopperBook requests match this filter.</div>
         ) : (
-          <>
-            <div className="card table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Request #</th>
-                    <th>Department</th>
-                    <th>Raised By</th>
-                    <th>Purpose</th>
-                    <th style={{ textAlign: "right" }}>Amount</th>
-                    <th>Assignees</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((r) => (
-                    <tr key={r.id}>
-                      <td style={{ fontWeight: 600 }}>{r.request_number}</td>
-                      <td>{r.department}</td>
-                      <td>{r.raised_by_name || "—"}</td>
-                      <td className="truncate" style={{ maxWidth: 240 }}>{r.purpose}</td>
-                      <td
+          <div className="card table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Request #</th>
+                  <th>Department</th>
+                  <th>Raised By</th>
+                  <th>Purpose</th>
+                  <th style={{ textAlign: "right" }}>Amount</th>
+                  <th>Assignees</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <td style={{ fontWeight: 600 }}>{r.request_number}</td>
+                    <td>{r.department}</td>
+                    <td>{r.raised_by_name || "—"}</td>
+                    <td className="truncate" style={{ maxWidth: 240 }}>{r.purpose}</td>
+                    <td
+                      style={{
+                        textAlign: "right",
+                        fontWeight: r.amount ? 700 : 400,
+                        color: r.amount ? "#065f46" : "#9ca3af",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {r.amount ? fmtMoney(r.amount) : "—"}
+                    </td>
+                    <td>
+                      {r.assignee_names && r.assignee_names.length
+                        ? r.assignee_names.join(", ")
+                        : <span style={{ color: "#9ca3af" }}>
+                            {r.is_payroll
+                              ? "Payroll"
+                              : (r.department === "General Expenses"
+                                  ? "General Expense"
+                                  : "Whole Dept")}
+                          </span>}
+                    </td>
+                    <td>
+                      <span
+                        className="badge"
                         style={{
-                          textAlign: "right",
-                          fontWeight: r.amount ? 700 : 400,
-                          color: r.amount ? "#065f46" : "#9ca3af",
-                          whiteSpace: "nowrap",
+                          background: `${STATUS_COLOR[r.status]}20`,
+                          color: STATUS_COLOR[r.status],
+                          fontWeight: 600,
+                          padding: "3px 10px",
+                          borderRadius: 12,
+                          fontSize: 12,
                         }}
                       >
-                        {r.amount ? fmtMoney(r.amount) : "—"}
-                      </td>
-                      <td>
-                        {r.assignee_names && r.assignee_names.length
-                          ? r.assignee_names.join(", ")
-                          : <span style={{ color: "#9ca3af" }}>
-                              {r.is_payroll
-                                ? "Payroll"
-                                : (r.department === "General Expenses"
-                                    ? "General Expense"
-                                    : "Whole Dept")}
-                            </span>}
-                      </td>
-                      <td>
-                        <span
-                          className="badge"
-                          style={{
-                            background: `${STATUS_COLOR[r.status]}20`,
-                            color: STATUS_COLOR[r.status],
-                            fontWeight: 600,
-                            padding: "3px 10px",
-                            borderRadius: 12,
-                            fontSize: 12,
-                          }}
-                        >
-                          {STATUS_LABEL[r.status] || r.status}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: 12.5, color: "#6b7280", whiteSpace: "nowrap" }}>
-                        {fmtDate(r.created_at)}
-                      </td>
-                      <td>
-                        <button className="btn btn-secondary" onClick={() => setOpenId(r.id)}>
-                          Open
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        {STATUS_LABEL[r.status] || r.status}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: 12.5, color: "#6b7280", whiteSpace: "nowrap" }}>
+                      {fmtDate(r.created_at)}
+                    </td>
+                    <td>
+                      <button className="btn btn-secondary" onClick={() => setOpenId(r.id)}>
+                        Open
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
 
-              {page < pages && (
-                <div style={{ textAlign: "center", marginTop: 12 }}>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => load(page + 1, true)}
-                    disabled={loadingMore}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-                  >
-                    {loadingMore ? (
-                      <><Loader2 size={14} className="spin" /> Loading…</>
-                    ) : (
-                      `Load More (page ${page + 1} of ${pages})`
-                    )}
-                  </button>
-                </div>
-              )}
-            </div>
-          </>
+            {page < pages && (
+              <div style={{ textAlign: "center", marginTop: 12 }}>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => load(page + 1, true)}
+                  disabled={loadingMore}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                >
+                  {loadingMore ? (
+                    <><Loader2 size={14} className="spin" /> Loading…</>
+                  ) : (
+                    `Load More (page ${page + 1} of ${pages})`
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
         )}
 
+        {/* Detail modal */}
         {openId && (
           <div
             className="modal-overlay"
@@ -364,7 +507,6 @@ export default function CopperBookPage({ onBack }) {
                     </div>
                   </div>
 
-                  {/* ✅ NEW — Amount block for General Expenses */}
                   {detail.amount !== null && detail.amount !== undefined && (
                     <div style={{ marginBottom: 16 }}>
                       <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>Amount</div>

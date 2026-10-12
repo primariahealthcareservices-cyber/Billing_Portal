@@ -8,6 +8,7 @@ from models import (
     db, User, FinanceEntry, CaredxLabEntry, CaredxExpense,
     SalesEnterpriseKPI, MedTechLedger, EvergladesLedger,
     ROLES, VALID_DEPARTMENTS, ENTRY_TYPES, DEPARTMENT_CONFIG,
+    SALARY_CATEGORY,
 )
 from utils import role_required
 from excel_utils import (
@@ -16,6 +17,9 @@ from excel_utils import (
 )
 
 superadmin_bp = Blueprint("superadmin", __name__, url_prefix="/api/admin")
+
+# Local alias used throughout this module.
+SALARY_CAT = SALARY_CATEGORY   # "Salary & Payrolls"
 
 
 # ----------------------------------------------------------------------
@@ -169,7 +173,6 @@ def overview():
         return float(query.scalar())
 
     def sum_capital(start_date, end_date, department=None):
-        """Sum Capital entries across all departments (or a specific one)."""
         query = db.session.query(func.coalesce(func.sum(FinanceEntry.amount), 0)).filter(
             FinanceEntry.entry_type == "Capital",
         )
@@ -191,9 +194,8 @@ def overview():
         if end_date: exp_query = exp_query.filter(CaredxExpense.expense_date <= end_date)
         exp_total = float(exp_query.scalar())
 
-        salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
         salary_query = db.session.query(func.coalesce(func.sum(FinanceEntry.amount), 0)).filter(
-            FinanceEntry.category == salary_category,
+            FinanceEntry.category == SALARY_CAT,
             or_(
                 FinanceEntry.department == "Caredx",
                 (FinanceEntry.department == "Corporate") & (FinanceEntry.exec_department == "Caredx")
@@ -250,7 +252,7 @@ def overview():
     total_income = sum(d["income"] for d in by_department)
     total_expenses = sum(d["expenses"] for d in by_department)
     total_capital = sum(d["capital"] for d in by_department)
-    total_funds = sum_for(None, "Funds", start_date, end_date)  # legacy; 0 going forward
+    total_funds = sum_for(None, "Funds", start_date, end_date)
 
     return jsonify({
         "total_members": total_members,
@@ -265,7 +267,7 @@ def overview():
 
 
 # ----------------------------------------------------------------------
-# MedTech helper — includes Corporate salary rows
+# MedTech helper
 # ----------------------------------------------------------------------
 def _get_medtech_entries_with_ledger():
     start_date = _parse_date(request.args.get("start_date"))
@@ -278,10 +280,7 @@ def _get_medtech_entries_with_ledger():
     if per_page < 1: per_page = 1
     if per_page > 100: per_page = 100
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
-        "is_salary_category", "Personnel & Payroll"
-    )
-    wants_salary = (category == "") or (category == salary_category)
+    wants_salary = (category == "") or (category == SALARY_CAT)
 
     base_query = FinanceEntry.query.filter(
         FinanceEntry.department == "MedTech",
@@ -291,7 +290,7 @@ def _get_medtech_entries_with_ledger():
     if wants_salary:
         base_query = base_query.filter(
             or_(
-                FinanceEntry.category != salary_category,
+                FinanceEntry.category != SALARY_CAT,
                 FinanceEntry.category.is_(None),
             )
         )
@@ -323,7 +322,7 @@ def _get_medtech_entries_with_ledger():
         salary_query = FinanceEntry.query.filter(
             FinanceEntry.department == "Corporate",
             FinanceEntry.exec_department == "MedTech",
-            FinanceEntry.category == salary_category,
+            FinanceEntry.category == SALARY_CAT,
         )
         if start_date: salary_query = salary_query.filter(FinanceEntry.entry_date >= start_date)
         if end_date: salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
@@ -389,10 +388,7 @@ def _get_medtech_summary_with_ledger():
     end_date = _parse_date(request.args.get("end_date"))
     category = (request.args.get("category") or "").strip()
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
-        "is_salary_category", "Personnel & Payroll"
-    )
-    wants_salary = (category == "") or (category == salary_category)
+    wants_salary = (category == "") or (category == SALARY_CAT)
 
     base_query = FinanceEntry.query.filter(
         FinanceEntry.department == "MedTech",
@@ -401,7 +397,7 @@ def _get_medtech_summary_with_ledger():
     if wants_salary:
         base_query = base_query.filter(
             or_(
-                FinanceEntry.category != salary_category,
+                FinanceEntry.category != SALARY_CAT,
                 FinanceEntry.category.is_(None),
             )
         )
@@ -415,7 +411,7 @@ def _get_medtech_summary_with_ledger():
         salary_query = FinanceEntry.query.filter(
             FinanceEntry.department == "Corporate",
             FinanceEntry.exec_department == "MedTech",
-            FinanceEntry.category == salary_category,
+            FinanceEntry.category == SALARY_CAT,
         )
         if start_date: salary_query = salary_query.filter(FinanceEntry.entry_date >= start_date)
         if end_date: salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
@@ -485,7 +481,7 @@ def _get_medtech_summary_with_ledger():
 
 
 # ----------------------------------------------------------------------
-# Everglades helper — same Corporate salary union
+# Everglades helper
 # ----------------------------------------------------------------------
 def _get_everglades_entries_with_ledger():
     start_date = _parse_date(request.args.get("start_date"))
@@ -498,10 +494,7 @@ def _get_everglades_entries_with_ledger():
     if per_page < 1: per_page = 1
     if per_page > 100: per_page = 100
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
-        "is_salary_category", "Personnel & Payroll"
-    )
-    wants_salary = (category == "") or (category == salary_category)
+    wants_salary = (category == "") or (category == SALARY_CAT)
 
     base_query = FinanceEntry.query.filter(
         FinanceEntry.department == "Everglades",
@@ -510,7 +503,7 @@ def _get_everglades_entries_with_ledger():
     if wants_salary:
         base_query = base_query.filter(
             or_(
-                FinanceEntry.category != salary_category,
+                FinanceEntry.category != SALARY_CAT,
                 FinanceEntry.category.is_(None),
             )
         )
@@ -540,7 +533,7 @@ def _get_everglades_entries_with_ledger():
         salary_query = FinanceEntry.query.filter(
             FinanceEntry.department == "Corporate",
             FinanceEntry.exec_department == "Everglades",
-            FinanceEntry.category == salary_category,
+            FinanceEntry.category == SALARY_CAT,
         )
         if start_date: salary_query = salary_query.filter(FinanceEntry.entry_date >= start_date)
         if end_date: salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
@@ -606,10 +599,7 @@ def _get_everglades_summary_with_ledger():
     end_date = _parse_date(request.args.get("end_date"))
     category = (request.args.get("category") or "").strip()
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get(
-        "is_salary_category", "Personnel & Payroll"
-    )
-    wants_salary = (category == "") or (category == salary_category)
+    wants_salary = (category == "") or (category == SALARY_CAT)
 
     base_query = FinanceEntry.query.filter(
         FinanceEntry.department == "Everglades",
@@ -618,7 +608,7 @@ def _get_everglades_summary_with_ledger():
     if wants_salary:
         base_query = base_query.filter(
             or_(
-                FinanceEntry.category != salary_category,
+                FinanceEntry.category != SALARY_CAT,
                 FinanceEntry.category.is_(None),
             )
         )
@@ -632,7 +622,7 @@ def _get_everglades_summary_with_ledger():
         salary_query = FinanceEntry.query.filter(
             FinanceEntry.department == "Corporate",
             FinanceEntry.exec_department == "Everglades",
-            FinanceEntry.category == salary_category,
+            FinanceEntry.category == SALARY_CAT,
         )
         if start_date: salary_query = salary_query.filter(FinanceEntry.entry_date >= start_date)
         if end_date: salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
@@ -773,11 +763,10 @@ def _get_caredx_entries_and_summary(for_summary=False):
             CaredxExpense.expense_date.desc(), CaredxExpense.id.desc()
         ).all()
 
-        salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
         salary_items = []
-        if category == "" or category == salary_category:
+        if category == "" or category == SALARY_CAT:
             salary_query = FinanceEntry.query.filter(
-                FinanceEntry.category == salary_category,
+                FinanceEntry.category == SALARY_CAT,
                 or_(
                     FinanceEntry.department == "Caredx",
                     (FinanceEntry.department == "Corporate") & (FinanceEntry.exec_department == "Caredx")
@@ -797,7 +786,7 @@ def _get_caredx_entries_and_summary(for_summary=False):
             for s in salary_entries:
                 salary_items.append({
                     "id": -s.id, "expense_date": s.entry_date.isoformat(),
-                    "category": salary_category, "amount": float(s.amount),
+                    "category": SALARY_CAT, "amount": float(s.amount),
                     "remarks": f"Salary for {s.employee_name} ({s.exec_department}) - {s.remarks or ''}",
                     "employee_name": s.employee_name, "purpose": s.remarks,
                     "vehicle_type": s.vehicle_type, "_isSalary": True,
@@ -922,20 +911,19 @@ def dept_entries(dept):
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     if dept == "Corporate":
         query = FinanceEntry.query.filter(
             FinanceEntry.department == "Corporate",
             or_(
-                FinanceEntry.category != salary_category,
-                (FinanceEntry.category == salary_category) & (FinanceEntry.exec_department == "Corporate")
+                FinanceEntry.category != SALARY_CAT,
+                (FinanceEntry.category == SALARY_CAT) & (FinanceEntry.exec_department == "Corporate")
             )
         )
     else:
         query = FinanceEntry.query.filter(
             or_(
                 FinanceEntry.department == dept,
-                (FinanceEntry.department == "Corporate") & (FinanceEntry.exec_department == dept) & (FinanceEntry.category == salary_category)
+                (FinanceEntry.department == "Corporate") & (FinanceEntry.exec_department == dept) & (FinanceEntry.category == SALARY_CAT)
             )
         )
 
@@ -1002,20 +990,19 @@ def dept_summary(dept):
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     if dept == "Corporate":
         query = FinanceEntry.query.filter(
             FinanceEntry.department == "Corporate",
             or_(
-                FinanceEntry.category != salary_category,
-                (FinanceEntry.category == salary_category) & (FinanceEntry.exec_department == "Corporate")
+                FinanceEntry.category != SALARY_CAT,
+                (FinanceEntry.category == SALARY_CAT) & (FinanceEntry.exec_department == "Corporate")
             )
         )
     else:
         query = FinanceEntry.query.filter(
             or_(
                 FinanceEntry.department == dept,
-                (FinanceEntry.department == "Corporate") & (FinanceEntry.exec_department == dept) & (FinanceEntry.category == salary_category)
+                (FinanceEntry.department == "Corporate") & (FinanceEntry.exec_department == dept) & (FinanceEntry.category == SALARY_CAT)
             )
         )
 

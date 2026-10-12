@@ -4,14 +4,16 @@ from datetime import datetime, date
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import get_jwt_identity
 
-from models import db, FinanceEntry, FinanceEntryItem, ENTRY_TYPES, DEPARTMENT_CONFIG, MedTechLedger
+from models import (
+    db, FinanceEntry, FinanceEntryItem, ENTRY_TYPES, DEPARTMENT_CONFIG,
+    MedTechLedger, SALARY_CATEGORY,
+)
 from utils import role_required
 from file_utils import save_invoice_file, delete_invoice_file
 
 DEPARTMENT = "MedTech"
 CONFIG = DEPARTMENT_CONFIG[DEPARTMENT]
 
-# ✅ Capital categories
 CAPITAL_CATEGORIES = (
     "Equity Infusion",
     "Partner Contribution",
@@ -20,8 +22,9 @@ CAPITAL_CATEGORIES = (
     "Other Capital",
 )
 
-# ✅ Categories that require item-level details
-MEDTECH_ITEM_CATEGORIES = ["Supplies & Equipments", "Wholesales", "B2B Revenue", "B2C Revenue"]
+# Only "Products & Innovation" now supports item-level details.
+MEDTECH_ITEM_CATEGORIES = ["Products & Innovation"]
+
 medtech_bp = Blueprint("medtech", __name__, url_prefix="/api/medtech")
 
 
@@ -38,16 +41,6 @@ def _parse_date(value, default=None):
 def _is_multipart():
     ct = request.content_type or ""
     return ct.startswith("multipart/")
-
-
-def _apply_date_filters(query):
-    start_date = _parse_date(request.args.get("start_date"))
-    end_date = _parse_date(request.args.get("end_date"))
-    if start_date:
-        query = query.filter(FinanceEntry.entry_date >= start_date)
-    if end_date:
-        query = query.filter(FinanceEntry.entry_date <= end_date)
-    return query
 
 
 def _validate_items(items_data):
@@ -101,7 +94,6 @@ def _parse_gst_tax_percent(raw_value):
 
 
 def _parse_items_field(raw_items):
-    """Accept items as a list (JSON body) or a JSON-encoded string (FormData)."""
     if raw_items is None or raw_items == "":
         return []
     if isinstance(raw_items, list):
@@ -118,7 +110,6 @@ def _parse_items_field(raw_items):
 @medtech_bp.route("/options", methods=["GET"])
 @role_required("MedTech")
 def options():
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     return jsonify({
         "department": DEPARTMENT,
         "entry_types": ["Income", "Expenses", "Capital", "Ledger"],
@@ -133,7 +124,7 @@ def options():
         "show_invoice": CONFIG["show_invoice"],
         "show_gst_tax": CONFIG["show_gst_tax"],
         "show_tax_invoice_number": CONFIG["show_tax_invoice_number"],
-        "is_salary_category": salary_category,
+        "is_salary_category": SALARY_CATEGORY,
         "is_ledger_category": "Ledger",
         "capital_categories": list(CAPITAL_CATEGORIES),
     }), 200
@@ -175,9 +166,7 @@ def create_entry():
         amount_raw = data.get("amount")
 
         if capital_category not in CAPITAL_CATEGORIES:
-            errors.append(
-                "capital_category must be one of: " + ", ".join(CAPITAL_CATEGORIES) + "."
-            )
+            errors.append("capital_category must be one of: " + ", ".join(CAPITAL_CATEGORIES) + ".")
         if not client_name:
             errors.append("Name is required.")
         if not purpose:
@@ -215,14 +204,13 @@ def create_entry():
             return jsonify({"message": "Failed to create Capital entry.", "error": str(exc)}), 500
         return jsonify({"message": "Capital entry created.", "entry": entry.to_dict()}), 201
 
-    # ---- LEDGER HANDLING (accepts JSON and multipart) ----
+    # ---- LEDGER HANDLING ----
     category = data.get("category")
     remarks = data.get("remarks", "")
     entry_date = _parse_date(data.get("entry_date"), default=date.today())
 
     if entry_type == "Ledger":
         category = "Ledger"
-
         customer_name = (data.get("customer_name") or "").strip()
         try:
             total_amount = float(data.get("total_amount") or 0)
@@ -249,7 +237,6 @@ def create_entry():
             created_by_id=get_jwt_identity(),
         )
 
-        # ✅ Save invoice file if uploaded
         if is_multipart:
             invoice_file = request.files.get("invoice")
             if invoice_file and invoice_file.filename:
@@ -274,7 +261,7 @@ def create_entry():
             "entry": ledger.to_dict()
         }), 201
 
-    # ---- REGULAR FINANCE ENTRY (non-Ledger) ----
+    # ---- REGULAR FINANCE ENTRY ----
     if is_json:
         return jsonify({"message": "Non-Ledger entries must be sent as form data."}), 400
 
@@ -288,8 +275,7 @@ def create_entry():
     vehicle_type = (data.get("vehicle_type") or "").strip() or None
     amount = data.get("amount")
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
-    is_salary = (entry_type == "Expenses" and category == salary_category)
+    is_salary = (entry_type == "Expenses" and category == SALARY_CATEGORY)
 
     errors = []
     if entry_type not in ENTRY_TYPES:
@@ -300,17 +286,16 @@ def create_entry():
     if is_salary:
         errors.append("Salaries must be entered by Corporate Management only.")
 
-    # ---- Goodwill validation ----
-    if category == "Goodwill" and not client_name:
-        errors.append("Client name is required for Goodwill entries.")
+    if category == "Miscellaneous" and not client_name and entry_type == "Income":
+        # Goodwill was folded into Miscellaneous — no special rule now
+        pass
 
-    # ---- Category-dependent item validation ----
     if not is_salary:
         require_items = CONFIG["show_items"] and category in MEDTECH_ITEM_CATEGORIES
 
-        if entry_type == "Income" and not generated_by and category != "Goodwill":
+        if entry_type == "Income" and not generated_by:
             errors.append("generated_by (employee name) is required for Income entries.")
-        if CONFIG["show_revenue_type"] and revenue_type not in CONFIG["revenue_types"] and category != "Goodwill":
+        if CONFIG["show_revenue_type"] and revenue_type not in CONFIG["revenue_types"]:
             errors.append(f"revenue_type must be one of: {', '.join(CONFIG['revenue_types'])}.")
         if CONFIG["show_gst_number"] and category in CONFIG["gst_required_categories"] and not gst_number:
             errors.append(f"gst_number is required for {category} entries.")
@@ -334,7 +319,7 @@ def create_entry():
                 base_amount = float(data.get("amount") or 0)
             except (TypeError, ValueError):
                 base_amount = 0
-            if base_amount <= 0 and not is_salary and category != "Goodwill":
+            if base_amount <= 0:
                 errors.append("Amount must be greater than 0.")
     else:
         clean_items = []
@@ -349,7 +334,7 @@ def create_entry():
 
     invoice_path = invoice_original = invoice_mimetype = None
     invoice_file = request.files.get("invoice")
-    if invoice_file and invoice_file.filename and not is_salary and category != "Goodwill":
+    if invoice_file and invoice_file.filename and not is_salary:
         try:
             invoice_path, invoice_original, invoice_mimetype = save_invoice_file(invoice_file, DEPARTMENT)
         except ValueError as e:
@@ -358,7 +343,7 @@ def create_entry():
     if errors:
         return jsonify({"message": "Validation failed.", "errors": errors}), 400
 
-    if not is_salary and category != "Goodwill":
+    if not is_salary:
         gst_tax_amount = round(base_amount * gst_tax_percent / 100, 2) if gst_tax_percent else 0
         total_amount = round(base_amount + gst_tax_amount, 2)
     else:
@@ -376,7 +361,7 @@ def create_entry():
         client_name=client_name,
         gst_number=gst_number if not is_salary else None,
         tax_invoice_number=tax_invoice_number if not is_salary else None,
-        amount=total_amount if not is_salary and category != "Goodwill" else (float(amount) if category == "Goodwill" else 0),
+        amount=total_amount if not is_salary else 0,
         base_amount=base_amount,
         gst_tax_percent=gst_tax_percent,
         gst_tax_amount=gst_tax_amount,
@@ -390,7 +375,7 @@ def create_entry():
         created_by_id=get_jwt_identity(),
     )
 
-    if not is_salary and clean_items and category != "Goodwill":
+    if not is_salary and clean_items:
         for item in clean_items:
             entry.items.append(FinanceEntryItem(**item))
 
@@ -461,7 +446,6 @@ def list_entries():
         d["_type"] = "finance"
         combined.append(d)
 
-    # ✅ Ledger now includes invoice fields
     for le in ledger_entries:
         combined.append({
             "id": le.id,
@@ -474,7 +458,7 @@ def list_entries():
             "customer_name": le.customer_name,
             "paid": float(le.paid or 0),
             "balance": float(le.balance or 0),
-             "invoice_url": f"/api/files/invoices/{le.invoice_filename}" if le.invoice_filename else None,
+            "invoice_url": f"/api/files/invoices/{le.invoice_filename}" if le.invoice_filename else None,
             "invoice_original_name": le.invoice_original_name,
             "invoice_mimetype": le.invoice_mimetype,
             "_type": "ledger",
@@ -511,9 +495,7 @@ def update_entry(entry_id):
         amount_raw = data.get("amount")
 
         if capital_category not in CAPITAL_CATEGORIES:
-            errors.append(
-                "capital_category must be one of: " + ", ".join(CAPITAL_CATEGORIES) + "."
-            )
+            errors.append("capital_category must be one of: " + ", ".join(CAPITAL_CATEGORIES) + ".")
         if not client_name:
             errors.append("Name is required.")
         if not purpose:
@@ -585,7 +567,6 @@ def update_entry(entry_id):
             if "remarks" in data:
                 ledger.remarks = data["remarks"]
 
-            # ✅ Handle invoice replace / removal
             if _is_multipart():
                 invoice_file = request.files.get("invoice")
                 if invoice_file and invoice_file.filename:
@@ -623,18 +604,10 @@ def update_entry(entry_id):
 
     errors = []
 
-    salary_category = DEPARTMENT_CONFIG.get("Corporate", {}).get("is_salary_category", "Personnel & Payroll")
     new_category = data.get("category", entry.category) or entry.category
     new_entry_type = data.get("entry_type", entry.entry_type) or entry.entry_type
 
     require_items = CONFIG["show_items"] and new_category in MEDTECH_ITEM_CATEGORIES
-
-    if new_category == "Goodwill":
-        client_name = (data.get("client_name") or "").strip()
-        if not client_name:
-            errors.append("Client name is required for Goodwill entries.")
-        else:
-            entry.client_name = client_name
 
     if "entry_type" in data and data["entry_type"] in ENTRY_TYPES:
         entry.entry_type = data["entry_type"]
@@ -642,105 +615,79 @@ def update_entry(entry_id):
         allowed_categories = CONFIG["categories"].get(entry.entry_type, [])
         if data["category"] in allowed_categories:
             entry.category = data["category"]
-            if data["category"] == "Goodwill":
-                entry.generated_by = None
-                entry.revenue_type = None
-                entry.gst_number = None
-                entry.gst_tax_percent = 0.0
-                entry.gst_tax_amount = 0.0
-                entry.employee_name = None
-                entry.vehicle_type = None
-                for old_item in list(entry.items):
-                    db.session.delete(old_item)
-                entry.items = []
         else:
             errors.append(f"category must be one of: {', '.join(allowed_categories)}")
 
-    if new_category != "Goodwill":
-        if "generated_by" in data and data["generated_by"].strip():
-            entry.generated_by = data["generated_by"].strip()
-        elif "generated_by" in data and not data["generated_by"].strip() and new_entry_type == "Income":
-            errors.append("generated_by (employee name) is required for Income entries.")
-        if "revenue_type" in data and data["revenue_type"] in CONFIG["revenue_types"]:
-            entry.revenue_type = data["revenue_type"]
-        if "client_name" in data:
-            entry.client_name = (data["client_name"] or "").strip() or None
-        if "gst_number" in data:
-            entry.gst_number = (data["gst_number"] or "").strip() or None
-        if "tax_invoice_number" in data:
-            entry.tax_invoice_number = (data["tax_invoice_number"] or "").strip() or None
-        if "employee_name" in data:
-            entry.employee_name = (data["employee_name"] or "").strip() or None
-        if "vehicle_type" in data:
-            entry.vehicle_type = (data["vehicle_type"] or "").strip() or None
-    else:
-        if "remarks" in data:
-            entry.remarks = data["remarks"]
-        if "entry_date" in data:
-            parsed = _parse_date(data["entry_date"])
-            if parsed:
-                entry.entry_date = parsed
+    if "generated_by" in data and data["generated_by"].strip():
+        entry.generated_by = data["generated_by"].strip()
+    elif "generated_by" in data and not data["generated_by"].strip() and new_entry_type == "Income":
+        errors.append("generated_by (employee name) is required for Income entries.")
+    if "revenue_type" in data and data["revenue_type"] in CONFIG["revenue_types"]:
+        entry.revenue_type = data["revenue_type"]
+    if "client_name" in data:
+        entry.client_name = (data["client_name"] or "").strip() or None
+    if "gst_number" in data:
+        entry.gst_number = (data["gst_number"] or "").strip() or None
+    if "tax_invoice_number" in data:
+        entry.tax_invoice_number = (data["tax_invoice_number"] or "").strip() or None
+    if "employee_name" in data:
+        entry.employee_name = (data["employee_name"] or "").strip() or None
+    if "vehicle_type" in data:
+        entry.vehicle_type = (data["vehicle_type"] or "").strip() or None
+    if "remarks" in data:
+        entry.remarks = data["remarks"]
+    if "entry_date" in data:
+        parsed = _parse_date(data["entry_date"])
+        if parsed:
+            entry.entry_date = parsed
 
     amount_from_request = data.get("amount")
-    if new_category == "Goodwill":
-        if amount_from_request is not None and amount_from_request != "":
-            try:
-                amount_val = float(amount_from_request)
-                if amount_val < 0:
-                    errors.append("amount must be >= 0.")
-                else:
-                    entry.amount = amount_val
-            except (TypeError, ValueError):
-                errors.append("amount must be a valid number.")
-        else:
-            errors.append("amount is required for Goodwill entries.")
-    else:
-        if amount_from_request is not None and amount_from_request != "":
-            try:
-                base_amount = float(amount_from_request)
-                if base_amount < 0:
-                    errors.append("amount must be >= 0.")
-            except (TypeError, ValueError):
-                errors.append("amount must be a valid number.")
-                base_amount = float(entry.base_amount) if entry.base_amount is not None else 0.0
-        else:
+    if amount_from_request is not None and amount_from_request != "":
+        try:
+            base_amount = float(amount_from_request)
+            if base_amount < 0:
+                errors.append("amount must be >= 0.")
+        except (TypeError, ValueError):
+            errors.append("amount must be a valid number.")
             base_amount = float(entry.base_amount) if entry.base_amount is not None else 0.0
+    else:
+        base_amount = float(entry.base_amount) if entry.base_amount is not None else 0.0
 
-        if require_items:
-            items_changed = "items" in data
-            if items_changed:
-                items_data = _parse_items_field(data.get("items"))
-                if items_data is None:
-                    items_data = []
-                    errors.append("Items data could not be read.")
-                clean_items, items_total, item_errors = _validate_items(items_data)
-                errors.extend(item_errors)
-                if not item_errors:
-                    for old_item in list(entry.items):
-                        db.session.delete(old_item)
-                    entry.items = [FinanceEntryItem(**item) for item in clean_items]
-                    base_amount = items_total
-        else:
-            if entry.items:
+    if require_items:
+        items_changed = "items" in data
+        if items_changed:
+            items_data = _parse_items_field(data.get("items"))
+            if items_data is None:
+                items_data = []
+                errors.append("Items data could not be read.")
+            clean_items, items_total, item_errors = _validate_items(items_data)
+            errors.extend(item_errors)
+            if not item_errors:
                 for old_item in list(entry.items):
                     db.session.delete(old_item)
-                entry.items = []
+                entry.items = [FinanceEntryItem(**item) for item in clean_items]
+                base_amount = items_total
+    else:
+        if entry.items:
+            for old_item in list(entry.items):
+                db.session.delete(old_item)
+            entry.items = []
 
-        if "gst_tax_percent" in data:
-            gst_tax_percent, gst_tax_error = _parse_gst_tax_percent(data.get("gst_tax_percent"))
-            if gst_tax_error:
-                errors.append(gst_tax_error)
-        else:
-            gst_tax_percent = float(entry.gst_tax_percent) if entry.gst_tax_percent is not None else 0.0
+    if "gst_tax_percent" in data:
+        gst_tax_percent, gst_tax_error = _parse_gst_tax_percent(data.get("gst_tax_percent"))
+        if gst_tax_error:
+            errors.append(gst_tax_error)
+    else:
+        gst_tax_percent = float(entry.gst_tax_percent) if entry.gst_tax_percent is not None else 0.0
 
-        if not errors:
-            gst_tax_amount = round(base_amount * gst_tax_percent / 100, 2) if gst_tax_percent else 0
-            entry.base_amount = base_amount
-            entry.gst_tax_percent = gst_tax_percent
-            entry.gst_tax_amount = gst_tax_amount
-            entry.amount = round(base_amount + gst_tax_amount, 2)
+    if not errors:
+        gst_tax_amount = round(base_amount * gst_tax_percent / 100, 2) if gst_tax_percent else 0
+        entry.base_amount = base_amount
+        entry.gst_tax_percent = gst_tax_percent
+        entry.gst_tax_amount = gst_tax_amount
+        entry.amount = round(base_amount + gst_tax_amount, 2)
 
-    if request.files and new_category != "Goodwill":
+    if request.files:
         invoice_file = request.files.get("invoice")
         if invoice_file and invoice_file.filename:
             try:
