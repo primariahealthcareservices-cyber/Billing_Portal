@@ -27,6 +27,9 @@ const STANDARD_CATEGORIES = [
   "Miscellaneous",
 ];
 
+// Special filter token used for the Capital entry-type button
+const CAPITAL_FILTER = "Capital";
+
 // Shared style for the category buttons (box shape, centered text)
 const categoryBtnStyle = {
   padding: "10px 12px",
@@ -303,7 +306,26 @@ export default function FinanceDashboard({ department, title, roleColor, onCoppe
   };
 
   // ---------------------------------------------------------------
-  // ✅ Categories Panel — 5 per row, box-style buttons, with Clear
+  // ✅ Handlers for the Categories panel
+  // ---------------------------------------------------------------
+  const handleAllCategories = () => {
+    setSelectedCategory(null);
+    setTypeFilter("");
+  };
+
+  const handleCategorySelect = (cat) => {
+    setSelectedCategory(cat);
+    // If Capital entry-type filter was active, drop it when picking a real category
+    if (typeFilter === CAPITAL_FILTER) setTypeFilter("");
+  };
+
+  const handleCapitalSelect = () => {
+    setTypeFilter(CAPITAL_FILTER);
+    setSelectedCategory(null);
+  };
+
+  // ---------------------------------------------------------------
+  // ✅ Categories Panel — 6 per row (1 × 6), box-style buttons, with Capital
   // ---------------------------------------------------------------
   const renderCategoryPanel = () => (
     <div className="card" style={{ marginBottom: 16 }}>
@@ -311,15 +333,15 @@ export default function FinanceDashboard({ department, title, roleColor, onCoppe
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+          gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
           gap: 10,
         }}
       >
-        {/* Row 1: All Categories + first 4 categories */}
+        {/* Row 1: All Categories + first 5 categories */}
         <button
           type="button"
-          className={`btn ${!selectedCategory ? "btn-primary" : "btn-secondary"}`}
-          onClick={() => setSelectedCategory(null)}
+          className={`btn ${!selectedCategory && typeFilter !== CAPITAL_FILTER ? "btn-primary" : "btn-secondary"}`}
+          onClick={handleAllCategories}
           style={categoryBtnStyle}
         >
           All Categories
@@ -330,22 +352,30 @@ export default function FinanceDashboard({ department, title, roleColor, onCoppe
             key={cat}
             type="button"
             className={`btn ${selectedCategory === cat ? "btn-primary" : "btn-secondary"}`}
-            onClick={() => setSelectedCategory(cat)}
+            onClick={() => handleCategorySelect(cat)}
             style={categoryBtnStyle}
           >
             {cat}
           </button>
         ))}
 
-        {/* Clear — first cell of the last row */}
+        {/* Capital — filters by entry_type=Capital */}
+        <button
+          type="button"
+          className={`btn ${typeFilter === CAPITAL_FILTER ? "btn-primary" : "btn-secondary"}`}
+          onClick={handleCapitalSelect}
+          style={categoryBtnStyle}
+          title="Show Capital entries only"
+        >
+          Capital
+        </button>
+
+        {/* Clear — last cell */}
         <button
           type="button"
           className="btn btn-secondary"
-          onClick={() => setSelectedCategory(null)}
-          style={{
-            ...categoryBtnStyle,
-            gap: 6,
-          }}
+          onClick={handleAllCategories}
+          style={{ ...categoryBtnStyle, gap: 6 }}
           title="Clear category filter"
         >
           <RotateCcw size={14} /> Clear

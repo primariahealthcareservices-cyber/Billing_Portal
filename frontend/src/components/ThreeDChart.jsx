@@ -1,5 +1,5 @@
 // frontend/src/components/ThreeDChart.jsx
-import React, { useEffect, useRef, useMemo } from "react";
+import React, { useMemo } from "react";
 
 const COLORS = [
   "#2f5dd4", // indigo
@@ -21,254 +21,217 @@ const formatCurrency = (value) => {
   }).format(n);
 };
 
-export default function ThreeDChart({ data = [], height = 260 }) {
-  const containerRef = useRef(null);
+/* ---------- geometry helpers ---------- */
+function polarToCartesian(cx, cy, r, angleDeg) {
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
 
-  // Normalize incoming data: only keep items with a numeric amount.
+function arcPath(cx, cy, r, startAngle, endAngle) {
+  const start = polarToCartesian(cx, cy, r, endAngle);
+  const end = polarToCartesian(cx, cy, r, startAngle);
+  const largeArc = endAngle - startAngle <= 180 ? 0 : 1;
+  return [
+    "M", cx, cy,
+    "L", start.x, start.y,
+    "A", r, r, 0, largeArc, 0, end.x, end.y,
+    "Z",
+  ].join(" ");
+}
+
+export default function ThreeDChart({
+  data = [],
+  height = 260,
+  title,
+  centerLabel = "Total",
+}) {
   const items = useMemo(() => {
     return (data || [])
-      .filter((d) => d && Number.isFinite(Number(d.amount)))
-      .map((d) => ({
-        category: String(d.category || "—"),
-        amount: Number(d.amount),
-      }));
+      .filter((d) => d && d.category)
+      .map((d, i) => ({
+        category: String(d.category),
+        amount: Math.abs(Number(d.amount) || 0),
+        rawAmount: Number(d.amount) || 0,
+        color: d.color || COLORS[i % COLORS.length],
+        displayValue: d.displayValue, // optional override (e.g. "42 entries")
+      }))
+      .filter((d) => d.amount > 0);
   }, [data]);
 
-  // Re-run entrance animation whenever the data changes.
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const bars = container.querySelectorAll(".bar-3d");
-    bars.forEach((bar, i) => {
-      bar.classList.remove("animate");
-      // Force reflow so re-adding the class replays the animation
-      void bar.offsetWidth;
-      bar.style.animationDelay = `${i * 0.06}s`;
-      bar.classList.add("animate");
-    });
-  }, [items]);
+  const total = useMemo(
+    () => items.reduce((s, d) => s + d.amount, 0),
+    [items]
+  );
 
-  if (items.length === 0) {
+  if (items.length === 0 || total === 0) {
     return (
-      <div className="chart-empty" style={{ height }}>
-        No data for 3D chart.
+      <div
+        className="chart-empty"
+        style={{
+          height,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#6b7280",
+          fontSize: 13,
+        }}
+      >
+        No data for chart.
       </div>
     );
   }
 
-  // Scale bars to a maximum height.
-  const maxAbs = Math.max(...items.map((d) => Math.abs(d.amount)), 1);
-  const maxBarHeight = height - 90; // reserve space for label + top face
+  const cx = 130;
+  const cy = 130;
+  const r = 108;
+  const innerR = 62;
+
+  let cursor = 0;
+  const slices = items.map((item) => {
+    const angle = (item.amount / total) * 360;
+    const startAngle = cursor;
+    const endAngle = cursor + angle;
+    cursor = endAngle;
+    return {
+      ...item,
+      startAngle,
+      endAngle,
+      percent: (item.amount / total) * 100,
+    };
+  });
 
   return (
-    <div
-      ref={containerRef}
-      className="chart-3d-wrap"
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "flex-end",
-        height,
-        padding: "20px 12px 28px",
-        perspective: "900px",
-        gap: "clamp(8px, 2vw, 22px)",
-        overflowX: "auto",
-      }}
-    >
-      {items.map((item, index) => {
-        const barHeight =
-          maxAbs === 0 ? 10 : Math.max(10, (Math.abs(item.amount) / maxAbs) * maxBarHeight);
-        const color = COLORS[index % COLORS.length];
-        const label =
-          item.category.length > 12
-            ? item.category.slice(0, 10) + "…"
-            : item.category;
-
-        return (
-          <div
-            key={`${item.category}-${index}`}
-            className="bar-3d"
-            style={{
-              position: "relative",
-              width: 46,
-              flex: "0 0 auto",
-              transformStyle: "preserve-3d",
-              transform: "rotateX(-18deg) rotateY(12deg)",
-              transition: "transform 0.25s ease",
-              cursor: "pointer",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform =
-                "rotateX(-18deg) rotateY(12deg) scale(1.06)";
-              const tip = e.currentTarget.querySelector(".bar-tip");
-              if (tip) tip.style.opacity = "1";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform =
-                "rotateX(-18deg) rotateY(12deg)";
-              const tip = e.currentTarget.querySelector(".bar-tip");
-              if (tip) tip.style.opacity = "0";
-            }}
-          >
-            {/* ---------- FRONT FACE ---------- */}
-            <div
-              className="bar-front"
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {title && (
+        <p className="section-title" style={{ margin: 0 }}>
+          {title}
+        </p>
+      )}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 32,
+          flexWrap: "wrap",
+          minHeight: height,
+        }}
+      >
+        {/* ---------- PIE / DONUT ---------- */}
+        <svg
+          width={260}
+          height={260}
+          viewBox="0 0 260 260"
+          style={{ flex: "0 0 auto" }}
+        >
+          {slices.map((s, idx) => (
+            <path
+              key={idx}
+              d={arcPath(cx, cy, r, s.startAngle, s.endAngle)}
+              fill={s.color}
+              stroke="#fff"
+              strokeWidth={2}
               style={{
-                height: barHeight,
-                width: "100%",
-                backgroundColor: color,
-                borderRadius: "4px 4px 0 0",
-                boxShadow: `0 6px 18px ${color}40, inset 0 -8px 12px rgba(0,0,0,0.15)`,
-                display: "flex",
-                alignItems: "flex-end",
-                justifyContent: "center",
-                paddingBottom: 6,
-                color: "#fff",
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: 0.2,
-                transition: "height 0.5s ease",
-                position: "relative",
-                overflow: "hidden",
+                transition: "transform 0.2s ease",
+                transformOrigin: `${cx}px ${cy}px`,
+                cursor: "pointer",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "scale(1.04)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "scale(1)";
               }}
             >
-              {/* subtle sheen */}
-              <div
+              <title>
+                {s.category}: {formatCurrency(s.rawAmount)} ({s.percent.toFixed(1)}%)
+              </title>
+            </path>
+          ))}
+
+          {/* inner hole for donut */}
+          <circle cx={cx} cy={cy} r={innerR} fill="#fff" />
+          <text
+            x={cx}
+            y={cy - 6}
+            textAnchor="middle"
+            fontSize={11}
+            fill="#6b7280"
+            fontWeight={500}
+          >
+            {centerLabel}
+          </text>
+          <text
+            x={cx}
+            y={cy + 14}
+            textAnchor="middle"
+            fontSize={14}
+            fill="#111827"
+            fontWeight={700}
+          >
+            {formatCurrency(total)}
+          </text>
+        </svg>
+
+        {/* ---------- LEGEND ---------- */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            minWidth: 230,
+            maxWidth: 340,
+          }}
+        >
+          {slices.map((s, idx) => (
+            <div
+              key={idx}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "8px 12px",
+                borderRadius: 8,
+                background: "#f8fafc",
+                border: "1px solid #e5e7eb",
+              }}
+            >
+              <span
                 style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: "40%",
-                  background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0))",
-                  pointerEvents: "none",
+                  width: 12,
+                  height: 12,
+                  borderRadius: 3,
+                  background: s.color,
+                  flex: "0 0 auto",
                 }}
               />
-              <span style={{ textShadow: "0 1px 3px rgba(0,0,0,0.5)", zIndex: 1 }}>
-                {formatCurrency(item.amount)}
+              <span style={{ fontSize: 13, color: "#334155", flex: 1 }}>
+                {s.category}
+              </span>
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "#111827",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {s.displayValue || formatCurrency(s.rawAmount)}
+              </span>
+              <span
+                style={{
+                  fontSize: 12,
+                  color: "#6b7280",
+                  minWidth: 48,
+                  textAlign: "right",
+                }}
+              >
+                {s.percent.toFixed(1)}%
               </span>
             </div>
-
-            {/* ---------- RIGHT SIDE FACE (depth) ---------- */}
-            <div
-              className="bar-side"
-              style={{
-                position: "absolute",
-                top: 0,
-                right: -10,
-                width: 10,
-                height: barHeight,
-                background: `linear-gradient(180deg, ${color}, ${shade(color, -0.25)})`,
-                transform: "skewY(-25deg)",
-                transformOrigin: "top left",
-                borderTopRightRadius: 4,
-                transition: "height 0.5s ease",
-              }}
-            />
-
-            {/* ---------- TOP FACE ---------- */}
-            <div
-              className="bar-top"
-              style={{
-                position: "absolute",
-                top: -6,
-                left: -10,
-                width: "calc(100% + 10px)",
-                height: 10,
-                background: shade(color, 0.15),
-                transform: "skewX(-55deg)",
-                transformOrigin: "bottom left",
-                borderTopLeftRadius: 4,
-                borderTopRightRadius: 2,
-              }}
-            />
-
-            {/* ---------- HOVER TOOLTIP ---------- */}
-            <div
-              className="bar-tip"
-              style={{
-                position: "absolute",
-                bottom: barHeight + 18,
-                left: "50%",
-                transform: "translateX(-50%) translateZ(30px)",
-                background: "#111827",
-                color: "#fff",
-                fontSize: 11,
-                padding: "6px 10px",
-                borderRadius: 6,
-                whiteSpace: "nowrap",
-                opacity: 0,
-                pointerEvents: "none",
-                transition: "opacity 0.2s ease",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
-                zIndex: 10,
-              }}
-            >
-              <div style={{ fontWeight: 600 }}>{item.category}</div>
-              <div style={{ opacity: 0.85 }}>{formatCurrency(item.amount)}</div>
-            </div>
-
-            {/* ---------- X-AXIS LABEL ---------- */}
-            <div
-              style={{
-                marginTop: 10,
-                textAlign: "center",
-                fontSize: 11,
-                color: "#475569",
-                fontWeight: 500,
-                maxWidth: 70,
-                lineHeight: 1.2,
-              }}
-            >
-              {label}
-            </div>
-          </div>
-        );
-      })}
-
-      <style>
-        {`
-          .bar-3d {
-            opacity: 0;
-            animation: popIn 0.5s ease forwards;
-          }
-          .bar-3d.animate {
-            animation: popIn 0.5s ease forwards;
-          }
-          @keyframes popIn {
-            0%   { opacity: 0; transform: rotateX(-18deg) rotateY(12deg) scale(0.6); }
-            70%  { opacity: 1; transform: rotateX(-18deg) rotateY(12deg) scale(1.05); }
-            100% { opacity: 1; transform: rotateX(-18deg) rotateY(12deg) scale(1); }
-          }
-        `}
-      </style>
+          ))}
+        </div>
+      </div>
     </div>
   );
-}
-
-/* ---------- color helper ---------- */
-function shade(hex, amount) {
-  // amount: -1 .. 1 (negative darkens, positive lightens)
-  const h = hex.replace("#", "");
-  const num = parseInt(
-    h.length === 3
-      ? h.split("").map((c) => c + c).join("")
-      : h,
-    16
-  );
-  let r = (num >> 16) & 0xff;
-  let g = (num >> 8) & 0xff;
-  let b = num & 0xff;
-
-  const adjust = (v) => {
-    if (amount >= 0) return Math.round(v + (255 - v) * amount);
-    return Math.round(v * (1 + amount));
-  };
-
-  r = Math.min(255, Math.max(0, adjust(r)));
-  g = Math.min(255, Math.max(0, adjust(g)));
-  b = Math.min(255, Math.max(0, adjust(b)));
-
-  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
 }

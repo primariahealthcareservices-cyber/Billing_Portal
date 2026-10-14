@@ -35,6 +35,14 @@ const emptyEmployee = () => ({
   remarks: "",
 });
 
+// One department row of a Corpus Fund split
+const emptyCorpusRow = () => ({
+  _key: nextItemKey(),
+  exec_department: "",
+  amount: "",
+  purpose: "",
+});
+
 const formatCurrency = (value) => {
   const number = Number(value || 0);
   return new Intl.NumberFormat("en-IN", {
@@ -71,6 +79,9 @@ const DEPARTMENTS_CONFIG = [
   { label: "Everglades", value: "Everglades" },
 ];
 
+const deptLabel = (value) =>
+  DEPARTMENTS_CONFIG.find((d) => d.value === value)?.label || value;
+
 const CAPITAL_CATEGORIES = [
   "Equity Infusion",
   "Partner Contribution",
@@ -79,77 +90,50 @@ const CAPITAL_CATEGORIES = [
   "Other Capital",
 ];
 
-// Categories whose entries are item-based (used only in MedTech & Everglades)
+const DEFAULT_CAPITAL_CATEGORY = CAPITAL_CATEGORIES[0];
+
 const ITEM_CATEGORIES = ["Products & Innovation"];
 
-/* ---------------- SHARED CATEGORY FIELD MAP ----------------
-   One map. Used by every department for both Income and Expenses.
-   Each category decides which of the extra fields to show.
------------------------------------------------------------- */
+const CORPUS_FUND = "Corpus Fund";
+
 const STANDARD_CATEGORY_FIELDS = {
   "Salary & Payrolls": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Employee Name",
-    showPurpose: true,
-  },
-  "Corpus Fund": {
-    showEmployeeName: false,
-    showVehicleType: false,
-    showPurpose: true,
+    showEmployeeName: true, showVehicleType: false,
+    labelName: "Employee Name", showPurpose: true,
   },
   "Referrals & Deposits": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Referral / Depositor Name",
-    showPurpose: true,
+    showEmployeeName: true, showVehicleType: false,
+    labelName: "Referral / Depositor Name", showPurpose: true,
   },
   "Products & Innovation": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Product / Item Name",
-    showPurpose: true,
+    showEmployeeName: true, showVehicleType: false,
+    labelName: "Product / Item Name", showPurpose: true,
   },
   "General Operations": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Employee Name",
-    showPurpose: true,
+    showEmployeeName: true, showVehicleType: false,
+    labelName: "Employee Name", showPurpose: true,
   },
   "Camps & Events": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Event / Camp Name",
-    showPurpose: true,
+    showEmployeeName: true, showVehicleType: false,
+    labelName: "Event / Camp Name", showPurpose: true,
   },
   "Marketing & Promos": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Employee Name",
-    showPurpose: true,
+    showEmployeeName: true, showVehicleType: false,
+    labelName: "Employee Name", showPurpose: true,
   },
   "Travel & Hospitality": {
-    showEmployeeName: true,
-    showVehicleType: true,
-    labelName: "Employee Name",
-    labelVehicle: "Travel Type",
+    showEmployeeName: true, showVehicleType: true,
+    labelName: "Employee Name", labelVehicle: "Travel Type",
     showPurpose: true,
   },
   "Miscellaneous": {
-    showEmployeeName: true,
-    showVehicleType: false,
-    labelName: "Name / Item",
-    showPurpose: true,
+    showEmployeeName: true, showVehicleType: false,
+    labelName: "Name / Item", showPurpose: true,
   },
 };
 
 export default function FinanceEntryForm({
-  open,
-  onClose,
-  onSaved,
-  department,
-  options,
-  editingEntry,
+  open, onClose, onSaved, department, options, editingEntry,
 }) {
   const apiBase = String(department || "").toLowerCase().replace(/\s/g, "");
 
@@ -191,6 +175,7 @@ export default function FinanceEntryForm({
   const [removeInvoice, setRemoveInvoice] = useState(false);
   const [saving, setSaving] = useState(false);
   const [employees, setEmployees] = useState([emptyEmployee()]);
+  const [corpusRows, setCorpusRows] = useState([emptyCorpusRow()]);
 
   const [ledgerCustomer, setLedgerCustomer] = useState("");
   const [ledgerNewAmount, setLedgerNewAmount] = useState("");
@@ -204,25 +189,37 @@ export default function FinanceEntryForm({
   const [clientSuggestions, setClientSuggestions] = useState([]);
 
   const isCapital = form.entry_type === "Capital";
+
+  // Legacy shape: entry_type itself is "Corpus Fund"
+  const isLegacyCorpusType = form.entry_type === CORPUS_FUND;
+  // Current shape (Corporate only): Expenses -> Corpus Fund
+  const isCorpusFundExpense =
+    isCorporate && form.entry_type === "Expenses" && form.category === CORPUS_FUND;
+  const isCorpusFundType = isLegacyCorpusType || isCorpusFundExpense;
+
+  const isEditingExisting =
+    !!(editingEntry && editingEntry.id !== undefined && editingEntry.id !== null);
+
   const isLedger = (isMedTech || isEverglades) && form.category === ledgerCategoryName;
-
   const isSalaryCategory = form.category === salaryCategoryName;
-
-  // Item-based categories only for MedTech & Everglades
   const requireItemsForCategory =
     (isMedTech || isEverglades) && ITEM_CATEGORIES.includes(form.category);
 
-  const showInvoiceField = !isCapital && !isLedger && !isSalaryCategory;
+  const showInvoiceField = !isCapital && !isCorpusFundType && !isLedger && !isSalaryCategory;
 
   const isEditingSalaryEntry =
     isSalaryCategory && !!(editingEntry && editingEntry.id !== undefined && editingEntry.id !== null);
 
-  // Shared field config for the current category
   const categoryFieldConfig = STANDARD_CATEGORY_FIELDS[form.category] || null;
   const showCategoryFields =
-    !isCapital && !isLedger && !isSalaryCategory && categoryFieldConfig;
+    !isCapital && !isCorpusFundType && !isLedger && !isSalaryCategory && categoryFieldConfig;
 
-  // Client suggestions for Miscellaneous (was Goodwill)
+  // Departments that can receive a Corpus Fund
+  const corpusDepartments = (
+    options?.corpus_fund_departments ||
+    (options?.exec_departments || []).filter((d) => d !== "Corporate")
+  );
+
   useEffect(() => {
     if (!open) return;
     if (form.category === "Miscellaneous" && form.entry_type === "Income") {
@@ -230,9 +227,7 @@ export default function FinanceEntryForm({
         try {
           const res = await api.get(`/${apiBase}/clients`);
           setClientSuggestions(res.data.clients || []);
-        } catch {
-          /* ignore */
-        }
+        } catch { /* ignore */ }
       };
       fetchClients();
     }
@@ -241,29 +236,51 @@ export default function FinanceEntryForm({
   useEffect(() => {
     if (!open) return;
 
+    // Always start with one fresh Corpus Fund row
+    setCorpusRows([emptyCorpusRow()]);
+
     const populateForm = (entry) => {
       if (entry.entry_type === "Capital") {
         setForm({
           entry_type: "Capital",
-          category: entry.category || entry.fund_category || CAPITAL_CATEGORIES[0],
+          category: entry.category || entry.fund_category || DEFAULT_CAPITAL_CATEGORY,
           sub_category: "Capital",
-          generated_by: "",
-          revenue_type: "",
-          patient_name: "",
-          patient_place: "",
+          generated_by: "", revenue_type: "",
+          patient_name: "", patient_place: "",
           client_name: entry.client_name || "",
-          gst_number: "",
-          gst_tax_percent: "",
-          tax_invoice_number: "",
-          amount: entry.amount !== undefined && entry.amount !== null ? String(entry.amount) : "",
+          gst_number: "", gst_tax_percent: "", tax_invoice_number: "",
+          amount: entry.amount != null ? String(entry.amount) : "",
           remarks: entry.remarks || "",
           entry_date: entry.entry_date || today(),
-          exec_department: "",
-          employee_name: "",
-          salary_amount: "",
-          allowance_amount: "",
-          vehicle_type: "",
-          team: "",
+          exec_department: entry.exec_department || "",
+          employee_name: "", salary_amount: "", allowance_amount: "",
+          vehicle_type: "", team: "",
+          purpose: entry.purpose || "",
+        });
+        setOtherCategory("");
+        setItems([emptyItem()]);
+        setEmployees([emptyEmployee()]);
+        setInvoiceFile(null);
+        setRemoveInvoice(false);
+        return;
+      }
+
+      if (entry.entry_type === CORPUS_FUND) {
+        setForm({
+          entry_type: CORPUS_FUND,
+          category: CORPUS_FUND,
+          sub_category: "",
+          generated_by: entry.generated_by || "",
+          revenue_type: "",
+          patient_name: "", patient_place: "",
+          client_name: entry.client_name || "",
+          gst_number: "", gst_tax_percent: "", tax_invoice_number: "",
+          amount: entry.amount != null ? String(entry.amount) : "",
+          remarks: entry.remarks || "",
+          entry_date: entry.entry_date || today(),
+          exec_department: entry.exec_department || "",
+          employee_name: "", salary_amount: "", allowance_amount: "",
+          vehicle_type: "", team: "",
           purpose: entry.purpose || "",
         });
         setOtherCategory("");
@@ -284,15 +301,15 @@ export default function FinanceEntryForm({
         patient_place: entry.patient_place || "",
         client_name: entry.client_name || "",
         gst_number: entry.gst_number || "",
-        gst_tax_percent: entry.gst_tax_percent !== undefined && entry.gst_tax_percent !== null ? String(entry.gst_tax_percent) : "",
+        gst_tax_percent: entry.gst_tax_percent != null ? String(entry.gst_tax_percent) : "",
         tax_invoice_number: entry.tax_invoice_number || "",
-        amount: entry.amount !== undefined && entry.amount !== null ? String(entry.amount) : "",
+        amount: entry.amount != null ? String(entry.amount) : "",
         remarks: entry.remarks || "",
         entry_date: entry.entry_date || today(),
         exec_department: entry.exec_department || "",
         employee_name: entry.employee_name || "",
-        salary_amount: entry.salary_amount !== undefined && entry.salary_amount !== null ? String(entry.salary_amount) : "",
-        allowance_amount: entry.allowance_amount !== undefined && entry.allowance_amount !== null ? String(entry.allowance_amount) : "",
+        salary_amount: entry.salary_amount != null ? String(entry.salary_amount) : "",
+        allowance_amount: entry.allowance_amount != null ? String(entry.allowance_amount) : "",
         vehicle_type: entry.vehicle_type || "",
         team: entry.team || "",
         purpose: entry.purpose || "",
@@ -315,8 +332,8 @@ export default function FinanceEntryForm({
           _key: nextItemKey(),
           exec_department: entry.exec_department || "",
           employee_name: entry.employee_name || "",
-          salary_amount: entry.salary_amount !== undefined && entry.salary_amount !== null ? String(entry.salary_amount) : "",
-          allowance_amount: entry.allowance_amount !== undefined && entry.allowance_amount !== null ? String(entry.allowance_amount) : "",
+          salary_amount: entry.salary_amount != null ? String(entry.salary_amount) : "",
+          allowance_amount: entry.allowance_amount != null ? String(entry.allowance_amount) : "",
           total: (Number(entry.salary_amount) || 0) + (Number(entry.allowance_amount) || 0),
           remarks: entry.remarks || "",
         }]);
@@ -417,7 +434,6 @@ export default function FinanceEntryForm({
   const categoryOptionsForType = options?.categories?.[form.entry_type] || [];
   const revenueTypes = options?.revenue_types || [];
   const gstRequired = (options?.gst_required_categories || []).includes(form.category);
-  const isOthersCategory = form.category === "Others";
 
   const handleTypeChange = (event) => {
     const newType = event.target.value;
@@ -445,14 +461,10 @@ export default function FinanceEntryForm({
     }
 
     if (newType === "Capital") {
-      const capitalList =
-        (options?.categories?.Capital && options.categories.Capital.length > 0)
-          ? options.categories.Capital
-          : CAPITAL_CATEGORIES;
       setForm((prev) => ({
         ...prev,
         entry_type: "Capital",
-        category: capitalList[0] || CAPITAL_CATEGORIES[0],
+        category: DEFAULT_CAPITAL_CATEGORY,
         sub_category: "Capital",
         client_name: "",
         amount: "",
@@ -463,6 +475,27 @@ export default function FinanceEntryForm({
       setOtherCategory("");
       setEmployees([emptyEmployee()]);
       setItems([emptyItem()]);
+      return;
+    }
+
+    if (newType === CORPUS_FUND) {
+      setForm((prev) => ({
+        ...prev,
+        entry_type: CORPUS_FUND,
+        category: CORPUS_FUND,
+        sub_category: "",
+        client_name: "",
+        amount: "",
+        purpose: "",
+        remarks: "",
+        exec_department: "",
+        entry_date: prev.entry_date || today(),
+      }));
+      setOtherCategory("");
+      setEmployees([emptyEmployee()]);
+      setItems([emptyItem()]);
+      setInvoiceFile(null);
+      setRemoveInvoice(false);
       return;
     }
 
@@ -525,6 +558,21 @@ export default function FinanceEntryForm({
     setEmployees((prev) => prev.filter((emp) => emp._key !== key));
   };
 
+  // ---- Corpus Fund rows ----
+  const handleCorpusRowChange = (key, field, value) => {
+    setCorpusRows((prev) =>
+      prev.map((row) => (row._key !== key ? row : { ...row, [field]: value }))
+    );
+  };
+  const handleAddCorpusRow = () => setCorpusRows((prev) => [...prev, emptyCorpusRow()]);
+  const handleRemoveCorpusRow = (key) => {
+    if (corpusRows.length === 1) {
+      toast.error("At least one department is required.");
+      return;
+    }
+    setCorpusRows((prev) => prev.filter((row) => row._key !== key));
+  };
+
   const handleItemChange = (key, field, value) => {
     setItems((prev) =>
       prev.map((item) => (item._key !== key ? item : { ...item, [field]: value }))
@@ -540,7 +588,7 @@ export default function FinanceEntryForm({
   };
 
   const salaryTotal = employees.reduce((sum, emp) => sum + (emp.total || 0), 0);
-
+  const corpusTotal = corpusRows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
   const itemsTotal = items.reduce((sum, item) => {
     const qty = Number(item.quantity) || 0;
     const price = Number(item.unit_price) || 0;
@@ -570,21 +618,13 @@ export default function FinanceEntryForm({
         <label className="form-label">Upload File (optional)</label>
         {editingEntry && editingEntry.invoice_url && !removeInvoice && (
           <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
-            <a
-              href={invoiceHref(editingEntry)}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-secondary"
-              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-            >
+            <a href={invoiceHref(editingEntry)} target="_blank" rel="noreferrer"
+               className="btn btn-secondary"
+               style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
               <FileText size={15} /> <span>View current file</span>
             </a>
-            <button
-              type="button"
-              className="btn-icon btn-icon--danger"
-              onClick={() => setRemoveInvoice(true)}
-              title="Remove file"
-            >
+            <button type="button" className="btn-icon btn-icon--danger"
+                    onClick={() => setRemoveInvoice(true)} title="Remove file">
               <Trash2 size={15} />
             </button>
           </div>
@@ -594,12 +634,9 @@ export default function FinanceEntryForm({
             Current file will be removed when you save.
           </p>
         )}
-        <input
-          type="file"
-          accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.csv"
-          onChange={handleInvoiceChange}
-          className="form-control"
-        />
+        <input type="file"
+               accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.csv"
+               onChange={handleInvoiceChange} className="form-control" />
         <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
           Accepted: PDF, Word, Excel, CSV, JPG, PNG, GIF, WEBP. Max 10 MB.
         </p>
@@ -607,21 +644,22 @@ export default function FinanceEntryForm({
     );
   };
 
+  /* ---------------- SUBMIT: Capital ---------------- */
   const submitCapitalEntry = async () => {
-    if (!form.category) { toast.error("Please select a Capital Category."); return; }
-    if (!form.client_name.trim()) { toast.error("Name is required for Capital entries."); return; }
-    if (!form.purpose.trim()) { toast.error("Purpose is required for Capital entries."); return; }
+    const capitalCategory = form.category || DEFAULT_CAPITAL_CATEGORY;
+    if (!form.client_name.trim()) { toast.error("Name is required."); return; }
+    if (!form.purpose.trim()) { toast.error("Purpose is required."); return; }
     const amount = Number(form.amount);
-    if (!Number.isFinite(amount) || amount <= 0) { toast.error("Please enter a valid amount."); return; }
-    if (!form.entry_date) { toast.error("Please select the entry date."); return; }
+    if (!Number.isFinite(amount) || amount <= 0) { toast.error("Enter a valid amount."); return; }
+    if (!form.entry_date) { toast.error("Select the entry date."); return; }
 
     setSaving(true);
     try {
       const body = {
         entry_type: "Capital",
-        category: form.category,
-        capital_category: form.category,
-        fund_category: form.category,
+        category: capitalCategory,
+        capital_category: capitalCategory,
+        fund_category: capitalCategory,
         sub_category: "Capital",
         client_name: form.client_name.trim(),
         amount,
@@ -640,17 +678,93 @@ export default function FinanceEntryForm({
       if (typeof onSaved === "function") await onSaved();
       onClose();
     } catch (error) {
-      const msg = error.response?.data?.message || "Failed to save Capital entry.";
-      toast.error(msg);
-    } finally {
-      setSaving(false);
+      toast.error(error.response?.data?.message || "Failed to save Capital entry.");
+    } finally { setSaving(false); }
+  };
+
+  /* ---------------- SUBMIT: Corpus Fund ---------------- */
+  const submitCorpusFundEntry = async () => {
+    if (!form.entry_date) { toast.error("Select the entry date."); return; }
+
+    const url = `/${apiBase}/entries`;
+
+    // ---------- EDIT: single row ----------
+    if (isEditingExisting) {
+      if (!form.exec_department) { toast.error("Select a department."); return; }
+      if (!form.purpose.trim()) { toast.error("Purpose is required."); return; }
+      const amount = Number(form.amount);
+      if (!Number.isFinite(amount) || amount <= 0) { toast.error("Enter a valid amount."); return; }
+
+      setSaving(true);
+      try {
+        const body = {
+          entry_type: isCorpusFundExpense ? "Expenses" : CORPUS_FUND,
+          category: CORPUS_FUND,
+          exec_department: form.exec_department,
+          client_name: form.client_name || "",
+          generated_by: form.generated_by || "",
+          amount,
+          purpose: form.purpose.trim(),
+          remarks: form.remarks || "",
+          entry_date: form.entry_date,
+        };
+        await api.put(`${url}/${editingEntry.id}`, body);
+        toast.success("Corpus Fund entry updated.");
+        if (typeof onSaved === "function") await onSaved();
+        onClose();
+      } catch (error) {
+        const errs = error.response?.data?.errors;
+        toast.error(
+          Array.isArray(errs) ? errs.join(" ")
+            : error.response?.data?.message || "Failed to update Corpus Fund entry."
+        );
+      } finally { setSaving(false); }
+      return;
     }
+
+    // ---------- NEW: one or more department rows ----------
+    for (let i = 0; i < corpusRows.length; i += 1) {
+      const row = corpusRows[i];
+      const n = i + 1;
+      if (!row.exec_department) { toast.error(`Row ${n}: select a department.`); return; }
+      const amt = Number(row.amount);
+      if (!Number.isFinite(amt) || amt <= 0) { toast.error(`Row ${n}: enter a valid amount.`); return; }
+      if (!row.purpose.trim()) { toast.error(`Row ${n}: purpose is required.`); return; }
+    }
+
+    setSaving(true);
+    try {
+      const body = {
+        entry_type: "Expenses",
+        category: CORPUS_FUND,
+        entry_date: form.entry_date,
+        client_name: form.client_name || "",
+        generated_by: form.generated_by || "",
+        remarks: form.remarks || "",
+        entries: corpusRows.map((row) => ({
+          exec_department: row.exec_department,
+          amount: Number(row.amount),
+          purpose: row.purpose.trim(),
+        })),
+      };
+      const res = await api.post(url, body);
+      toast.success(res.data?.message || "Corpus Fund entries added.");
+      if (typeof onSaved === "function") await onSaved();
+      onClose();
+    } catch (error) {
+      const errs = error.response?.data?.errors;
+      toast.error(
+        Array.isArray(errs) ? errs.join(" ")
+          : error.response?.data?.message || "Failed to save Corpus Fund entries."
+      );
+    } finally { setSaving(false); }
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
     if (isCapital) return submitCapitalEntry();
+    if (isCorpusFundType) return submitCorpusFundEntry();
 
     if (!form.entry_date) { toast.error("Please select the entry date."); return; }
     if (!form.category) { toast.error("Please select a category."); return; }
@@ -665,7 +779,7 @@ export default function FinanceEntryForm({
         const newAmt = parseFloat(ledgerNewAmount) || 0;
         totalAmount = ledgerOutstanding + newAmt;
       }
-      if (totalAmount <= 0) { toast.error("Total amount must be greater than 0."); return; }
+      if (totalAmount <= 0) { toast.error("Total amount must be > 0."); return; }
       const paid = parseFloat(ledgerPaid) || 0;
 
       setSaving(true);
@@ -673,7 +787,6 @@ export default function FinanceEntryForm({
         const useFormData = !!invoiceFile || removeInvoice;
         let body;
         let config = {};
-
         if (useFormData) {
           const fd = new FormData();
           fd.append("entry_type", "Ledger");
@@ -698,7 +811,6 @@ export default function FinanceEntryForm({
             remarks: form.remarks || "",
           };
         }
-
         const url = `/${apiBase}/entries`;
         if (editingEntry && editingEntry._type === "ledger") {
           await api.put(`${url}/${editingEntry.id}`, body, config);
@@ -712,15 +824,11 @@ export default function FinanceEntryForm({
         if (typeof onSaved === "function") await onSaved();
         onClose();
       } catch (err) {
-        const msg = err.response?.data?.message || "Failed to save ledger entry.";
-        toast.error(msg);
-      } finally {
-        setSaving(false);
-      }
+        toast.error(err.response?.data?.message || "Failed to save ledger entry.");
+      } finally { setSaving(false); }
       return;
     }
 
-    // Salary must be entered by Corporate only
     if (isSalaryCategory && !isCorporate) {
       toast.error("Salaries must be entered by Corporate Management only.");
       return;
@@ -729,12 +837,12 @@ export default function FinanceEntryForm({
     if (isSalaryCategory) {
       let valid = true;
       for (const emp of employees) {
-        if (!emp.exec_department) { toast.error("Please select a department for all employees."); valid = false; break; }
-        if (!emp.employee_name.trim()) { toast.error("Please enter employee name for all employees."); valid = false; break; }
+        if (!emp.exec_department) { toast.error("Select a department for all employees."); valid = false; break; }
+        if (!emp.employee_name.trim()) { toast.error("Enter employee name."); valid = false; break; }
         const sal = parseFloat(emp.salary_amount) || 0;
         const allow = parseFloat(emp.allowance_amount) || 0;
         if (sal <= 0 && allow <= 0) {
-          toast.error(`For ${emp.employee_name || "employee"}, at least one of Salary or TADA must be greater than 0.`);
+          toast.error(`For ${emp.employee_name || "employee"}, at least one of Salary or TADA must be > 0.`);
           valid = false; break;
         }
       }
@@ -742,7 +850,6 @@ export default function FinanceEntryForm({
       return submitSalaryEntries();
     }
 
-    // Category-specific validation
     if (showCategoryFields) {
       if (categoryFieldConfig.showEmployeeName && !form.employee_name.trim()) {
         toast.error(`Please enter ${categoryFieldConfig.labelName || "name"}.`); return;
@@ -769,15 +876,13 @@ export default function FinanceEntryForm({
 
     let cleanItems = [];
     if (requireItemsForCategory) {
-      cleanItems = items
-        .map((item) => {
-          const qty = Number(item.quantity);
-          const price = Number(item.unit_price);
-          return { item_name: item.item_name.trim(), quantity: qty, unit_price: price };
-        })
-        .filter((item) => item.item_name);
+      cleanItems = items.map((item) => ({
+        item_name: item.item_name.trim(),
+        quantity: Number(item.quantity),
+        unit_price: Number(item.unit_price),
+      })).filter((item) => item.item_name);
       if (cleanItems.length === 0) {
-        toast.error("Add at least one item (name, quantity, unit price)."); return;
+        toast.error("Add at least one item."); return;
       }
     } else {
       const amount = Number(form.amount);
@@ -798,14 +903,12 @@ export default function FinanceEntryForm({
       let itemsTotalCalc = 0;
       if (cleanItems && cleanItems.length > 0) {
         itemsTotalCalc = cleanItems.reduce(
-          (sum, item) => sum + item.quantity * item.unit_price,
-          0
+          (sum, item) => sum + item.quantity * item.unit_price, 0
         );
       }
 
       const isEditing =
         editingEntry && editingEntry.id !== undefined && editingEntry.id !== null;
-
       const useFormData = options.show_invoice || !!invoiceFile || removeInvoice;
 
       if (useFormData) {
@@ -815,35 +918,31 @@ export default function FinanceEntryForm({
             formData.append(key, form[key]);
           }
         });
-
         if (showCategoryFields) {
           formData.append("employee_name", form.employee_name || "");
           formData.append("purpose", form.purpose || "");
           formData.append("vehicle_type", form.vehicle_type || "");
+          formData.append("exec_department", form.exec_department || "");
         }
-
         if (requireItemsForCategory) {
           formData.append("items", JSON.stringify(cleanItems || []));
           formData.append("amount", itemsTotalCalc);
         } else {
           formData.append("amount", parseFloat(form.amount) || 0);
         }
-
         if (invoiceFile) formData.append("invoice", invoiceFile);
         if (removeInvoice && isEditing) formData.append("remove_invoice", "true");
-
         body = formData;
         config = { headers: { "Content-Type": "multipart/form-data" } };
       } else {
         body = { ...form };
         body.amount = parseFloat(form.amount) || 0;
-
         if (showCategoryFields) {
           body.employee_name = form.employee_name || null;
           body.purpose = form.purpose || null;
           body.vehicle_type = form.vehicle_type || null;
+          body.exec_department = form.exec_department || null;
         }
-
         if (!options.show_generated_by) delete body.generated_by;
         if (!options.show_revenue_type) delete body.revenue_type;
         if (!options.show_patient_fields) {
@@ -878,7 +977,6 @@ export default function FinanceEntryForm({
       if (typeof onSaved === "function") await onSaved();
       onClose();
     } catch (error) {
-      console.error("❌ Finance entry error:", error);
       const responseData = error.response?.data;
       let errorMessage = "Something went wrong while saving the entry.";
       if (responseData) {
@@ -886,15 +984,10 @@ export default function FinanceEntryForm({
           errorMessage = responseData.errors.join(" ");
         } else if (responseData.message) {
           errorMessage = responseData.message;
-        } else {
-          try { errorMessage = JSON.stringify(responseData); }
-          catch { errorMessage = "An unknown error occurred."; }
         }
       }
       toast.error(errorMessage);
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
   const submitSalaryEntries = async () => {
@@ -937,64 +1030,222 @@ export default function FinanceEntryForm({
       if (typeof onSaved === "function") await onSaved();
       onClose();
     } catch (error) {
-      console.error("Salary entry error:", error);
       const errors = error.response?.data?.errors;
       const message = Array.isArray(errors)
         ? errors.join(" ")
-        : error.response?.data?.message || "Something went wrong while saving salary entries.";
+        : error.response?.data?.message || "Failed to save salary entries.";
       toast.error(message);
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
-  /* ---------------- CAPITAL FIELDS ---------------- */
-  const renderCapitalFields = () => {
-    const capitalList =
-      (options?.categories?.Capital && options.categories.Capital.length > 0)
-        ? options.categories.Capital
-        : CAPITAL_CATEGORIES;
+  /* ---------------- RENDER: Capital ---------------- */
+  const renderCapitalFields = () => (
+    <>
+      <div className="form-group">
+        <label className="form-label">Name <span style={{ color: "red" }}>*</span></label>
+        <input name="client_name" value={form.client_name || ""} onChange={handleChange}
+               placeholder="Enter name of person, organization, or source"
+               className="form-control" required />
+      </div>
+      <div className="form-row">
+        <div className="form-group">
+          <label className="form-label">Amount (₹) <span style={{ color: "red" }}>*</span></label>
+          <input type="number" step="0.01" min="0" name="amount" value={form.amount}
+                 onChange={handleChange} placeholder="0.00" className="form-control" required />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
+          <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
+                 className="form-control" required />
+        </div>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Purpose <span style={{ color: "red" }}>*</span></label>
+        <textarea name="purpose" value={form.purpose || ""} onChange={handleChange} rows={3}
+                  placeholder="Reason or purpose" className="form-control" required />
+      </div>
+      <div className="form-group">
+        <label className="form-label">Remarks</label>
+        <textarea name="remarks" value={form.remarks} onChange={handleChange} rows={2}
+                  placeholder="Optional notes" className="form-control" />
+      </div>
+    </>
+  );
 
+  /* ---------------- RENDER: Corpus Fund ---------------- */
+  const infoBoxStyle = {
+    fontSize: 12, color: "#1d4ed8", background: "#eff6ff",
+    border: "1px solid #bfdbfe", borderRadius: 6,
+    padding: "8px 10px", marginTop: 8,
+  };
+
+  const renderCorpusFundFields = () => {
+    // ---------- EDIT: single entry ----------
+    if (isEditingExisting) {
+      const targetLabel = deptLabel(form.exec_department);
+      return (
+        <>
+          <div className="form-group">
+            <label className="form-label">
+              Department <span style={{ color: "red" }}>*</span>
+            </label>
+            <select name="exec_department" value={form.exec_department || ""}
+                    onChange={handleChange} className="form-control" required>
+              <option value="">Select Department</option>
+              {corpusDepartments.map((key) => (
+                <option key={key} value={key}>{deptLabel(key)}</option>
+              ))}
+            </select>
+            {form.exec_department && (
+              <p style={infoBoxStyle}>
+                ℹ️ Updating this also updates <b>{targetLabel} → Corpus Fund</b>.
+              </p>
+            )}
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">Client Name</label>
+              <input name="client_name" value={form.client_name || ""} onChange={handleChange}
+                     placeholder="Enter the client name" className="form-control" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Generated By</label>
+              <input name="generated_by" value={form.generated_by || ""} onChange={handleChange}
+                     placeholder="Enter employee name" className="form-control" />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">Amount (₹) <span style={{ color: "red" }}>*</span></label>
+              <input type="number" step="0.01" min="0" name="amount" value={form.amount}
+                     onChange={handleChange} placeholder="0.00" className="form-control" required />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
+              <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
+                     className="form-control" required />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Purpose <span style={{ color: "red" }}>*</span></label>
+            <input name="purpose" value={form.purpose || ""} onChange={handleChange}
+                   placeholder="e.g. Corpus allocation for R&D expansion"
+                   className="form-control" required />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Remarks</label>
+            <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={2}
+                      placeholder="Optional notes" className="form-control" />
+          </div>
+        </>
+      );
+    }
+
+    // ---------- NEW: split across departments ----------
     return (
       <>
         <div className="form-group">
-          <label className="form-label">Capital Category <span style={{ color: "red" }}>*</span></label>
-          <select name="category" value={form.category || capitalList[0]} onChange={handleChange} className="form-control" required>
-            {capitalList.map((cat) => (<option key={cat} value={cat}>{cat}</option>))}
-          </select>
+          <label className="form-label">Split Corpus Fund by Department</label>
+
+          {corpusRows.map((row, idx) => (
+            <div key={row._key}
+                 style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12,
+                          marginBottom: 12, position: "relative" }}>
+              <div className="form-row">
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">
+                    Department <span style={{ color: "red" }}>*</span>
+                  </label>
+                  <select value={row.exec_department}
+                          onChange={(e) => handleCorpusRowChange(row._key, "exec_department", e.target.value)}
+                          className="form-control">
+                    <option value="">Select Department</option>
+                    {corpusDepartments.map((key) => (
+                      <option key={key} value={key}>{deptLabel(key)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">
+                    Amount (₹) <span style={{ color: "red" }}>*</span>
+                  </label>
+                  <input type="number" step="0.01" min="0" value={row.amount}
+                         onChange={(e) => handleCorpusRowChange(row._key, "amount", e.target.value)}
+                         placeholder="0.00" className="form-control" />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">
+                  Purpose <span style={{ color: "red" }}>*</span>
+                </label>
+                <input value={row.purpose}
+                       onChange={(e) => handleCorpusRowChange(row._key, "purpose", e.target.value)}
+                       placeholder="e.g. Corpus allocation for R&D expansion"
+                       className="form-control" />
+              </div>
+
+              {row.exec_department && (
+                <p style={{ ...infoBoxStyle, marginTop: 0 }}>
+                  ℹ️ Counted in <b>Corporate → Expenses</b> and posted to{" "}
+                  <b>{deptLabel(row.exec_department)} → Corpus Fund</b>.
+                </p>
+              )}
+
+              {corpusRows.length > 1 && (
+                <button type="button" className="btn-icon btn-icon--danger"
+                        onClick={() => handleRemoveCorpusRow(row._key)}
+                        style={{ position: "absolute", top: 8, right: 8 }}
+                        title={`Remove row ${idx + 1}`}>
+                  <Trash2 size={15} />
+                </button>
+              )}
+            </div>
+          ))}
+
+          <button type="button" onClick={handleAddCorpusRow} className="btn btn-secondary"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Plus size={15} /> Add Department
+          </button>
+
+          <div style={{ marginTop: 12, textAlign: "right", fontWeight: "bold" }}>
+            Total Corpus Fund: {formatCurrency(corpusTotal)}
+          </div>
         </div>
-        <div className="form-group">
-          <label className="form-label">Name <span style={{ color: "red" }}>*</span></label>
-          <input name="client_name" value={form.client_name || ""} onChange={handleChange}
-                 placeholder="Enter name of person, organization, or source" className="form-control" required />
-        </div>
+
         <div className="form-row">
           <div className="form-group">
-            <label className="form-label">Amount (₹) <span style={{ color: "red" }}>*</span></label>
-            <input type="number" step="0.01" min="0" name="amount" value={form.amount}
-                   onChange={handleChange} placeholder="0.00" className="form-control" required />
+            <label className="form-label">Client Name</label>
+            <input name="client_name" value={form.client_name || ""} onChange={handleChange}
+                   placeholder="Enter the client name" className="form-control" />
           </div>
           <div className="form-group">
-            <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
-            <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
-                   className="form-control" required />
+            <label className="form-label">Generated By</label>
+            <input name="generated_by" value={form.generated_by || ""} onChange={handleChange}
+                   placeholder="Enter employee name" className="form-control" />
           </div>
         </div>
+
         <div className="form-group">
-          <label className="form-label">Purpose <span style={{ color: "red" }}>*</span></label>
-          <textarea name="purpose" value={form.purpose || ""} onChange={handleChange} rows={3}
-                    placeholder="Reason or purpose for which the capital is being added" className="form-control" required />
+          <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
+          <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
+                 className="form-control" required />
         </div>
+
         <div className="form-group">
           <label className="form-label">Remarks</label>
-          <textarea name="remarks" value={form.remarks} onChange={handleChange} rows={2}
-                    placeholder="Optional notes" className="form-control" />
+          <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={2}
+                    placeholder="Optional notes (applies to all rows)" className="form-control" />
         </div>
       </>
     );
   };
 
-  /* ---------------- STANDARD (shared) fields renderer ---------------- */
+  /* ---------------- RENDER: standard shared fields ---------------- */
   const renderStandardFields = () => (
     <>
       {options.show_client_name && (
@@ -1030,7 +1281,8 @@ export default function FinanceEntryForm({
             <div className="form-group">
               <label className="form-label">Tax Invoice Number</label>
               <input name="tax_invoice_number" value={form.tax_invoice_number}
-                     onChange={handleChange} placeholder="e.g. INV-2026-0142" className="form-control" />
+                     onChange={handleChange} placeholder="e.g. INV-2026-0142"
+                     className="form-control" />
             </div>
           )}
         </div>
@@ -1063,7 +1315,8 @@ export default function FinanceEntryForm({
           {options.show_revenue_type && (
             <div className="form-group">
               <label className="form-label">Revenue Type</label>
-              <select name="revenue_type" value={form.revenue_type} onChange={handleChange} className="form-control">
+              <select name="revenue_type" value={form.revenue_type}
+                      onChange={handleChange} className="form-control">
                 {revenueTypes.map((rt) => (<option key={rt} value={rt}>{rt}</option>))}
               </select>
             </div>
@@ -1081,7 +1334,7 @@ export default function FinanceEntryForm({
     </>
   );
 
-  /* ---------------- Category-driven fields renderer ---------------- */
+  /* ---------------- RENDER: category-driven fields ---------------- */
   const renderCategoryFields = () => {
     if (!showCategoryFields) return null;
     const config = categoryFieldConfig;
@@ -1134,7 +1387,8 @@ export default function FinanceEntryForm({
         {options.show_revenue_type && (
           <div className="form-group">
             <label className="form-label">Revenue Type</label>
-            <select name="revenue_type" value={form.revenue_type} onChange={handleChange} className="form-control">
+            <select name="revenue_type" value={form.revenue_type} onChange={handleChange}
+                    className="form-control">
               {revenueTypes.map((rt) => (<option key={rt} value={rt}>{rt}</option>))}
             </select>
           </div>
@@ -1159,6 +1413,7 @@ export default function FinanceEntryForm({
     );
   };
 
+  /* ---------------- RENDER: ledger fields ---------------- */
   const renderLedgerFields = () => {
     const isEditingLedger = editingEntry && editingEntry._type === "ledger";
 
@@ -1182,7 +1437,8 @@ export default function FinanceEntryForm({
       <>
         <div className="form-group">
           <label className="form-label">Customer Name</label>
-          <input type="text" value={ledgerCustomer} onChange={(e) => setLedgerCustomer(e.target.value)}
+          <input type="text" value={ledgerCustomer}
+                 onChange={(e) => setLedgerCustomer(e.target.value)}
                  placeholder="Enter customer name" className="form-control" required />
         </div>
 
@@ -1194,7 +1450,8 @@ export default function FinanceEntryForm({
             {ledgerLoadingHistory ? (
               <p>Loading history...</p>
             ) : ledgerHistory.length > 0 ? (
-              <div style={{ maxHeight: "200px", overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: "4px", padding: "8px" }}>
+              <div style={{ maxHeight: "200px", overflowY: "auto",
+                            border: "1px solid #e5e7eb", borderRadius: "4px", padding: "8px" }}>
                 <table style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid #d1d5db" }}>
@@ -1260,18 +1517,21 @@ export default function FinanceEntryForm({
         {!isEditingLedger && (
           <div className="form-group">
             <label className="form-label">Total Amount (auto-calculated)</label>
-            <input type="text" value={formatCurrency(ledgerTotalAmount)} disabled className="form-control" style={{ backgroundColor: "#f3f4f6" }} />
+            <input type="text" value={formatCurrency(ledgerTotalAmount)} disabled
+                   className="form-control" style={{ backgroundColor: "#f3f4f6" }} />
           </div>
         )}
 
         <div className="form-group">
           <label className="form-label">Balance (auto-calculated)</label>
-          <input type="text" value={formatCurrency(ledgerBalance)} disabled className="form-control" style={{ backgroundColor: "#f3f4f6" }} />
+          <input type="text" value={formatCurrency(ledgerBalance)} disabled
+                 className="form-control" style={{ backgroundColor: "#f3f4f6" }} />
         </div>
 
         <div className="form-group">
           <label className="form-label">Date</label>
-          <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange} className="form-control" required />
+          <input type="date" name="entry_date" value={form.entry_date}
+                 onChange={handleChange} className="form-control" required />
         </div>
 
         <div className="form-group">
@@ -1285,7 +1545,8 @@ export default function FinanceEntryForm({
           {isEditingLedger && editingEntry.invoice_url && !removeInvoice && (
             <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
               <a href={invoiceHref(editingEntry)} target="_blank" rel="noreferrer"
-                 className="btn btn-secondary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                 className="btn btn-secondary"
+                 style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <FileText size={15} /> <span>View current invoice</span>
               </a>
               <button type="button" className="btn-icon btn-icon--danger"
@@ -1306,7 +1567,8 @@ export default function FinanceEntryForm({
 
         <div style={{ marginTop: 12, background: "#f0f9ff", padding: "8px", borderRadius: "4px" }}>
           <p style={{ fontSize: "0.9rem" }}>
-            <strong>Note:</strong> To add new amount, enter the amount in "New Amount to Add". To record a payment, set "New Amount" to 0 and enter the paid amount.
+            <strong>Note:</strong> To add new amount, enter the amount in "New Amount to Add".
+            To record a payment, set "New Amount" to 0 and enter the paid amount.
           </p>
         </div>
       </>
@@ -1333,19 +1595,23 @@ export default function FinanceEntryForm({
           <div className="form-row">
             <div className="form-group">
               <label className="form-label">Type</label>
-              <select name="entry_type" value={form.entry_type} onChange={handleTypeChange} className="form-control">
+              <select name="entry_type" value={form.entry_type} onChange={handleTypeChange}
+                      className="form-control">
                 {(options.entry_types || []).map((type) => (
                   <option key={type} value={type}>{type}</option>
                 ))}
               </select>
             </div>
-            {!isCapital && (
+            {/* Category stays visible for Expenses → Corpus Fund so it can be changed back */}
+            {!isCapital && !isLegacyCorpusType && (
               <div className="form-group">
                 <label className="form-label">Category</label>
                 {form.entry_type === "Ledger" ? (
                   <input value="Ledger" disabled className="form-control" />
                 ) : (
-                  <select name="category" value={form.category} onChange={handleCategoryChange} className="form-control">
+                  <select name="category" value={form.category} onChange={handleCategoryChange}
+                          className="form-control"
+                          disabled={isEditingExisting && isCorpusFundExpense}>
                     {categoryOptionsForType.map((cat) => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
@@ -1356,8 +1622,9 @@ export default function FinanceEntryForm({
           </div>
 
           {isCapital && renderCapitalFields()}
+          {isCorpusFundType && renderCorpusFundFields()}
 
-          {!isCapital && requireItemsForCategory && (
+          {!isCapital && !isCorpusFundType && requireItemsForCategory && (
             <div className="form-group">
               <label className="form-label">Items</label>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1365,8 +1632,10 @@ export default function FinanceEntryForm({
                   const lineTotal = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
                   return (
                     <div key={item._key}
-                         style={{ display: "grid", gridTemplateColumns: "1fr 90px 120px 100px 32px", gap: 8, alignItems: "center" }}>
-                      <input value={item.item_name} onChange={(e) => handleItemChange(item._key, "item_name", e.target.value)}
+                         style={{ display: "grid", gridTemplateColumns: "1fr 90px 120px 100px 32px",
+                                  gap: 8, alignItems: "center" }}>
+                      <input value={item.item_name}
+                             onChange={(e) => handleItemChange(item._key, "item_name", e.target.value)}
                              placeholder="Item name" className="form-control" />
                       <input type="number" min="0" step="0.01" value={item.quantity}
                              onChange={(e) => handleItemChange(item._key, "quantity", e.target.value)}
@@ -1394,8 +1663,8 @@ export default function FinanceEntryForm({
               <div className="form-row" style={{ marginTop: 12 }}>
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
-                  <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
-                         className="form-control" required />
+                  <input type="date" name="entry_date" value={form.entry_date}
+                         onChange={handleChange} className="form-control" required />
                 </div>
                 {options.show_gst_tax && (
                   <div className="form-group" style={{ flex: 1 }}>
@@ -1409,7 +1678,8 @@ export default function FinanceEntryForm({
                   <div className="form-group" style={{ flex: 1 }}>
                     <label className="form-label">Tax Invoice Number</label>
                     <input name="tax_invoice_number" value={form.tax_invoice_number}
-                           onChange={handleChange} placeholder="e.g. INV-2026-0142" className="form-control" />
+                           onChange={handleChange} placeholder="e.g. INV-2026-0142"
+                           className="form-control" />
                   </div>
                 )}
               </div>
@@ -1440,7 +1710,7 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {!isCapital && !requireItemsForCategory && !isLedger && !isSalaryCategory && (
+          {!isCapital && !isCorpusFundType && !requireItemsForCategory && !isLedger && !isSalaryCategory && (
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Amount (₹)</label>
@@ -1449,13 +1719,13 @@ export default function FinanceEntryForm({
               </div>
               <div className="form-group">
                 <label className="form-label">Date</label>
-                <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
-                       className="form-control" />
+                <input type="date" name="entry_date" value={form.entry_date}
+                       onChange={handleChange} className="form-control" />
               </div>
             </div>
           )}
 
-          {!isCapital && !requireItemsForCategory && options.show_gst_tax && !isLedger && !isSalaryCategory && (
+          {!isCapital && !isCorpusFundType && !requireItemsForCategory && options.show_gst_tax && !isLedger && !isSalaryCategory && (
             <p className="text-muted" style={{ textAlign: "right", fontSize: 13, marginTop: -8 }}>
               GST Tax ({gstTaxPercentValue || 0}%): {formatCurrency(gstTaxAmount)}
               {" · "}
@@ -1463,21 +1733,20 @@ export default function FinanceEntryForm({
             </p>
           )}
 
-          {!isCapital && isSalaryCategory && !isCorporate && (
-            <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
+          {!isCapital && !isCorpusFundType && isSalaryCategory && !isCorporate && (
+            <div className="alert alert-info"
+                 style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
               <strong>⚠️ Salary must be entered by Corporate Management only.</strong>
-              <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>
-                Please use the Corporate Management dashboard to add salary records.
-              </p>
             </div>
           )}
 
-          {!isCapital && isSalaryCategory && isCorporate && (
+          {!isCapital && !isCorpusFundType && isSalaryCategory && isCorporate && (
             <div className="form-group">
               <label className="form-label">Employees</label>
               {employees.map((emp) => (
                 <div key={emp._key}
-                     style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12, marginBottom: 12, position: "relative" }}>
+                     style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12,
+                              marginBottom: 12, position: "relative" }}>
                   <div className="form-row">
                     <div className="form-group" style={{ flex: 1 }}>
                       <label className="form-label">Department</label>
@@ -1485,10 +1754,9 @@ export default function FinanceEntryForm({
                               onChange={(e) => handleEmployeeChange(emp._key, "exec_department", e.target.value)}
                               className="form-control">
                         <option value="">Select Department</option>
-                        {(options.exec_departments || []).map((deptKey) => {
-                          const deptLabel = DEPARTMENTS_CONFIG.find((d) => d.value === deptKey)?.label || deptKey;
-                          return <option key={deptKey} value={deptKey}>{deptLabel}</option>;
-                        })}
+                        {(options.exec_departments || []).map((deptKey) => (
+                          <option key={deptKey} value={deptKey}>{deptLabel(deptKey)}</option>
+                        ))}
                       </select>
                     </div>
                     <div className="form-group" style={{ flex: 1 }}>
@@ -1544,8 +1812,8 @@ export default function FinanceEntryForm({
               <div className="form-row" style={{ marginTop: 12 }}>
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
-                  <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
-                         className="form-control" required />
+                  <input type="date" name="entry_date" value={form.entry_date}
+                         onChange={handleChange} className="form-control" required />
                 </div>
               </div>
               <div style={{ marginTop: 12, textAlign: "right", fontWeight: "bold" }}>
@@ -1554,19 +1822,19 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {!isCapital && isLedger && renderLedgerFields()}
+          {!isCapital && !isCorpusFundType && isLedger && renderLedgerFields()}
 
-          {!isCapital && !isSalaryCategory && !isLedger && (
+          {!isCapital && !isCorpusFundType && !isSalaryCategory && !isLedger && (
             showCategoryFields ? renderCategoryFields() : renderStandardFields()
           )}
 
           <div className="modal-footer">
-            <button type="button" onClick={onClose} className="btn btn-secondary" disabled={saving}>Cancel</button>
-            <button
-              type="submit"
-              disabled={saving || (isSalaryCategory && !isCorporate)}
-              className="btn btn-primary"
-            >
+            <button type="button" onClick={onClose} className="btn btn-secondary" disabled={saving}>
+              Cancel
+            </button>
+            <button type="submit"
+                    disabled={saving || (isSalaryCategory && !isCorporate)}
+                    className="btn btn-primary">
               {saving ? "Saving..." : editingEntry ? "Update Entry" : "Save Entry"}
             </button>
           </div>

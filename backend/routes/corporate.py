@@ -12,9 +12,16 @@ DEPARTMENT = "Corporate"
 CONFIG = DEPARTMENT_CONFIG[DEPARTMENT]
 EXEC_DEPARTMENTS = CONFIG.get("exec_departments", [])
 
+# Every real department except Corporate can receive a Corpus Fund transfer.
+VALID_TRANSFER_TARGETS = [d for d in DEPARTMENT_CONFIG.keys() if d != "Corporate"]
+
+CORPUS_FUND_TYPE = "Corpus Fund"       # entry_type of the row in the TARGET department
+CORPUS_FUND_CATEGORY = "Corpus Fund"   # category of the Corporate Expenses row
+
 corporate_bp = Blueprint("corporate", __name__, url_prefix="/api/corporate")
 
 
+# ----------------------------------------------------------------- helpers
 def _parse_date(value, default=None):
     if not value:
         return default
@@ -43,6 +50,24 @@ def _to_float_or_none(value):
         return None
 
 
+def _is_corporate_corpus_expense(entry):
+    """Corporate-side row: Expenses -> Corpus Fund."""
+    return (
+        entry.department == DEPARTMENT
+        and entry.entry_type == "Expenses"
+        and entry.category == CORPUS_FUND_CATEGORY
+    )
+
+
+def _linked_dept_rows(corporate_entry):
+    """Department-side Corpus Fund rows created from this Corporate expense."""
+    return FinanceEntry.query.filter_by(
+        linked_entry_id=corporate_entry.id,
+        entry_type=CORPUS_FUND_TYPE,
+    ).all()
+
+
+# ----------------------------------------------------------------- options
 @corporate_bp.route("/options", methods=["GET"])
 @role_required("Corporate")
 def options():
@@ -62,10 +87,15 @@ def options():
         "show_gst_tax": CONFIG["show_gst_tax"],
         "show_tax_invoice_number": CONFIG["show_tax_invoice_number"],
         "exec_departments": EXEC_DEPARTMENTS,
+        "capital_transfer_departments": list(VALID_TRANSFER_TARGETS),
+        # Departments selectable under Expenses -> Corpus Fund
+        "corpus_fund_departments": list(VALID_TRANSFER_TARGETS),
+        "corpus_fund_category": CORPUS_FUND_CATEGORY,
         "is_salary_category": SALARY_CATEGORY,
     }), 200
 
 
+# ------------------------------------------------------------------ create
 @corporate_bp.route("/entries", methods=["POST"])
 @role_required("Corporate")
 def create_entry():
@@ -73,8 +103,23 @@ def create_entry():
         data = request.get_json(silent=True) or {}
         print("📥 Received payload:", data)
 
-        # ========== CAPITAL ENTRY ==========
-        if data.get("entry_type") == "Capital":
+        entry_type_in = (data.get("entry_type") or "").strip()
+        category_in = (data.get("category") or "").strip()
+        target_dept = (data.get("exec_department") or data.get("department") or "").strip()
+
+        # ========== EXPENSES -> CORPUS FUND (Corporate expense + dept Corpus Fund) ==========
+        # Triggered by:
+        #   1. entry_type = "Expenses", category = "Corpus Fund"
+        #   2. entry_type = "Corpus Fund" (legacy payload shape)
+        is_corpus_fund_request = (
+            entry_type_in == CORPUS_FUND_TYPE
+            or (entry_type_in == "Expenses" and category_in == CORPUS_FUND_CATEGORY)
+        )
+        if is_corpus_fund_request:
+            return _create_corpus_fund_entry(data)
+
+        # ========== CAPITAL ENTRY (Corporate's own Capital) ==========
+        if entry_type_in == "Capital":
             return _create_capital_entry(data)
 
         # ========== MULTI SALARY ENTRIES ==========
@@ -113,10 +158,10 @@ def create_entry():
                     "entries": [e.to_dict() for e in created]
                 }), 201
 
-        # ========== SINGLE INCOME/EXPENSE ENTRY ==========
+        # ========== SINGLE INCOME/EXPENSE ENTRY (Corporate's own) ==========
         errors = []
-        entry_type = data.get("entry_type")
-        category = data.get("category")
+        entry_type = entry_type_in
+        category = category_in
         generated_by = (data.get("generated_by") or "").strip()
         client_name = (data.get("client_name") or "").strip() or None
         amount = data.get("amount")
@@ -184,9 +229,229 @@ def create_entry():
         return jsonify({"message": "Internal server error", "error": str(e)}), 500
 
 
-def _create_capital_entry(data):
+def _create_corpus_fund_entry(data):
+    """
+    Expenses -> Corpus Fund, entered from the Corporate dashboard.
+
+    Creates TWO linked rows in one transaction:
+
+      1. Corporate row   : department="Corporate", entry_type="Expenses",
+                           category="Corpus Fund", exec_department=<target dept>
+                           -> counts in Corporate's Expenses.
+
+      2. Department row  : department=<target dept>, entry_type="Corpus Fund",
+                           category="Corpus Fund", linked_entry_id=<corporate row id>
+                           -> shows as a separate Corpus Fund in that department
+                              (not counted in its Income / Expenses / Capital).
+    """
+    # Several departments in one submit -> batch handler
+    if isinstance(data.get("entries"), list):
+        return _create_corpus_fund_batch(data)
+
     errors = []
 
+    target_dept = (data.get("exec_department") or data.get("department") or "").strip()
+    amount_raw = data.get("amount")
+    purpose = (data.get("purpose") or "").strip()
+    remarks = (data.get("remarks") or "").strip()
+    generated_by = (data.get("generated_by") or "").strip() or None
+    entry_date = _parse_date(data.get("entry_date"), default=date.today())
+    client_name = (data.get("client_name") or "").strip()
+
+    if not target_dept:
+        errors.append("Department is required.")
+    elif target_dept == "Corporate":
+        errors.append("Department must not be Corporate.")
+    elif target_dept not in VALID_TRANSFER_TARGETS:
+        errors.append(f"Department must be one of: {', '.join(VALID_TRANSFER_TARGETS)}.")
+
+    if not purpose:
+        errors.append("Purpose is required.")
+
+    amount = None
+    try:
+        amount = float(amount_raw)
+        if amount <= 0:
+            errors.append("Amount must be greater than 0.")
+    except (TypeError, ValueError):
+        errors.append("Amount must be a valid number.")
+
+    if errors:
+        return jsonify({"message": "Validation failed.", "errors": errors}), 400
+
+    user_id = get_jwt_identity()
+
+    try:
+        # 1) Corporate-side expense
+        corporate_row = FinanceEntry(
+            department=DEPARTMENT,
+            entry_type="Expenses",
+            category=CORPUS_FUND_CATEGORY,
+            generated_by=generated_by,
+            client_name=client_name or f"Corpus Fund → {target_dept}",
+            amount=amount,
+            purpose=purpose,
+            remarks=remarks,
+            entry_date=entry_date,
+            exec_department=target_dept,
+            created_by_id=user_id,
+        )
+        db.session.add(corporate_row)
+        db.session.flush()  # get corporate_row.id
+
+        # 2) Department-side separate Corpus Fund
+        dept_row = FinanceEntry(
+            department=target_dept,
+            entry_type=CORPUS_FUND_TYPE,
+            category=CORPUS_FUND_CATEGORY,
+            sub_category=None,
+            fund_category=None,
+            generated_by=generated_by,
+            client_name=client_name or f"Corporate → {target_dept}",
+            amount=amount,
+            purpose=purpose,
+            remarks=remarks,
+            entry_date=entry_date,
+            exec_department=target_dept,
+            created_by_id=user_id,
+            linked_entry_id=corporate_row.id,
+        )
+        db.session.add(dept_row)
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({
+            "message": "Failed to create Corpus Fund entry.",
+            "error": str(exc),
+        }), 500
+
+    print(f"✅ Corpus Fund: Corporate expense {corporate_row.id} + {target_dept} fund {dept_row.id}")
+    return jsonify({
+        "message": f"Corpus Fund recorded in Corporate Expenses and posted to {target_dept}.",
+        "entry": corporate_row.to_dict(),
+        "department_entry": dept_row.to_dict(),
+    }), 201
+
+
+def _create_corpus_fund_batch(data):
+    """
+    Split one Corpus Fund expense across several departments.
+
+    Payload:
+      {
+        "entry_type": "Expenses", "category": "Corpus Fund",
+        "entry_date": "YYYY-MM-DD", "generated_by": "...", "client_name": "...",
+        "remarks": "...",                     # shared (row-level overrides it)
+        "entries": [
+          {"exec_department": "IT", "amount": 50000, "purpose": "..."},
+          {"exec_department": "PCM", "amount": 30000, "purpose": "..."}
+        ]
+      }
+
+    Each row creates one Corporate Expenses/Corpus Fund entry plus one linked
+    "Corpus Fund" entry in that department. All-or-nothing: if any row is
+    invalid, nothing is saved.
+    """
+    rows = data.get("entries") or []
+    if not rows:
+        return jsonify({"message": "Add at least one department."}), 400
+
+    entry_date = _parse_date(data.get("entry_date"), default=date.today())
+    generated_by = (data.get("generated_by") or "").strip() or None
+    client_name = (data.get("client_name") or "").strip()
+    shared_purpose = (data.get("purpose") or "").strip()
+    shared_remarks = (data.get("remarks") or "").strip()
+
+    errors = []
+    clean = []
+    for idx, row in enumerate(rows, start=1):
+        dept = (row.get("exec_department") or row.get("department") or "").strip()
+        purpose = (row.get("purpose") or shared_purpose or "").strip()
+        remarks = (row.get("remarks") or shared_remarks or "").strip()
+        row_errors = []
+
+        if not dept:
+            row_errors.append("Department is required.")
+        elif dept == "Corporate":
+            row_errors.append("Department must not be Corporate.")
+        elif dept not in VALID_TRANSFER_TARGETS:
+            row_errors.append("Invalid department.")
+
+        if not purpose:
+            row_errors.append("Purpose is required.")
+
+        amount = None
+        try:
+            amount = float(row.get("amount"))
+            if amount <= 0:
+                row_errors.append("Amount must be greater than 0.")
+        except (TypeError, ValueError):
+            row_errors.append("Amount must be a valid number.")
+
+        if row_errors:
+            errors.append(f"Row {idx}: " + " ".join(row_errors))
+        else:
+            clean.append((dept, amount, purpose, remarks))
+
+    if errors:
+        return jsonify({"message": "Validation failed.", "errors": errors}), 400
+
+    user_id = get_jwt_identity()
+    created = []
+    try:
+        for dept, amount, purpose, remarks in clean:
+            corporate_row = FinanceEntry(
+                department=DEPARTMENT,
+                entry_type="Expenses",
+                category=CORPUS_FUND_CATEGORY,
+                generated_by=generated_by,
+                client_name=client_name or f"Corpus Fund → {dept}",
+                amount=amount,
+                purpose=purpose,
+                remarks=remarks,
+                entry_date=entry_date,
+                exec_department=dept,
+                created_by_id=user_id,
+            )
+            db.session.add(corporate_row)
+            db.session.flush()
+
+            dept_row = FinanceEntry(
+                department=dept,
+                entry_type=CORPUS_FUND_TYPE,
+                category=CORPUS_FUND_CATEGORY,
+                generated_by=generated_by,
+                client_name=client_name or f"Corporate → {dept}",
+                amount=amount,
+                purpose=purpose,
+                remarks=remarks,
+                entry_date=entry_date,
+                exec_department=dept,
+                created_by_id=user_id,
+                linked_entry_id=corporate_row.id,
+            )
+            db.session.add(dept_row)
+            created.append(corporate_row)
+
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({
+            "message": "Failed to create Corpus Fund entries.",
+            "error": str(exc),
+        }), 500
+
+    total = sum(c[1] for c in clean)
+    return jsonify({
+        "message": f"Corpus Fund split across {len(created)} department(s) (₹{total:,.2f}).",
+        "entries": [e.to_dict() for e in created],
+    }), 201
+
+
+def _create_capital_entry(data):
+    errors = []
     client_name = (data.get("client_name") or "").strip()
     amount = data.get("amount")
     purpose = (data.get("purpose") or "").strip()
@@ -274,6 +539,7 @@ def _create_single_salary_entry(emp_data):
     return entry
 
 
+# -------------------------------------------------------------------- list
 @corporate_bp.route("/entries", methods=["GET"])
 @role_required("Corporate")
 def list_entries():
@@ -309,6 +575,7 @@ def list_entries():
     return jsonify({"entries": [e.to_dict() for e in entries]}), 200
 
 
+# ------------------------------------------------------------------ update
 @corporate_bp.route("/entries/<int:entry_id>", methods=["PUT"])
 @role_required("Corporate")
 def update_entry(entry_id):
@@ -319,6 +586,7 @@ def update_entry(entry_id):
     data = request.get_json(silent=True) or {}
     print(f"📝 Updating entry {entry_id} with data:", data)
 
+    # ---- Capital ----
     if entry.entry_type == "Capital":
         if "client_name" in data:
             entry.client_name = (data["client_name"] or "").strip() or None
@@ -344,6 +612,90 @@ def update_entry(entry_id):
 
         db.session.commit()
         return jsonify({"message": "Capital entry updated.", "entry": entry.to_dict()}), 200
+
+    # ---- Expenses -> Corpus Fund (Corporate row + linked department row) ----
+    if _is_corporate_corpus_expense(entry):
+        linked_rows = _linked_dept_rows(entry)
+
+        if "exec_department" in data or "department" in data:
+            new_dept = (data.get("exec_department") or data.get("department") or "").strip()
+            if new_dept not in VALID_TRANSFER_TARGETS:
+                return jsonify({
+                    "message": f"Department must be one of: {', '.join(VALID_TRANSFER_TARGETS)}."
+                }), 400
+            entry.exec_department = new_dept
+            for row in linked_rows:
+                row.department = new_dept
+                row.exec_department = new_dept
+
+        if "amount" in data:
+            try:
+                amt = float(data["amount"])
+                if amt > 0:
+                    entry.amount = amt
+                    for row in linked_rows:
+                        row.amount = amt
+            except (TypeError, ValueError):
+                pass
+        if "purpose" in data:
+            val = (data["purpose"] or "").strip() or None
+            entry.purpose = val
+            for row in linked_rows:
+                row.purpose = val
+        if "remarks" in data:
+            entry.remarks = data["remarks"]
+            for row in linked_rows:
+                row.remarks = data["remarks"]
+        if "generated_by" in data:
+            val = (data["generated_by"] or "").strip() or None
+            entry.generated_by = val
+            for row in linked_rows:
+                row.generated_by = val
+        if "client_name" in data:
+            val = (data["client_name"] or "").strip() or None
+            entry.client_name = val
+            for row in linked_rows:
+                row.client_name = val
+        if "entry_date" in data:
+            parsed = _parse_date(data["entry_date"])
+            if parsed:
+                entry.entry_date = parsed
+                for row in linked_rows:
+                    row.entry_date = parsed
+
+        db.session.commit()
+        return jsonify({
+            "message": "Corpus Fund entry updated.",
+            "entry": entry.to_dict(),
+            "department_entries": [r.to_dict() for r in linked_rows],
+        }), 200
+
+    # ---- Legacy Corpus Fund type stored under Corporate (if any) ----
+    if entry.entry_type == CORPUS_FUND_TYPE:
+        if "amount" in data:
+            try:
+                amt = float(data["amount"])
+                if amt > 0:
+                    entry.amount = amt
+            except (TypeError, ValueError):
+                pass
+        if "purpose" in data:
+            entry.purpose = (data["purpose"] or "").strip() or None
+        if "remarks" in data:
+            entry.remarks = data["remarks"]
+        if "entry_date" in data:
+            parsed = _parse_date(data["entry_date"])
+            if parsed:
+                entry.entry_date = parsed
+        db.session.commit()
+        return jsonify({"message": "Corpus Fund entry updated.", "entry": entry.to_dict()}), 200
+
+    # ---- Generic Income / Expenses ----
+    # Moving a normal entry INTO Corpus Fund would skip the department posting.
+    if data.get("category") == CORPUS_FUND_CATEGORY or data.get("entry_type") == CORPUS_FUND_TYPE:
+        return jsonify({
+            "message": "Cannot convert an entry to Corpus Fund. Create a new Corpus Fund expense instead."
+        }), 400
 
     if "entry_type" in data and data["entry_type"] in ENTRY_TYPES:
         entry.entry_type = data["entry_type"]
@@ -384,17 +736,25 @@ def update_entry(entry_id):
     return jsonify({"message": "Entry updated.", "entry": entry.to_dict()}), 200
 
 
+# ------------------------------------------------------------------ delete
 @corporate_bp.route("/entries/<int:entry_id>", methods=["DELETE"])
 @role_required("Corporate")
 def delete_entry(entry_id):
     entry = FinanceEntry.query.filter_by(id=entry_id, department=DEPARTMENT).first()
     if not entry:
         return jsonify({"message": "Entry not found."}), 404
+
+    # Deleting the Corporate Corpus Fund expense also removes the department's copy.
+    if _is_corporate_corpus_expense(entry):
+        for row in _linked_dept_rows(entry):
+            db.session.delete(row)
+
     db.session.delete(entry)
     db.session.commit()
     return jsonify({"message": "Entry deleted."}), 200
 
 
+# ----------------------------------------------------------------- summary
 @corporate_bp.route("/summary", methods=["GET"])
 @role_required("Corporate")
 def finance_summary():
@@ -404,16 +764,25 @@ def finance_summary():
     total_expenses = sum(float(e.amount) for e in entries if e.entry_type == "Expenses")
     total_capital = sum(float(e.amount) for e in entries if e.entry_type == "Capital")
 
+    # Corpus Fund is part of Corporate Expenses (category), shown separately for info.
+    total_corpus_fund = sum(
+        float(e.amount) for e in entries
+        if e.entry_type == "Expenses" and e.category == CORPUS_FUND_CATEGORY
+    )
+
     by_date = {}
     for e in entries:
         key = e.entry_date.isoformat()
-        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "capital": 0})
+        by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "capital": 0, "corpus_fund": 0})
+        amt = float(e.amount)
         if e.entry_type == "Income":
-            by_date[key]["income"] += float(e.amount)
+            by_date[key]["income"] += amt
         elif e.entry_type == "Expenses":
-            by_date[key]["expenses"] += float(e.amount)
+            by_date[key]["expenses"] += amt
+            if e.category == CORPUS_FUND_CATEGORY:
+                by_date[key]["corpus_fund"] += amt
         elif e.entry_type == "Capital":
-            by_date[key]["capital"] += float(e.amount)
+            by_date[key]["capital"] += amt
     trend = sorted(by_date.values(), key=lambda x: x["date"])
 
     by_category = {}
@@ -421,13 +790,24 @@ def finance_summary():
         by_category.setdefault(e.category, {"category": e.category, "amount": 0})
         by_category[e.category]["amount"] += float(e.amount)
 
+    # Corpus Fund by target department (for a Corporate-side breakdown)
+    corpus_by_dept = {}
+    for e in entries:
+        if e.entry_type == "Expenses" and e.category == CORPUS_FUND_CATEGORY:
+            d = e.exec_department or "Unassigned"
+            corpus_by_dept[d] = corpus_by_dept.get(d, 0) + float(e.amount)
+
     return jsonify({
         "department": DEPARTMENT,
         "total_income": total_income,
         "total_expenses": total_expenses,
         "total_capital": total_capital,
+        "total_corpus_fund": total_corpus_fund,
         "profit": total_income - total_expenses,
         "entry_count": len(entries),
         "trend": trend,
         "category_breakdown": list(by_category.values()),
+        "corpus_fund_by_department": [
+            {"department": k, "amount": v} for k, v in corpus_by_dept.items()
+        ],
     }), 200

@@ -12,12 +12,15 @@ ROLES = [
     "ResearchDevelopment", "Dental", "SalesEnterprise", "Everglades",
 ]
 
-ENTRY_TYPES = ["Income", "Expenses", "Capital"]
+# "Corpus Fund" as an ENTRY TYPE is used only for the row that lands in the
+# TARGET department (IT, IT Sales, PCM ...). Corporate itself records the same
+# money as an Expenses entry with category "Corpus Fund".
+ENTRY_TYPES = ["Income", "Expenses", "Capital", "Corpus Fund"]
 
 # ---------- STANDARD CATEGORIES (used by ALL departments for Income & Expenses) ----------
 STANDARD_CATEGORIES = [
     "Salary & Payrolls",
-    "Corpus Fund",
+    "Corpus Fund",              # Corporate: Expenses -> Corpus Fund
     "Referrals & Deposits",
     "Products & Innovation",
     "General Operations",
@@ -36,6 +39,8 @@ CAPITAL_CATEGORIES = [
 ]
 
 SALARY_CATEGORY = "Salary & Payrolls"
+CORPUS_FUND_CATEGORY = "Corpus Fund"
+CORPUS_FUND_TYPE = "Corpus Fund"
 
 
 def _build_categories():
@@ -172,6 +177,8 @@ DEPARTMENT_CONFIG = {
 
     # =================== Corporate ===================
     "Corporate": {
+        # Corpus Fund is an Expenses CATEGORY for Corporate.
+        # Saving one also posts a separate "Corpus Fund" entry to the chosen department.
         "entry_types": ["Income", "Expenses", "Capital"],
         "categories": _build_categories(),
         "revenue_types": [],
@@ -306,6 +313,10 @@ class FinanceEntry(db.Model):
 
     extra_data = db.Column(db.JSON, nullable=True)
 
+    # Links the department-side "Corpus Fund" row to the Corporate
+    # "Expenses / Corpus Fund" row that created it (so edit/delete stay in sync).
+    linked_entry_id = db.Column(db.Integer, nullable=True, index=True)
+
     items = db.relationship(
         "FinanceEntryItem", backref="entry", lazy=True,
         cascade="all, delete-orphan", order_by="FinanceEntryItem.id",
@@ -344,6 +355,7 @@ class FinanceEntry(db.Model):
             "entry_date": self.entry_date.isoformat() if self.entry_date else None,
             "items": [i.to_dict() for i in self.items],
             "extra_data": self.extra_data,
+            "linked_entry_id": self.linked_entry_id,
             "created_by": self.creator.name if self.creator else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
@@ -574,27 +586,15 @@ class Notification(db.Model):
 
 
 # ===========================================================================
-# SCHEMA SYNC — adds any missing columns to existing tables
+# SCHEMA SYNC
 # ===========================================================================
-# db.create_all() only creates missing TABLES; it never ALTERs existing ones.
-# So when a new column is added to a model after the table already exists,
-# the DB stays missing that column and every SELECT fails with MySQL error 1054.
-#
-# ensure_schema_columns() reads information_schema and runs ALTER TABLE for any
-# missing column. It is idempotent and safe to run on every app start.
-# ===========================================================================
-
 def ensure_schema_columns():
     """Add any missing columns to existing tables. MySQL-safe, idempotent."""
     from sqlalchemy import text
 
-    # (table_name, column_name, column_ddl)
-    # Keep these DDLs aligned with the model definitions above.
     required_columns = [
-        # --- users ---
         ("users", "temp_otp", "VARCHAR(10) NULL"),
 
-        # --- finance_entries (newer optional fields) ---
         ("finance_entries", "sub_category",           "VARCHAR(60) NULL"),
         ("finance_entries", "fund_category",          "VARCHAR(50) NULL"),
         ("finance_entries", "base_amount",            "DECIMAL(14,2) NULL"),
@@ -612,14 +612,13 @@ def ensure_schema_columns():
         ("finance_entries", "invoice_original_name",  "VARCHAR(255) NULL"),
         ("finance_entries", "invoice_mimetype",       "VARCHAR(100) NULL"),
         ("finance_entries", "extra_data",             "JSON NULL"),
+        ("finance_entries", "linked_entry_id",        "INT NULL"),
 
-        # --- caredx_expenses (newer fields) ---
         ("caredx_expenses", "referral_amount", "DECIMAL(14,2) NOT NULL DEFAULT 0"),
         ("caredx_expenses", "employee_name",   "VARCHAR(150) NULL"),
         ("caredx_expenses", "purpose",         "TEXT NULL"),
         ("caredx_expenses", "vehicle_type",    "VARCHAR(100) NULL"),
 
-        # --- caredx_lab_entries ---
         ("caredx_lab_entries", "cash",               "DECIMAL(14,2) NOT NULL DEFAULT 0"),
         ("caredx_lab_entries", "online",             "DECIMAL(14,2) NOT NULL DEFAULT 0"),
         ("caredx_lab_entries", "paid_to_other_labs", "DECIMAL(14,2) NOT NULL DEFAULT 0"),
@@ -630,12 +629,10 @@ def ensure_schema_columns():
         ("caredx_lab_entries", "referral_amount",    "DECIMAL(14,2) NOT NULL DEFAULT 0"),
         ("caredx_lab_entries", "sales",              "DECIMAL(14,2) NOT NULL DEFAULT 0"),
 
-        # --- medtech_ledger (invoice fields) ---
         ("medtech_ledger", "invoice_filename",      "VARCHAR(255) NULL"),
         ("medtech_ledger", "invoice_original_name", "VARCHAR(255) NULL"),
         ("medtech_ledger", "invoice_mimetype",      "VARCHAR(100) NULL"),
 
-        # --- everglades_ledger (invoice fields) ---
         ("everglades_ledger", "invoice_filename",      "VARCHAR(255) NULL"),
         ("everglades_ledger", "invoice_original_name", "VARCHAR(255) NULL"),
         ("everglades_ledger", "invoice_mimetype",      "VARCHAR(100) NULL"),
@@ -671,25 +668,54 @@ def ensure_schema_columns():
 
 
 # ===========================================================================
+# Ensure entry_type column is VARCHAR (not ENUM) so "Corpus Fund" is accepted
+# ===========================================================================
+def ensure_entry_type_is_varchar():
+    """
+    Older schemas created entry_type as ENUM('Income','Expenses','Capital').
+    Those reject the 'Corpus Fund' value → MySQL 1265 → 500.
+    This converts the column to VARCHAR(20) once. Idempotent.
+    """
+    from sqlalchemy import text
+    try:
+        col_type = db.session.execute(
+            text(
+                "SELECT DATA_TYPE FROM information_schema.columns "
+                "WHERE table_schema = DATABASE() "
+                "AND table_name = 'finance_entries' "
+                "AND column_name = 'entry_type'"
+            )
+        ).scalar()
+
+        if col_type and str(col_type).lower() in ("enum", "char"):
+            db.session.execute(text(
+                "ALTER TABLE finance_entries "
+                "MODIFY COLUMN entry_type VARCHAR(20) NOT NULL"
+            ))
+            db.session.commit()
+            print(f"✅ Converted finance_entries.entry_type from {col_type} → VARCHAR(20)")
+        else:
+            print(f"ℹ️  finance_entries.entry_type is already {col_type or 'VARCHAR'}.")
+    except Exception as exc:
+        db.session.rollback()
+        print(f"⚠️  Could not convert entry_type column: {exc}")
+
+
+# ===========================================================================
 # LEGACY CATEGORY MIGRATION
 # ===========================================================================
-# Maps old category names → new standardized categories.
 LEGACY_CATEGORY_MAP = {
-    # Old Personnel / Payroll variants
     "Payroll Salaries": SALARY_CATEGORY,
     "Personnel & Payroll": SALARY_CATEGORY,
     "R&D Salaries": SALARY_CATEGORY,
 
-    # Travel
     "Travel & Entertainment": "Travel & Hospitality",
     "Travel & Entertainment (T&E)": "Travel & Hospitality",
     "Travel and Mileage Reimbursement": "Travel & Hospitality",
 
-    # Marketing
     "Marketing": "Marketing & Promos",
     "Marketing Expenses": "Marketing & Promos",
 
-    # Supplies / Products
     "Assets & Infra Cost": "Products & Innovation",
     "Supplies & Equipments": "Products & Innovation",
     "Supplies and Equipments": "Products & Innovation",
@@ -707,7 +733,6 @@ LEGACY_CATEGORY_MAP = {
     "B2B Revenue": "Products & Innovation",
     "B2C Revenue": "Products & Innovation",
 
-    # Facilities / General Ops
     "Office Management": "General Operations",
     "Facilities & Overhead": "General Operations",
     "Clinical Overhead": "General Operations",
@@ -730,7 +755,6 @@ LEGACY_CATEGORY_MAP = {
     "Outsourced Services": "General Operations",
     "Innovation": "General Operations",
 
-    # Camps / Events / Guest
     "Guest Concierge": "Camps & Events",
     "Events-Conferences-Training": "Camps & Events",
     "Camp": "Camps & Events",
@@ -740,7 +764,6 @@ LEGACY_CATEGORY_MAP = {
     "Consultation Fees": "Camps & Events",
     "Consulting": "Camps & Events",
 
-    # Referrals
     "Referral": "Referrals & Deposits",
     "Referrals": "Referrals & Deposits",
     "Lab": "Referrals & Deposits",
@@ -757,7 +780,6 @@ LEGACY_CATEGORY_MAP = {
     "Web Services": "Referrals & Deposits",
     "Portal Services": "Referrals & Deposits",
 
-    # Management fees / misc
     "Management Fees": "Miscellaneous",
     "Legal Governance": "Miscellaneous",
     "Legal/Administrative Expenses": "Miscellaneous",
@@ -773,15 +795,10 @@ LEGACY_CATEGORY_MAP = {
 
 
 def migrate_all_categories():
-    """One-shot migration: rewrite any legacy categories to the new standardized ones.
-
-    Fail-safe: any error is logged but never raised — app startup must not be
-    blocked by a category migration.
-    """
+    """One-shot migration: rewrite any legacy categories to the new standardized ones."""
     from sqlalchemy import update
     migrated = 0
     try:
-        # ---- FinanceEntry ----
         for old, new in LEGACY_CATEGORY_MAP.items():
             if old == new:
                 continue
@@ -800,7 +817,6 @@ def migrate_all_categories():
                 db.session.rollback()
                 print(f"⚠️  FinanceEntry migration skipped for '{old}': {exc}")
 
-        # ---- CaredxExpense ----
         for old, new in LEGACY_CATEGORY_MAP.items():
             if old == new:
                 continue

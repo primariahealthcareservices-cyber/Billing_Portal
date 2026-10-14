@@ -1,5 +1,7 @@
+// frontend/src/components/CaredxLabTable.jsx
 import React from "react";
 import { Pencil, Trash2 } from "lucide-react";
+import RemarkCell, { remarkCellStyle } from "./RemarkCell.jsx";
 
 const formatCurrency = (value) => {
   if (!value) return "—";
@@ -30,7 +32,7 @@ export default function CaredxLabTable({ entries, onEdit, onDelete }) {
             <th className="text-right">Paid to Other Labs</th>
             <th className="text-right">RMP</th>
             <th className="text-right">Salaries/Expense</th>
-            <th>Expense Details</th>
+            <th style={{ minWidth: remarkCellStyle.minWidth }}>Expense Details</th>
             <th>Referral By</th>
             <th className="text-right">Referral Amount</th>
             <th className="text-right">Sales</th>
@@ -50,7 +52,9 @@ export default function CaredxLabTable({ entries, onEdit, onDelete }) {
               <td className="text-right">{formatCurrency(e.paid_to_other_labs)}</td>
               <td className="text-right">{formatCurrency(e.rmp)}</td>
               <td className="text-right">{formatCurrency(e.salaries_expense)}</td>
-              <td className="truncate" title={e.expense_details}>{e.expense_details || "—"}</td>
+              <td style={remarkCellStyle}>
+                <RemarkCell text={e.expense_details} />
+              </td>
               <td>{e.referral_by || "—"}</td>
               <td className="text-right">{formatCurrency(e.referral_amount)}</td>
               <td className="text-right">{formatCurrency(e.sales)}</td>

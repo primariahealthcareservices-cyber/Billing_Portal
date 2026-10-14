@@ -247,6 +247,10 @@ export default function CopperBookPage({ onBack }) {
     rejected: rows.filter((r) => r.status === "rejected").length,
   };
 
+  // ── Total amount across the currently loaded rows (respects active filter) ──
+  const totalAmount = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+  const rowsWithAmount = rows.filter((r) => r.amount !== null && r.amount !== undefined && Number(r.amount) > 0).length;
+
   if (showAllEmployees) {
     return <AllEmployeesPage onBack={() => setShowAllEmployees(false)} />;
   }
@@ -273,7 +277,7 @@ export default function CopperBookPage({ onBack }) {
           {/* Row 1 — Status chips */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
             {["all", "pending", "forwarded_to_ceo", "approved", "rejected"].map((s) => {
-              if (s !== "all" && counts[s] === 0) return null;
+              if (s !== "all" && counts[s] === 0 && statusFilter !== s) return null;
               const label = s === "all" ? `All (${counts.all})` : `${STATUS_LABEL[s]} (${counts[s]})`;
               return (
                 <button
@@ -430,7 +434,66 @@ export default function CopperBookPage({ onBack }) {
                   </tr>
                 ))}
               </tbody>
+
+              {/* ── Totals row ─────────────────────────────── */}
+              <tfoot>
+                <tr style={{ background: "#f8fafc", borderTop: "2px solid #e2e8f0" }}>
+                  <td colSpan={4} style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>
+                    Total ({statusFilter === "all" ? "All" : STATUS_LABEL[statusFilter]})
+                  </td>
+                  <td
+                    style={{
+                      textAlign: "right",
+                      fontWeight: 800,
+                      fontSize: 16,
+                      color: "#065f46",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {fmtMoney(totalAmount)}
+                  </td>
+                  <td colSpan={4} style={{ fontSize: 12.5, color: "#6b7280" }}>
+                    {rowsWithAmount} of {rows.length} {rows.length === 1 ? "entry" : "entries"} have an amount
+                  </td>
+                </tr>
+              </tfoot>
             </table>
+
+            {/* ── Big highlighted total banner below the table ── */}
+            <div
+              style={{
+                marginTop: 12,
+                padding: "14px 20px",
+                borderRadius: 10,
+                background: "linear-gradient(90deg, #ecfdf5 0%, #f0fdf4 100%)",
+                border: "1px solid #a7f3d0",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 16,
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#047857", letterSpacing: 0.4 }}>
+                  TOTAL AMOUNT — {statusFilter === "all" ? "ALL ENTRIES" : STATUS_LABEL[statusFilter].toUpperCase()}
+                </div>
+                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+                  Summed across {rows.length} currently loaded {rows.length === 1 ? "request" : "requests"}
+                  {page < pages ? ` (page ${page} of ${pages})` : ""}
+                </div>
+              </div>
+              <div
+                style={{
+                  fontSize: 24,
+                  fontWeight: 800,
+                  color: "#065f46",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {fmtMoney(totalAmount)}
+              </div>
+            </div>
 
             {page < pages && (
               <div style={{ textAlign: "center", marginTop: 12 }}>

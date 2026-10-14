@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { Pencil, Trash2, FileText, Eye } from "lucide-react";
 
 import api from "../api/axios.js";
+import RemarkCell, { remarkCellStyle } from "./RemarkCell.jsx";
 
 const formatCurrency = (value) => {
   const number = Number(value || 0);
@@ -120,7 +121,7 @@ export default function FinanceTable({
             {showTeam && <th>Team</th>}
             <th className="text-right">Amount</th>
             {showLedgerDetails && <th>Customer / Details</th>}
-            <th>Remarks</th>
+            <th style={{ minWidth: remarkCellStyle.minWidth }}>Remarks</th>
             {showInvoice && <th>Invoice</th>}
             <th>Actions</th>
           </tr>
@@ -220,7 +221,9 @@ export default function FinanceTable({
                     )}
                   </td>
                 )}
-                <td>{entry.remarks || "—"}</td>
+                <td style={remarkCellStyle}>
+                  <RemarkCell text={entry.remarks} />
+                </td>
                 {showInvoice && (
                   <td>
                     {entry.invoice_url ? (
