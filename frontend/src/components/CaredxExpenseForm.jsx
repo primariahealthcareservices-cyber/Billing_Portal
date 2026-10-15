@@ -15,25 +15,17 @@ const emptyForm = () => ({
   vehicle_type: "",
 });
 
-// New category list (including Pay Role Salaries)
+// Updated category list
 const CATEGORIES = [
-  "Payroll Salaries",
-  "Travel & Entertainment",
-  "Marketing Expenses",
-  "Assets & Infra Cost",
+  "Salary & Payrolls",
+  "Corpus Fund",
+  "Referrals & Deposits",
+  "Products & Innovation",
   "General Operations",
-  "Innovation",
-  "Miscellaneous Categories",
-  "Service Revenue",
-  "Supplies & Equipments",   // renamed
-  "Legal Governance",
-  "Reagents and Laboratory Consumables",
-  "Specialized Clinical Labor",
-  "Logistics, Couriers, and Specimen Collection",
-  "Equipment Maintenance, Leases, and Automation",
-  "Waste Management, Compliance, and Safety",
-  "Billing, Revenue Cycle, and Administration",
-  "Other"
+  "Camps & Events",
+  "Marketing & Promos",
+  "Travel & Hospitality",
+  "Miscellaneous",
 ];
 
 export default function CaredxExpenseForm({ open, onClose, onSaved, editingExpense }) {
@@ -59,7 +51,10 @@ export default function CaredxExpenseForm({ open, onClose, onSaved, editingExpen
 
   if (!open) return null;
 
-  const isSalaryCategory = form.category === "Payroll Salaries";
+  // Categories that must be entered via Corporate Management only
+  const isSalaryCategory = form.category === "Salary & Payrolls";
+  const isCorpusFund = form.category === "Corpus Fund";
+  const isBlockedCategory = isSalaryCategory || isCorpusFund;
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -68,9 +63,13 @@ export default function CaredxExpenseForm({ open, onClose, onSaved, editingExpen
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Prevent salary category submission
-    if (isSalaryCategory) {
-      toast.error("Salaries must be entered by Corporate Management only.");
+    // Prevent blocked categories from being submitted here
+    if (isBlockedCategory) {
+      toast.error(
+        isCorpusFund
+          ? "Corpus Fund must be entered by Corporate Management only."
+          : "Salaries must be entered by Corporate Management only."
+      );
       return;
     }
 
@@ -104,7 +103,10 @@ export default function CaredxExpenseForm({ open, onClose, onSaved, editingExpen
       onSaved();
       onClose();
     } catch (err) {
-      const msg = err.response?.data?.errors?.join(" ") || err.response?.data?.message || "Something went wrong.";
+      const msg =
+        err.response?.data?.errors?.join(" ") ||
+        err.response?.data?.message ||
+        "Something went wrong.";
       toast.error(msg);
     } finally {
       setSaving(false);
@@ -126,11 +128,26 @@ export default function CaredxExpenseForm({ open, onClose, onSaved, editingExpen
           <div className="form-row">
             <div className="form-group">
               <label className="form-label">Date</label>
-              <input type="date" name="expense_date" value={form.expense_date} onChange={handleChange} className="form-control" />
+              <input
+                type="date"
+                name="expense_date"
+                value={form.expense_date}
+                onChange={handleChange}
+                className="form-control"
+              />
             </div>
             <div className="form-group">
               <label className="form-label">Amount (₹)</label>
-              <input type="number" step="0.01" min="0" name="amount" value={form.amount} onChange={handleChange} placeholder="0.00" className="form-control" />
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                name="amount"
+                value={form.amount}
+                onChange={handleChange}
+                placeholder="0.00"
+                className="form-control"
+              />
             </div>
           </div>
 
@@ -144,24 +161,40 @@ export default function CaredxExpenseForm({ open, onClose, onSaved, editingExpen
               className="form-control"
             >
               <option value="">Select a category</option>
-              {CATEGORIES.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
+              {CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
               ))}
             </select>
           </div>
 
-          {/* Salary Category Message */}
-          {isSalaryCategory && (
-            <div className="alert alert-info" style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
-              <strong>⚠️ Salaries must be entered by Corporate Management only.</strong>
+          {/* Blocked Category Message (Salaries / Corpus Fund) */}
+          {isBlockedCategory && (
+            <div
+              className="alert alert-info"
+              style={{
+                background: "#f0f0ff",
+                padding: "12px",
+                borderRadius: "8px",
+                marginBottom: "12px",
+              }}
+            >
+              <strong>
+                {isCorpusFund
+                  ? "⚠️ Corpus Fund must be entered by Corporate Management only."
+                  : "⚠️ Salaries must be entered by Corporate Management only."}
+              </strong>
               <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>
-                Please use the Corporate Management dashboard to add salary records for CareDx employees.
+                {isCorpusFund
+                  ? "Please use the Corporate Management dashboard to add corpus fund records."
+                  : "Please use the Corporate Management dashboard to add salary records for CareDx employees."}
               </p>
             </div>
           )}
 
-          {/* Editable fields – hidden for salary category */}
-          {!isSalaryCategory && (
+          {/* Editable fields – hidden for blocked categories */}
+          {!isBlockedCategory && (
             <>
               {/* Employee/Person Name (generic) */}
               <div className="form-group">
@@ -187,8 +220,8 @@ export default function CaredxExpenseForm({ open, onClose, onSaved, editingExpen
                 />
               </div>
 
-              {/* Vehicle Type – shown only for Travel & Entertainment */}
-              {form.category === "Travel & Entertainment" && (
+              {/* Vehicle Type – shown only for Travel & Hospitality */}
+              {form.category === "Travel & Hospitality" && (
                 <div className="form-group">
                   <label className="form-label">Transport / Travel Type</label>
                   <input
@@ -203,7 +236,9 @@ export default function CaredxExpenseForm({ open, onClose, onSaved, editingExpen
 
               {/* Remarks – mandatory */}
               <div className="form-group">
-                <label className="form-label">Remarks <span style={{ color: "red" }}>*</span></label>
+                <label className="form-label">
+                  Remarks <span style={{ color: "red" }}>*</span>
+                </label>
                 <textarea
                   name="remarks"
                   value={form.remarks}
@@ -218,9 +253,24 @@ export default function CaredxExpenseForm({ open, onClose, onSaved, editingExpen
           )}
 
           <div className="modal-footer">
-            <button type="button" onClick={onClose} className="btn btn-secondary" disabled={saving}>Cancel</button>
-            <button type="submit" disabled={saving || isSalaryCategory} className="btn btn-primary">
-              {saving ? "Saving..." : editingExpense ? "Update Expense" : "Save Expense"}
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn btn-secondary"
+              disabled={saving}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving || isBlockedCategory}
+              className="btn btn-primary"
+            >
+              {saving
+                ? "Saving..."
+                : editingExpense
+                ? "Update Expense"
+                : "Save Expense"}
             </button>
           </div>
         </form>

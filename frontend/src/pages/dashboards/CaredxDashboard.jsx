@@ -30,8 +30,9 @@ import CaredxLabEntryForm from "../../components/CaredxLabEntryForm.jsx";
 import CaredxExpenseTable from "../../components/CaredxExpenseTable.jsx";
 import CaredxExpenseForm from "../../components/CaredxExpenseForm.jsx";
 
-import CaredxCapitalTable from "../../components/CaredxCapitalTable.jsx";
-import CaredxCapitalForm from "../../components/CaredxCapitalForm.jsx";
+// ===== CAPITAL IMPORTS (REMOVED) =====
+// import CaredxCapitalTable from "../../components/CaredxCapitalTable.jsx";
+// import CaredxCapitalForm from "../../components/CaredxCapitalForm.jsx";
 
 import Pagination from "../../components/Pagination.jsx";
 
@@ -88,15 +89,13 @@ export default function CaredxDashboard() {
   const [expenseFormOpen, setExpenseFormOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
 
-  // -------------------------------------------------------------------------
-  // Capital (replaces Funds)
-  // -------------------------------------------------------------------------
-  const [capitalEntries, setCapitalEntries] = useState([]);
-  const [capitalLoading, setCapitalLoading] = useState(true);
-  const [capitalPage, setCapitalPage] = useState(1);
-
-  const [capitalFormOpen, setCapitalFormOpen] = useState(false);
-  const [editingCapital, setEditingCapital] = useState(null);
+  // ===== CAPITAL STATE (REMOVED) =====
+  // const [capitalEntries, setCapitalEntries] = useState([]);
+  // const [capitalLoading, setCapitalLoading] = useState(true);
+  // const [capitalPage, setCapitalPage] = useState(1);
+  //
+  // const [capitalFormOpen, setCapitalFormOpen] = useState(false);
+  // const [editingCapital, setEditingCapital] = useState(null);
 
   // -------------------------------------------------------------------------
   // Shared API params
@@ -169,36 +168,37 @@ export default function CaredxDashboard() {
     }
   }, [startDate, endDate]);
 
-  const fetchCapital = useCallback(async () => {
-    setCapitalLoading(true);
-    try {
-      const response = await api.get("/caredx/capital", {
-        params: dateParams,
-      });
-      setCapitalEntries(
-        Array.isArray(response.data?.capital) ? response.data.capital : []
-      );
-      setCapitalPage(1);
-    } catch (error) {
-      console.error("Capital error:", error);
-      toast.error(
-        error.response?.data?.message || "Failed to load capital entries."
-      );
-      setCapitalEntries([]);
-      setCapitalPage(1);
-    } finally {
-      setCapitalLoading(false);
-    }
-  }, [startDate, endDate]);
+  // ===== CAPITAL FETCHER (REMOVED) =====
+  // const fetchCapital = useCallback(async () => {
+  //   setCapitalLoading(true);
+  //   try {
+  //     const response = await api.get("/caredx/capital", {
+  //       params: dateParams,
+  //     });
+  //     setCapitalEntries(
+  //       Array.isArray(response.data?.capital) ? response.data.capital : []
+  //     );
+  //     setCapitalPage(1);
+  //   } catch (error) {
+  //     console.error("Capital error:", error);
+  //     toast.error(
+  //       error.response?.data?.message || "Failed to load capital entries."
+  //     );
+  //     setCapitalEntries([]);
+  //     setCapitalPage(1);
+  //   } finally {
+  //     setCapitalLoading(false);
+  //   }
+  // }, [startDate, endDate]);
 
   const refetchAll = useCallback(async () => {
     await Promise.all([
       fetchSummary(),
       fetchLabEntries(),
       fetchExpenses(),
-      fetchCapital(),
+      // fetchCapital(), // ===== CAPITAL (REMOVED) =====
     ]);
-  }, [fetchSummary, fetchLabEntries, fetchExpenses, fetchCapital]);
+  }, [fetchSummary, fetchLabEntries, fetchExpenses /*, fetchCapital */]);
 
   useEffect(() => {
     refetchAll();
@@ -222,17 +222,15 @@ export default function CaredxDashboard() {
     expensePage * PAGE_SIZE
   );
 
-  // -------------------------------------------------------------------------
-  // Pagination — Capital
-  // -------------------------------------------------------------------------
-  const capitalTotalPages = Math.max(
-    1,
-    Math.ceil(capitalEntries.length / PAGE_SIZE)
-  );
-  const paginatedCapital = capitalEntries.slice(
-    (capitalPage - 1) * PAGE_SIZE,
-    capitalPage * PAGE_SIZE
-  );
+  // ===== CAPITAL PAGINATION (REMOVED) =====
+  // const capitalTotalPages = Math.max(
+  //   1,
+  //   Math.ceil(capitalEntries.length / PAGE_SIZE)
+  // );
+  // const paginatedCapital = capitalEntries.slice(
+  //   (capitalPage - 1) * PAGE_SIZE,
+  //   capitalPage * PAGE_SIZE
+  // );
 
   // -------------------------------------------------------------------------
   // Reset
@@ -374,38 +372,36 @@ export default function CaredxDashboard() {
     }
   };
 
-  // -------------------------------------------------------------------------
-  // Capital actions
-  // -------------------------------------------------------------------------
-  const openNewCapital = () => {
-    setEditingCapital(null);
-    setCapitalFormOpen(true);
-  };
-
-  const openEditCapital = (entry) => {
-    setEditingCapital(entry);
-    setCapitalFormOpen(true);
-  };
-
-  const handleCapitalDelete = async (entry) => {
-    const confirmed = window.confirm(
-      `Delete the capital entry for "${entry.client_name || "—"}" dated ${
-        entry.entry_date
-      }?`
-    );
-    if (!confirmed) return;
-
-    try {
-      await api.delete(`/caredx/capital/${entry.id}`);
-      toast.success("Capital entry deleted.");
-      await refetchAll();
-    } catch (error) {
-      console.error("Delete capital error:", error);
-      toast.error(
-        error.response?.data?.message || "Failed to delete capital entry."
-      );
-    }
-  };
+  // ===== CAPITAL ACTIONS (REMOVED) =====
+  // const openNewCapital = () => {
+  //   setEditingCapital(null);
+  //   setCapitalFormOpen(true);
+  // };
+  //
+  // const openEditCapital = (entry) => {
+  //   setEditingCapital(entry);
+  //   setCapitalFormOpen(true);
+  // };
+  //
+  // const handleCapitalDelete = async (entry) => {
+  //   const confirmed = window.confirm(
+  //     `Delete the capital entry for "${entry.client_name || "—"}" dated ${
+  //       entry.entry_date
+  //     }?`
+  //   );
+  //   if (!confirmed) return;
+  //
+  //   try {
+  //     await api.delete(`/caredx/capital/${entry.id}`);
+  //     toast.success("Capital entry deleted.");
+  //     await refetchAll();
+  //   } catch (error) {
+  //     console.error("Delete capital error:", error);
+  //     toast.error(
+  //       error.response?.data?.message || "Failed to delete capital entry."
+  //     );
+  //   }
+  // };
 
   // -------------------------------------------------------------------------
   // Render
@@ -542,7 +538,8 @@ export default function CaredxDashboard() {
                 </div>
               </div>
 
-              {/* Capital card (was Funds) */}
+              {/* ===== CAPITAL CARD (REMOVED) ===== */}
+              {/*
               <div className="card stat-card">
                 <div className="stat-icon stat-icon--funds">
                   <Landmark size={22} />
@@ -554,6 +551,7 @@ export default function CaredxDashboard() {
                   </p>
                 </div>
               </div>
+              */}
 
               <div className="card stat-card">
                 <div className="stat-icon stat-icon--profit">
@@ -682,7 +680,8 @@ export default function CaredxDashboard() {
           </>
         )}
 
-        {/* ============ CAPITAL (was Funds) ============ */}
+        {/* ===== CAPITAL SECTION (REMOVED) ===== */}
+        {/*
         <div className="section-header">
           <p className="section-title">Capital</p>
           <button
@@ -712,6 +711,7 @@ export default function CaredxDashboard() {
             />
           </>
         )}
+        */}
       </main>
 
       {/* ============ MODALS ============ */}
@@ -729,6 +729,8 @@ export default function CaredxDashboard() {
         editingExpense={editingExpense}
       />
 
+      {/* ===== CAPITAL MODAL (REMOVED) ===== */}
+      {/*
       <CaredxCapitalForm
         open={capitalFormOpen}
         onClose={() => {
@@ -738,6 +740,7 @@ export default function CaredxDashboard() {
         onSaved={refetchAll}
         editingCapital={editingCapital}
       />
+      */}
     </div>
   );
 }

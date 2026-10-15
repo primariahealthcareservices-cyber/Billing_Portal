@@ -192,9 +192,10 @@ export default function FinanceEntryForm({
 
   // Legacy shape: entry_type itself is "Corpus Fund"
   const isLegacyCorpusType = form.entry_type === CORPUS_FUND;
-  // Current shape (Corporate only): Expenses -> Corpus Fund
+  // Current shape: Expenses -> Corpus Fund (any department can select this;
+  // gating is handled by isCorpusFundBlocked below)
   const isCorpusFundExpense =
-    isCorporate && form.entry_type === "Expenses" && form.category === CORPUS_FUND;
+    form.entry_type === "Expenses" && form.category === CORPUS_FUND;
   const isCorpusFundType = isLegacyCorpusType || isCorpusFundExpense;
 
   const isEditingExisting =
@@ -205,14 +206,31 @@ export default function FinanceEntryForm({
   const requireItemsForCategory =
     (isMedTech || isEverglades) && ITEM_CATEGORIES.includes(form.category);
 
-  const showInvoiceField = !isCapital && !isCorpusFundType && !isLedger && !isSalaryCategory;
+  // NEW: any category named "Corpus Fund" for a non-Corporate department is restricted
+  const isCorpusFundRestricted =
+    form.category === CORPUS_FUND && !isCorporate;
+
+  // Kept for backward-compat (submit block + button disable)
+  const isCorpusFundBlocked = isCorpusFundType && !isCorporate;
+
+  const showInvoiceField =
+    !isCapital &&
+    !isCorpusFundType &&
+    !isCorpusFundRestricted &&
+    !isLedger &&
+    !isSalaryCategory;
 
   const isEditingSalaryEntry =
     isSalaryCategory && !!(editingEntry && editingEntry.id !== undefined && editingEntry.id !== null);
 
   const categoryFieldConfig = STANDARD_CATEGORY_FIELDS[form.category] || null;
   const showCategoryFields =
-    !isCapital && !isCorpusFundType && !isLedger && !isSalaryCategory && categoryFieldConfig;
+    !isCapital &&
+    !isCorpusFundType &&
+    !isCorpusFundRestricted &&
+    !isLedger &&
+    !isSalaryCategory &&
+    categoryFieldConfig;
 
   // Departments that can receive a Corpus Fund
   const corpusDepartments = (
@@ -764,7 +782,20 @@ export default function FinanceEntryForm({
     event.preventDefault();
 
     if (isCapital) return submitCapitalEntry();
-    if (isCorpusFundType) return submitCorpusFundEntry();
+
+    // Block Corpus Fund (any entry type) for non-Corporate departments
+    if (isCorpusFundRestricted) {
+      toast.error("Corpus Fund must be entered by Corporate Management only.");
+      return;
+    }
+
+    if (isCorpusFundType) {
+      if (!isCorporate) {
+        toast.error("Corpus Fund must be entered by Corporate Management only.");
+        return;
+      }
+      return submitCorpusFundEntry();
+    }
 
     if (!form.entry_date) { toast.error("Please select the entry date."); return; }
     if (!form.category) { toast.error("Please select a category."); return; }
@@ -1597,9 +1628,11 @@ export default function FinanceEntryForm({
               <label className="form-label">Type</label>
               <select name="entry_type" value={form.entry_type} onChange={handleTypeChange}
                       className="form-control">
-                {(options.entry_types || []).map((type) => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
+                {(options.entry_types || [])
+                  .filter((type) => isCorporate || type !== "Capital")
+                  .map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
               </select>
             </div>
             {/* Category stays visible for Expenses → Corpus Fund so it can be changed back */}
@@ -1611,7 +1644,7 @@ export default function FinanceEntryForm({
                 ) : (
                   <select name="category" value={form.category} onChange={handleCategoryChange}
                           className="form-control"
-                          disabled={isEditingExisting && isCorpusFundExpense}>
+                          disabled={isEditingExisting && isCorpusFundExpense && isCorporate}>
                     {categoryOptionsForType.map((cat) => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
@@ -1621,10 +1654,34 @@ export default function FinanceEntryForm({
             )}
           </div>
 
-          {isCapital && renderCapitalFields()}
-          {isCorpusFundType && renderCorpusFundFields()}
+          {/* ============ NON-CORPORATE RESTRICTED CORPUS FUND ============ */}
+          {isCorpusFundRestricted && (
+            <div
+              className="alert alert-info"
+              style={{
+                background: "#f0f0ff",
+                padding: "12px",
+                borderRadius: "8px",
+                marginBottom: "12px",
+              }}
+            >
+              <strong>
+                ⚠️ Corpus Fund must be entered by Corporate Management only.
+              </strong>
+              <p style={{ marginTop: "4px", fontSize: "0.9rem" }}>
+                Please use the Corporate Management dashboard to add corpus fund records.
+              </p>
+            </div>
+          )}
 
-          {!isCapital && !isCorpusFundType && requireItemsForCategory && (
+          {/* ============ CAPITAL ============ */}
+          {isCapital && renderCapitalFields()}
+
+          {/* ============ CORPUS FUND (Corporate only) ============ */}
+          {isCorpusFundType && isCorporate && !isCorpusFundRestricted && renderCorpusFundFields()}
+
+          {/* ============ ITEMS (MedTech / Everglades only) ============ */}
+          {!isCapital && !isCorpusFundType && !isCorpusFundRestricted && requireItemsForCategory && (
             <div className="form-group">
               <label className="form-label">Items</label>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1710,7 +1767,13 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {!isCapital && !isCorpusFundType && !requireItemsForCategory && !isLedger && !isSalaryCategory && (
+          {/* ============ AMOUNT + DATE (standard) ============ */}
+          {!isCapital &&
+           !isCorpusFundType &&
+           !isCorpusFundRestricted &&
+           !requireItemsForCategory &&
+           !isLedger &&
+           !isSalaryCategory && (
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Amount (₹)</label>
@@ -1725,7 +1788,14 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {!isCapital && !isCorpusFundType && !requireItemsForCategory && options.show_gst_tax && !isLedger && !isSalaryCategory && (
+          {/* ============ GST summary line ============ */}
+          {!isCapital &&
+           !isCorpusFundType &&
+           !isCorpusFundRestricted &&
+           !requireItemsForCategory &&
+           options.show_gst_tax &&
+           !isLedger &&
+           !isSalaryCategory && (
             <p className="text-muted" style={{ textAlign: "right", fontSize: 13, marginTop: -8 }}>
               GST Tax ({gstTaxPercentValue || 0}%): {formatCurrency(gstTaxAmount)}
               {" · "}
@@ -1733,6 +1803,7 @@ export default function FinanceEntryForm({
             </p>
           )}
 
+          {/* ============ SALARY WARNING (non-Corporate) ============ */}
           {!isCapital && !isCorpusFundType && isSalaryCategory && !isCorporate && (
             <div className="alert alert-info"
                  style={{ background: "#f0f0ff", padding: "12px", borderRadius: "8px", marginBottom: "12px" }}>
@@ -1740,7 +1811,8 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {!isCapital && !isCorpusFundType && isSalaryCategory && isCorporate && (
+          {/* ============ SALARY EMPLOYEES (Corporate only) ============ */}
+          {!isCapital && !isCorpusFundType && !isCorpusFundRestricted && isSalaryCategory && isCorporate && (
             <div className="form-group">
               <label className="form-label">Employees</label>
               {employees.map((emp) => (
@@ -1822,9 +1894,15 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {!isCapital && !isCorpusFundType && isLedger && renderLedgerFields()}
+          {/* ============ LEDGER ============ */}
+          {!isCapital && !isCorpusFundType && !isCorpusFundRestricted && isLedger && renderLedgerFields()}
 
-          {!isCapital && !isCorpusFundType && !isSalaryCategory && !isLedger && (
+          {/* ============ STANDARD / CATEGORY FIELDS ============ */}
+          {!isCapital &&
+           !isCorpusFundType &&
+           !isCorpusFundRestricted &&
+           !isSalaryCategory &&
+           !isLedger && (
             showCategoryFields ? renderCategoryFields() : renderStandardFields()
           )}
 
@@ -1833,7 +1911,7 @@ export default function FinanceEntryForm({
               Cancel
             </button>
             <button type="submit"
-                    disabled={saving || (isSalaryCategory && !isCorporate)}
+                    disabled={saving || (isSalaryCategory && !isCorporate) || isCorpusFundRestricted}
                     className="btn btn-primary">
               {saving ? "Saving..." : editingEntry ? "Update Entry" : "Save Entry"}
             </button>
