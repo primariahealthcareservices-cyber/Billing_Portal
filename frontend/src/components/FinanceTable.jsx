@@ -5,6 +5,7 @@ import { Pencil, Trash2, FileText, Eye } from "lucide-react";
 
 import api from "../api/axios.js";
 import RemarkCell, { remarkCellStyle } from "./RemarkCell.jsx";
+import ItemCell, { itemCellStyle } from "./ItemCell.jsx";
 
 const formatCurrency = (value) => {
   const number = Number(value || 0);
@@ -121,8 +122,8 @@ export default function FinanceTable({
             {showTeam && <th>Team</th>}
             <th className="text-right">Amount</th>
             {showLedgerDetails && <th>Customer / Details</th>}
-            <th style={{ minWidth: remarkCellStyle.minWidth }}>Remarks</th>
-            {showInvoice && <th>Invoice</th>}
+<th className="col-remarks" style={{ minWidth: 90 }}>Remarks</th>
+{showInvoice && <th className="col-invoice">Invoice</th>}
             <th>Actions</th>
           </tr>
         </thead>
@@ -168,13 +169,15 @@ export default function FinanceTable({
                 {showTaxInvoiceNumber && (
                   <td>{entry.tax_invoice_number || "—"}</td>
                 )}
-                {showItems && (
-                  <td>
-                    {items.length > 0
-                      ? `${items.length} item${items.length > 1 ? "s" : ""} — ${itemNames}`
-                      : "—"}
-                  </td>
-                )}
+             {showItems && (
+  <td style={itemCellStyle}>
+    {items.length > 0 ? (
+      <ItemCell items={items} />
+    ) : (
+      "—"
+    )}
+  </td>
+)}
                 {showPatientName && <td>{entry.patient_name || "—"}</td>}
                 {showPatientPlace && <td>{entry.patient_place || "—"}</td>}
                 {showGeneratedBy && <td>{entry.generated_by || "—"}</td>}
@@ -221,9 +224,8 @@ export default function FinanceTable({
                     )}
                   </td>
                 )}
-                <td style={remarkCellStyle}>
-                  <RemarkCell text={entry.remarks} />
-                </td>
+<td className="col-remarks" style={{ ...remarkCellStyle, minWidth: 90, maxWidth: 120 }}>  <ItemCell text={entry.remarks} previewLabel="View" />
+</td>
                 {showInvoice && (
                   <td>
                     {entry.invoice_url ? (

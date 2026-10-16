@@ -6,7 +6,13 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 
 from config import Config
-from models import db, ensure_schema_columns, migrate_all_categories
+from models import (
+    db,
+    ensure_schema_columns,
+    migrate_all_categories,
+    ensure_entry_type_is_varchar,
+    ensure_user_role_is_varchar,
+)
 
 
 def create_app():
@@ -18,13 +24,20 @@ def create_app():
     db.init_app(app)
 
     # ── Data migrations (must run inside app context) ───────────────────
-    #   1. ensure_schema_columns()  → adds any missing DB columns
+    #   1. ensure_schema_columns()           → adds any missing DB columns
     #      (fixes "Unknown column" errors caused by db.create_all() never
     #       altering existing tables)
-    #   2. migrate_all_categories() → rewrites legacy category names
+    #   2. ensure_entry_type_is_varchar()    → converts finance_entries.entry_type
+    #      from ENUM → VARCHAR(20) so "Corpus Fund" is accepted
+    #   3. ensure_user_role_is_varchar()     → converts users.role from ENUM
+    #      → VARCHAR(50) so new roles like "Everglades" / "SalesEnterprise"
+    #      are accepted (fixes MySQL 1265 "Data truncated for column 'role'")
+    #   4. migrate_all_categories()          → rewrites legacy category names
     #      to the standardized 9 categories. Fail-safe — never blocks boot.
     with app.app_context():
         ensure_schema_columns()
+        ensure_entry_type_is_varchar()
+        ensure_user_role_is_varchar()
         migrate_all_categories()
 
     JWTManager(app)

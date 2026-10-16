@@ -4,11 +4,43 @@ import toast from "react-hot-toast";
 import { ArrowLeft, Loader2, Search, RotateCcw } from "lucide-react";
 import api from "../api/axios.js";
 
-const STATUS_LABEL = { pending: "Pending", approved: "Approved", rejected: "Rejected" };
-const STATUS_COLOR = { pending: "#b45309", approved: "#16a34a", rejected: "#e11d48" };
+const STATUS_LABEL = {
+  pending: "Pending",
+  approved: "Approved",
+  rejected: "Rejected",
+  forwarded_to_ceo: "Forwarded to CEO",
+  partially_approved: "Partially Approved",
+};
+const STATUS_COLOR = {
+  pending: "#b45309",
+  approved: "#16a34a",
+  rejected: "#e11d48",
+  forwarded_to_ceo: "#2563eb",
+  partially_approved: "#7c3aed",
+};
+
+const ENTRY_TABS = [
+  ["pending", "Pending", "#b45309"],
+  ["approved", "Approved", "#16a34a"],
+  ["rejected", "Rejected", "#e11d48"],
+];
 
 const PAGE_SIZE = 25;
 const ENTRIES_CHUNK = 50;
+
+// ── Formatters ──────────────────────────────────────────────────
+const fmtMoney = (v) =>
+  v === null || v === undefined || v === ""
+    ? "—"
+    : `₹ ${Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const fmtDate = (iso) => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return isNaN(d) ? "—" : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+};
+
+const sumOf = (arr) => arr.reduce((s, e) => s + (Number(e.total_amount) || 0), 0);
 
 // ── Date helpers ────────────────────────────────────────────────
 const fmtLocalDate = (d) => {
@@ -46,6 +78,25 @@ const getPeriodRange = (period) => {
   return { start: fmtLocalDate(start), end: fmtLocalDate(end) };
 };
 
+function StatusPill({ status }) {
+  const color = STATUS_COLOR[status] || "#64748b";
+  return (
+    <span
+      style={{
+        background: `${color}20`,
+        color,
+        padding: "3px 10px",
+        borderRadius: 12,
+        fontWeight: 600,
+        fontSize: 12,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {STATUS_LABEL[status] || status}
+    </span>
+  );
+}
+
 export default function AllEmployeesPage({ onBack }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -65,6 +116,7 @@ export default function AllEmployeesPage({ onBack }) {
   const [bulkActing, setBulkActing] = useState(false);
   const [remarks, setRemarks] = useState({});
   const [visibleCount, setVisibleCount] = useState(ENTRIES_CHUNK);
+  const [entryTab, setEntryTab] = useState("pending");
 
   // ── Debounce search input ───────────────────────────────────
   useEffect(() => {
@@ -73,9 +125,11 @@ export default function AllEmployeesPage({ onBack }) {
   }, [searchInput]);
 
   // ── Load a page of payroll requests ─────────────────────────
-  const loadPage = useCallback(async (pageNum = 1, append = false) => {
-    if (pageNum === 1) setLoading(true);
-    else setLoadingMore(true);
+  const loadPage = useCallback(async (pageNum = 1, append = false, silent = false) => {
+    if (!silent) {
+      if (pageNum === 1) setLoading(true);
+      else setLoadingMore(true);
+    }
     try {
       const params = { payroll: "1", page: pageNum, per_page: PAGE_SIZE };
       if (fromDate) params.start_date = fromDate;
@@ -124,6 +178,9 @@ export default function AllEmployeesPage({ onBack }) {
     setSearch("");
   };
 
+  // ── Keep the list row in sync with the open request ────────────
+  const syncListRow = () => { loadPage(1, false, true); };
+
   // ── Per-entry approve/reject with optimistic UI ────────────────
   const act = async (entryId, action) => {
     if (!activeRequest) return;
@@ -147,6 +204,7 @@ export default function AllEmployeesPage({ onBack }) {
       toast.success(`Entry ${action === "approve" ? "approved" : "rejected"}.`);
       const fresh = await api.get(`/copperbook/${activeRequest.id}`);
       setActiveRequest(fresh.data);
+      syncListRow(fresh.data);
     } catch (err) {
       setActiveRequest(prevRequest);
       toast.error(err.response?.data?.error || "Action failed.");
@@ -163,7 +221,6 @@ export default function AllEmployeesPage({ onBack }) {
     const prevRequest = activeRequest;
     setActiveRequest({
       ...activeRequest,
-      status: "approved",
       employee_entries: activeRequest.employee_entries.map((e) =>
         e.status === "pending" ? { ...e, status: "approved", action_by: "You" } : e
       ),
@@ -174,9 +231,8 @@ export default function AllEmployeesPage({ onBack }) {
       toast.success(res.data.message || "All approved.");
       const fresh = await api.get(`/copperbook/${activeRequest.id}`);
       setActiveRequest(fresh.data);
-      setRequests((prev) => prev.map((r) =>
-        r.id === activeRequest.id ? { ...r, status: "approved" } : r
-      ));
+      syncListRow(fresh.data);
+      setEntryTab("approved");
     } catch (err) {
       setActiveRequest(prevRequest);
       toast.error(err.response?.data?.error || "Bulk approve failed.");
@@ -185,7 +241,34 @@ export default function AllEmployeesPage({ onBack }) {
     }
   };
 
-  const pendingCount = activeRequest?.employee_entries?.filter((e) => e.status === "pending").length || 0;
+  const openRequest = (r) => {
+    setVisibleCount(ENTRIES_CHUNK);
+    setRemarks({});
+    setEntryTab("pending");
+    setActiveRequest(r);
+    api
+      .get(`/copperbook/${r.id}`)
+      .then((res) => {
+        setActiveRequest(res.data);
+        const es = res.data.employee_entries || [];
+        if (!es.some((e) => e.status === "pending")) {
+          setEntryTab(es.some((e) => e.status === "approved") ? "approved" : "rejected");
+        }
+      })
+      .catch(() => {});
+  };
+
+  // ── Derived data for the open request ──────────────────────────
+  const allEntries = activeRequest?.employee_entries || [];
+  const groups = {
+    pending: allEntries.filter((e) => e.status === "pending"),
+    approved: allEntries.filter((e) => e.status === "approved"),
+    rejected: allEntries.filter((e) => e.status === "rejected"),
+  };
+  const pendingCount = groups.pending.length;
+  const entriesTotal = sumOf(allEntries);
+  const tabEntries = groups[entryTab] || [];
+  const tabLabel = ENTRY_TABS.find(([k]) => k === entryTab)?.[1] || "";
 
   return (
     <div className="page">
@@ -244,7 +327,7 @@ export default function AllEmployeesPage({ onBack }) {
                 <input
                   className="form-control"
                   style={{ paddingLeft: 32 }}
-                  placeholder="Request #, purpose, department, raiser…"
+                  placeholder="Request #, purpose, department, category, raiser…"
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                 />
@@ -257,60 +340,96 @@ export default function AllEmployeesPage({ onBack }) {
           </div>
         </div>
 
+        {/* ── Requests table ───────────────────────────────────── */}
         {loading ? (
           <div className="card empty-state">Loading…</div>
         ) : requests.length === 0 ? (
           <div className="card empty-state">No payroll requests yet.</div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {requests.map((r) => (
-              <div
-                key={r.id}
-                className="card"
-                style={{ padding: 16, cursor: "pointer" }}
-                onClick={() => {
-                  setVisibleCount(ENTRIES_CHUNK);
-                  setRemarks({});
-                  setActiveRequest(r);
-                  api.get(`/copperbook/${r.id}`).then((res) => setActiveRequest(res.data)).catch(() => {});
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 16 }}>{r.request_number}</div>
-                    <div style={{ color: "#64748b", fontSize: 13 }}>
-                      {r.purpose} · from {r.raised_by_name}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <span
-                      style={{
-                        background: `${STATUS_COLOR[r.status] || "#64748b"}20`,
-                        color: STATUS_COLOR[r.status] || "#64748b",
-                        padding: "4px 12px", borderRadius: 12, fontWeight: 600, fontSize: 12,
-                      }}
-                    >
-                      {STATUS_LABEL[r.status] || r.status}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
+          <>
+            <div className="card table-wrap">
+              {/* widths: 110 Request | 150 BU | 175 Amount | 150 Cat | auto Purpose | 140 Raised | 150 Status | 120 Created */}
+              <table className="data-table" style={{ minWidth: 1200, width: "100%", tableLayout: "fixed" }}>
+                <colgroup>
+                  <col style={{ width: 110 }} />
+                  <col style={{ width: 150 }} />
+                  <col style={{ width: 175 }} />
+                  <col style={{ width: 150 }} />
+                  <col />
+                  <col style={{ width: 140 }} />
+                  <col style={{ width: 150 }} />
+                  <col style={{ width: 120 }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>Request</th>
+                    <th>Business Unit</th>
+                    <th style={{ textAlign: "right" }}>Amount</th>
+                    <th>Category</th>
+                    <th>Purpose</th>
+                    <th>Raised By</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {requests.map((r) => (
+                    <tr key={r.row_key || r.id} style={{ cursor: "pointer" }} onClick={() => openRequest(r)}>
+                      <td style={{ fontWeight: 600 }}>{r.request_number}</td>
+                      <td>{r.business_unit || r.department || "—"}</td>
+                      <td
+                        style={{
+                          textAlign: "right",
+                          fontWeight: r.amount ? 700 : 400,
+                          color: r.amount ? "#065f46" : "#9ca3af",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {r.amount ? fmtMoney(r.amount) : "—"}
+                        {r.is_split && (
+                          <div style={{ fontSize: 11, color: "#64748b", fontWeight: 400 }}>
+                            of {fmtMoney(r.request_amount)}
+                          </div>
+                        )}
+                      </td>
+                      <td>{r.category || "—"}</td>
+                      <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.purpose}>
+                        {r.purpose}
+                      </td>
+                      <td>{r.raised_by_name || "—"}</td>
+                      <td>
+                        <StatusPill status={r.status} />
+                        {r.status === "partially_approved" && (
+                          <div style={{ fontSize: 11, color: "#64748b", marginTop: 4, whiteSpace: "nowrap" }}>
+                            ✓ {r.approved_count ?? 0} · ✕ {r.rejected_count ?? 0}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ fontSize: 12.5, color: "#6b7280", whiteSpace: "nowrap" }}>
+                        {fmtDate(r.created_at)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {page < pages && (
-              <button
-                className="btn btn-secondary"
-                onClick={() => loadPage(page + 1, true)}
-                disabled={loadingMore}
-                style={{ alignSelf: "center", minWidth: 200 }}
-              >
-                {loadingMore ? <><Loader2 size={14} className="spin" /> Loading…</> : `Load More (page ${page + 1} of ${pages})`}
-              </button>
+              <div style={{ textAlign: "center", marginTop: 12 }}>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => loadPage(page + 1, true)}
+                  disabled={loadingMore}
+                  style={{ minWidth: 200 }}
+                >
+                  {loadingMore ? <><Loader2 size={14} className="spin" /> Loading…</> : `Load More (page ${page + 1} of ${pages})`}
+                </button>
+              </div>
             )}
-          </div>
+          </>
         )}
 
-        {/* Modal */}
+        {/* ── Modal ────────────────────────────────────────────── */}
         {activeRequest && (
           <div
             style={{
@@ -327,7 +446,10 @@ export default function AllEmployeesPage({ onBack }) {
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 16 }}>
                 <div>
-                  <h3 style={{ margin: 0 }}>{activeRequest.request_number}</h3>
+                  <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: 10 }}>
+                    {activeRequest.request_number}
+                    <StatusPill status={activeRequest.status} />
+                  </h3>
                   <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 13 }}>
                     {activeRequest.purpose} · from {activeRequest.raised_by_name}
                   </p>
@@ -347,90 +469,143 @@ export default function AllEmployeesPage({ onBack }) {
                 </div>
               </div>
 
+              {/* Summary strip */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gap: 12,
+                  marginBottom: 16,
+                }}
+              >
+                {[
+                  ["Business Unit", activeRequest.business_unit || activeRequest.department || "—"],
+                  ["Category", activeRequest.category || "—"],
+                  ["Grand Total", fmtMoney(activeRequest.amount ?? (entriesTotal || null))],
+                  ["Approved Amount", fmtMoney(sumOf(groups.approved))],
+                  ["Rejected Amount", fmtMoney(sumOf(groups.rejected))],
+                  ["Created", fmtDate(activeRequest.created_at)],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ background: "#f8fafc", padding: 12, borderRadius: 8 }}>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>{label}</div>
+                    <div style={{ fontWeight: 700, marginTop: 2 }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+
               <div style={{ background: "#f8fafc", padding: 12, borderRadius: 8, marginBottom: 16 }}>
                 <b>Description:</b> {activeRequest.description}
               </div>
 
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Employee</th>
-                    <th>Department</th>
-                    <th className="text-right">Monthly Salary</th>
-                    <th className="text-right">TD/DA</th>
-                    <th className="text-right">Total</th>
-                    <th>Status</th>
-                    <th>Remarks</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activeRequest.employee_entries?.slice(0, visibleCount).map((e) => (
-                    <tr key={e.id} style={{ opacity: actingId === e.id ? 0.6 : 1 }}>
-                      <td><b>{e.employee_name}</b></td>
-                      <td>{e.employee_department || "—"}</td>
-                      <td className="text-right">₹{e.monthly_salary.toLocaleString("en-IN")}</td>
-                      <td className="text-right">₹{e.td_da.toLocaleString("en-IN")}</td>
-                      <td className="text-right" style={{ fontWeight: 700 }}>
-                        ₹{e.total_amount.toLocaleString("en-IN")}
-                      </td>
-                      <td>
-                        <span
-                          style={{
-                            background: `${STATUS_COLOR[e.status]}20`,
-                            color: STATUS_COLOR[e.status],
-                            padding: "3px 10px", borderRadius: 12, fontSize: 12, fontWeight: 600,
-                          }}
-                        >
-                          {STATUS_LABEL[e.status] || e.status}
-                        </span>
-                      </td>
-                      <td>
-                        <input
-                          className="form-control"
-                          placeholder="Optional"
-                          value={remarks[e.id] ?? e.remarks ?? ""}
-                          onChange={(ev) => setRemarks((prev) => ({ ...prev, [e.id]: ev.target.value }))}
-                          disabled={e.status !== "pending"}
-                          style={{ minWidth: 130 }}
-                        />
-                      </td>
-                      <td>
-                        {e.status === "pending" ? (
-                          <div style={{ display: "flex", gap: 6 }}>
-                            <button
-                              className="btn btn-primary"
-                              disabled={actingId === e.id || bulkActing}
-                              onClick={() => act(e.id, "approve")}
-                            >
-                              ✓
-                            </button>
-                            <button
-                              className="btn btn-secondary"
-                              disabled={actingId === e.id || bulkActing}
-                              onClick={() => act(e.id, "reject")}
-                              style={{ background: "#fee2e2", color: "#b91c1c", borderColor: "#fecaca" }}
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ) : (
-                          <span style={{ color: "#64748b", fontSize: 12 }}>{e.action_by || "—"}</span>
-                        )}
-                      </td>
-                    </tr>
+              {/* Tabs: Pending / Approved / Rejected */}
+              {allEntries.length > 0 && (
+                <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                  {ENTRY_TABS.map(([key, label, color]) => (
+                    <button
+                      key={key}
+                      onClick={() => { setEntryTab(key); setVisibleCount(ENTRIES_CHUNK); }}
+                      style={{
+                        padding: "8px 14px", borderRadius: 8, cursor: "pointer", fontWeight: 600,
+                        border: `1px solid ${color}`,
+                        background: entryTab === key ? color : "transparent",
+                        color: entryTab === key ? "#fff" : color,
+                      }}
+                    >
+                      {label} ({groups[key].length}) · {fmtMoney(sumOf(groups[key]))}
+                    </button>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              )}
 
-              {activeRequest.employee_entries?.length > visibleCount && (
+              {allEntries.length > 0 ? (
+                tabEntries.length === 0 ? (
+                  <div className="empty-state">No {tabLabel.toLowerCase()} entries.</div>
+                ) : (
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Employee</th>
+                        <th>Department</th>
+                        <th className="text-right">Monthly Salary</th>
+                        <th className="text-right">TD/DA</th>
+                        <th className="text-right">Total</th>
+                        <th>Status</th>
+                        <th>Remarks</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tabEntries.slice(0, visibleCount).map((e) => (
+                        <tr key={e.id} style={{ opacity: actingId === e.id ? 0.6 : 1 }}>
+                          <td><b>{e.employee_name}</b></td>
+                          <td>{e.employee_department || "—"}</td>
+                          <td className="text-right">₹{Number(e.monthly_salary || 0).toLocaleString("en-IN")}</td>
+                          <td className="text-right">₹{Number(e.td_da || 0).toLocaleString("en-IN")}</td>
+                          <td className="text-right" style={{ fontWeight: 700 }}>
+                            ₹{Number(e.total_amount || 0).toLocaleString("en-IN")}
+                          </td>
+                          <td><StatusPill status={e.status} /></td>
+                          <td>
+                            <input
+                              className="form-control"
+                              placeholder="Optional"
+                              value={remarks[e.id] ?? e.remarks ?? ""}
+                              onChange={(ev) => setRemarks((prev) => ({ ...prev, [e.id]: ev.target.value }))}
+                              disabled={e.status !== "pending"}
+                              style={{ minWidth: 130 }}
+                            />
+                          </td>
+                          <td>
+                            {e.status === "pending" ? (
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <button
+                                  className="btn btn-primary"
+                                  disabled={actingId === e.id || bulkActing}
+                                  onClick={() => act(e.id, "approve")}
+                                >
+                                  ✓
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  disabled={actingId === e.id || bulkActing}
+                                  onClick={() => act(e.id, "reject")}
+                                  style={{ background: "#fee2e2", color: "#b91c1c", borderColor: "#fecaca" }}
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ) : (
+                              <span style={{ color: "#64748b", fontSize: 12 }}>{e.action_by || "—"}</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      <tr style={{ background: "#f8fafc" }}>
+                        <td colSpan={4} className="text-right" style={{ fontWeight: 600 }}>
+                          {tabLabel} Total:
+                        </td>
+                        <td className="text-right" style={{ fontWeight: 700 }}>
+                          {fmtMoney(sumOf(tabEntries))}
+                        </td>
+                        <td colSpan={3}></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                )
+              ) : (
+                <div className="empty-state">
+                  General payroll expense — no per-employee entries.
+                </div>
+              )}
+
+              {tabEntries.length > visibleCount && (
                 <button
                   className="btn btn-secondary"
                   onClick={() => setVisibleCount((c) => c + ENTRIES_CHUNK)}
                   style={{ marginTop: 12, alignSelf: "center", minWidth: 200 }}
                 >
-                  Load {Math.min(ENTRIES_CHUNK, activeRequest.employee_entries.length - visibleCount)} more
-                  ({activeRequest.employee_entries.length - visibleCount} remaining)
+                  Load {Math.min(ENTRIES_CHUNK, tabEntries.length - visibleCount)} more
+                  ({tabEntries.length - visibleCount} remaining)
                 </button>
               )}
             </div>

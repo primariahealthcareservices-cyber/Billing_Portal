@@ -709,8 +709,8 @@ textarea.form-control {
 
 .dept-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 14px;
 }
 
 .dept-card {
@@ -1247,4 +1247,14 @@ input[type="file"].form-control {
   .modal-footer .btn {
     width: 100%;
   }
+}
+/* Tighten the gap between Remarks and Invoice */
+.finance-table th.col-remarks,
+.finance-table td.col-remarks {
+  padding-right: 6px;
+}
+
+.finance-table th.col-invoice,
+.finance-table td.col-invoice {
+  padding-left: 6px;
 }

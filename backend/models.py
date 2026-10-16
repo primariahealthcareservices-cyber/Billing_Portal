@@ -702,6 +702,43 @@ def ensure_entry_type_is_varchar():
 
 
 # ===========================================================================
+# ✅ NEW — Ensure users.role column is VARCHAR (not ENUM)
+# ===========================================================================
+def ensure_user_role_is_varchar():
+    """
+    Older schemas created users.role as ENUM('SuperAdmin','admin', ...) which
+    rejects any new role (e.g. 'Everglades', 'SalesEnterprise') with
+    MySQL 1265 'Data truncated for column role'.
+
+    This converts the column to VARCHAR(50) once. Idempotent — safe to run
+    on every boot.
+    """
+    from sqlalchemy import text
+    try:
+        col_type = db.session.execute(
+            text(
+                "SELECT DATA_TYPE FROM information_schema.columns "
+                "WHERE table_schema = DATABASE() "
+                "AND table_name = 'users' "
+                "AND column_name = 'role'"
+            )
+        ).scalar()
+
+        if col_type and str(col_type).lower() in ("enum", "char"):
+            db.session.execute(text(
+                "ALTER TABLE users "
+                "MODIFY COLUMN `role` VARCHAR(50) NOT NULL"
+            ))
+            db.session.commit()
+            print(f"✅ Converted users.role from {col_type} → VARCHAR(50)")
+        else:
+            print(f"ℹ️  users.role is already {col_type or 'VARCHAR'}.")
+    except Exception as exc:
+        db.session.rollback()
+        print(f"⚠️  Could not convert users.role column: {exc}")
+
+
+# ===========================================================================
 # LEGACY CATEGORY MIGRATION
 # ===========================================================================
 LEGACY_CATEGORY_MAP = {

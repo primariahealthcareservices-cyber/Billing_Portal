@@ -917,6 +917,9 @@ export default function SuperAdminDashboard() {
                Products & Innovation · General Operations
         Row 2: Camps & Events · Marketing & Promos · Travel & Hospitality ·
                Miscellaneous · Corpus Fund
+
+     NOTE: The inner "Categories" heading has been removed — the panel is now
+     titled externally by the parent section ("Categories Panel").
   --------------------------------------------------------------------------- */
   const renderCategoryPanel = () => {
     if (categoryPanelOptions.length === 0) return null;
@@ -942,7 +945,6 @@ export default function SuperAdminDashboard() {
 
     return (
       <div className="card" style={{ marginBottom: 16 }}>
-        <p className="section-title" style={{ marginBottom: 12 }}>Categories</p>
         <div style={gridStyle}>
           <button
             type="button"
@@ -1612,9 +1614,12 @@ export default function SuperAdminDashboard() {
               <div className="card empty-state">Loading...</div>
             ) : activeDept === "Caredx" ? (
               <>
-                <p className="section-title" style={{ marginBottom: 8 }}>Transactional Panel</p>
-
+                {/* ---- Categories Panel ---- */}
+                <p className="section-title" style={{ marginBottom: 8 }}>Categories Panel</p>
                 {renderCategoryPanel()}
+
+                {/* ---- Transactional Panel ---- */}
+                <p className="section-title" style={{ marginBottom: 8 }}>Transactional Panel</p>
 
                 {visibleCaredxLabEntries.length > 0 && (
                   <div style={{ marginBottom: 20 }}>
@@ -1715,12 +1720,13 @@ export default function SuperAdminDashboard() {
               </>
             ) : (
               <div>
-                <p className="section-title" style={{ marginBottom: 8 }}>Transactional Panel</p>
-
+                {/* ---- Categories Panel ---- */}
+                <p className="section-title" style={{ marginBottom: 8 }}>Categories Panel</p>
                 {renderCategoryPanel()}
 
+                {/* ---- Transactional Panel ---- */}
                 <p className="section-title" style={{ marginBottom: 12 }}>
-                  {currentDeptLabel} Finance Entries
+                  Transactional Panel — {currentDeptLabel}
                   {dataView === "income" && " — Income"}
                   {dataView === "expenses" && " — Expenses"}
                   {dataView === "capital" && " — Capital"}

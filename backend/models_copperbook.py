@@ -10,12 +10,15 @@ class CopperBookRequest(db.Model):
     request_number = db.Column(db.String(30), unique=True, nullable=False)
     remote_id = db.Column(db.Integer, nullable=True)
     department = db.Column(db.String(50), nullable=False)
+    category = db.Column(db.String(80), nullable=True)
     assignee_mode = db.Column(db.String(20), default="department")
     raised_by_name = db.Column(db.String(150), nullable=True)
     raised_by_email = db.Column(db.String(150), nullable=True)
     purpose = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=False)
     remarks = db.Column(db.Text, nullable=True)
+    # pending | forwarded_to_ceo | approved | rejected | partially_approved
+    # partially_approved = payroll request whose entries are a mix of approved + rejected
     status = db.Column(db.String(30), default="pending")
     assigned_to_role = db.Column(db.String(20), default="finance")
     is_payroll = db.Column(db.Boolean, default=False)
@@ -39,7 +42,8 @@ class CopperBookRequest(db.Model):
         "CopperBookAttachment", backref="request", cascade="all, delete-orphan"
     )
     employee_entries = db.relationship(
-        "CopperBookEmployeeEntry", backref="request", cascade="all, delete-orphan"
+        "CopperBookEmployeeEntry", backref="request", cascade="all, delete-orphan",
+        order_by="CopperBookEmployeeEntry.id",
     )
 
 
@@ -71,7 +75,8 @@ class CopperBookEmployeeEntry(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     request_id = db.Column(
-        db.Integer, db.ForeignKey("copper_book_requests.id", ondelete="CASCADE"), nullable=False
+        db.Integer, db.ForeignKey("copper_book_requests.id", ondelete="CASCADE"),
+        nullable=False, index=True,
     )
     employee_id = db.Column(db.Integer, nullable=True)
     employee_name = db.Column(db.String(150), nullable=False)
@@ -79,12 +84,14 @@ class CopperBookEmployeeEntry(db.Model):
     monthly_salary = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     td_da = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     total_amount = db.Column(db.Numeric(14, 2), nullable=False, default=0)
-    status = db.Column(db.String(20), nullable=False, default="pending")
+    # Each entry is decided on its own: pending | approved | rejected
+    status = db.Column(db.String(20), nullable=False, default="pending", index=True)
     remarks = db.Column(db.Text, nullable=True)
     action_by = db.Column(db.String(150), nullable=True)
     action_at = db.Column(db.DateTime, nullable=True)
 
-    # ✅ NEW — per-employee attachment metadata
+    # Per-employee attachment (file content + metadata)
+    attachment_data = db.Column(db.LargeBinary(length=(2**32) - 1), nullable=True)  # ✅ NEW — the backend reads/writes this
     attachment_filename = db.Column(db.String(255), nullable=True)
     attachment_original_name = db.Column(db.String(255), nullable=True)
     attachment_mimetype = db.Column(db.String(100), nullable=True)

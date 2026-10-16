@@ -13,10 +13,13 @@ DEMO_USERS = [
     {"name": "Afreed",                 "email": "rd@primaria.com",                             "password": "Primaria@123", "role": "ResearchDevelopment",         "department": "ResearchDevelopment"},
     {"name": "Kumar M",                "email": "caredx@primaria.com",                         "password": "Primaria@123", "role": "Caredx",                      "department": "Caredx"},
     {"name": "Dental User",            "email": "dental@primaria.com",                         "password": "Primaria@123", "role": "Dental",                      "department": "Dental"},
-    # ✅ NEW — Everglades (Pharmacy)
+    # Everglades (Pharmacy)
     {"name": "Everglades Pharmacy",    "email": "everglades@primaria.com",                     "password": "Primaria@123", "role": "Everglades",                  "department": "Everglades"},
     # NEW ADMIN USER
     {"name": "admin",                  "email": "jnanesht@primariacare.com",                   "password": "Primaria@123", "role": "SuperAdmin",                  "department": "Administration"},
+
+    # ✅ NEW — SalesEnterprise (Gayathri M)
+    {"name": "Gayathri M",             "email": "gayathrim@primariahealthcareservices.in",     "password": "Gayathrim@2026", "role": "SalesEnterprise",           "department": "SalesEnterprise"},
 ]
 
 app = create_app()
