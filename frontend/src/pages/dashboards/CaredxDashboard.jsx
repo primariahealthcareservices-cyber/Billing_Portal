@@ -19,6 +19,7 @@ import {
   Landmark,
   TrendingUp,
   TrendingDown,
+  RotateCcw,
 } from "lucide-react";
 
 import Navbar from "../../components/Navbar.jsx";
@@ -30,16 +31,41 @@ import CaredxLabEntryForm from "../../components/CaredxLabEntryForm.jsx";
 import CaredxExpenseTable from "../../components/CaredxExpenseTable.jsx";
 import CaredxExpenseForm from "../../components/CaredxExpenseForm.jsx";
 
-// ===== CAPITAL IMPORTS (REMOVED) =====
-// import CaredxCapitalTable from "../../components/CaredxCapitalTable.jsx";
-// import CaredxCapitalForm from "../../components/CaredxCapitalForm.jsx";
-
 import Pagination from "../../components/Pagination.jsx";
 
 import api from "../../api/axios.js";
 
 const ROLE_COLOR = "#be185d";
 const PAGE_SIZE = 25;
+
+// ---------------------------------------------------------
+// Standard categories & styles
+// ---------------------------------------------------------
+const STANDARD_CATEGORIES = [
+  "Salary & Payrolls",
+  "Corpus Fund",
+  "Referrals & Deposits",
+  "Products & Innovation",
+  "General Operations",
+  "Camps & Events",
+  "Marketing & Promos",
+  "Travel & Hospitality",
+  "Miscellaneous",
+];
+
+const categoryBtnStyle = {
+  padding: "10px 12px",
+  borderRadius: 8,
+  fontSize: 13,
+  minHeight: 40,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textAlign: "center",
+  lineHeight: 1.2,
+  whiteSpace: "normal",
+  wordBreak: "break-word",
+};
 
 const formatCurrency = (value) => {
   const number = Number(value || 0);
@@ -57,6 +83,10 @@ export default function CaredxDashboard() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [labSearch, setLabSearch] = useState("");
+
+  // Categories & Type Filter
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [typeFilter, setTypeFilter] = useState("");
 
   // -------------------------------------------------------------------------
   // Summary
@@ -88,14 +118,6 @@ export default function CaredxDashboard() {
 
   const [expenseFormOpen, setExpenseFormOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
-
-  // ===== CAPITAL STATE (REMOVED) =====
-  // const [capitalEntries, setCapitalEntries] = useState([]);
-  // const [capitalLoading, setCapitalLoading] = useState(true);
-  // const [capitalPage, setCapitalPage] = useState(1);
-  //
-  // const [capitalFormOpen, setCapitalFormOpen] = useState(false);
-  // const [editingCapital, setEditingCapital] = useState(null);
 
   // -------------------------------------------------------------------------
   // Shared API params
@@ -168,47 +190,54 @@ export default function CaredxDashboard() {
     }
   }, [startDate, endDate]);
 
-  // ===== CAPITAL FETCHER (REMOVED) =====
-  // const fetchCapital = useCallback(async () => {
-  //   setCapitalLoading(true);
-  //   try {
-  //     const response = await api.get("/caredx/capital", {
-  //       params: dateParams,
-  //     });
-  //     setCapitalEntries(
-  //       Array.isArray(response.data?.capital) ? response.data.capital : []
-  //     );
-  //     setCapitalPage(1);
-  //   } catch (error) {
-  //     console.error("Capital error:", error);
-  //     toast.error(
-  //       error.response?.data?.message || "Failed to load capital entries."
-  //     );
-  //     setCapitalEntries([]);
-  //     setCapitalPage(1);
-  //   } finally {
-  //     setCapitalLoading(false);
-  //   }
-  // }, [startDate, endDate]);
-
   const refetchAll = useCallback(async () => {
     await Promise.all([
       fetchSummary(),
       fetchLabEntries(),
       fetchExpenses(),
-      // fetchCapital(), // ===== CAPITAL (REMOVED) =====
     ]);
-  }, [fetchSummary, fetchLabEntries, fetchExpenses /*, fetchCapital */]);
+  }, [fetchSummary, fetchLabEntries, fetchExpenses]);
 
   useEffect(() => {
     refetchAll();
   }, [refetchAll]);
 
   // -------------------------------------------------------------------------
+  // ✅ Filtering Logic
+  // -------------------------------------------------------------------------
+  const filteredLabEntries = labEntries.filter((e) => {
+    // 1. Hide Lab Entries if "Expenses" is specifically selected
+    if (typeFilter === "Expenses") return false;
+    
+    // 2. If a category is selected, ONLY show Lab entries if that category is 
+    // "Referrals & Deposits" (or if the entry itself matches the category)
+    if (selectedCategory) {
+      return (
+        selectedCategory === "Referrals & Deposits" || 
+        e.category === selectedCategory
+      );
+    }
+    
+    return true; // Show all if no filters applied
+  });
+
+  const filteredExpenses = expenses.filter((e) => {
+    // 1. Hide Expenses if "Income" is specifically selected
+    if (typeFilter === "Income") return false;
+    
+    // 2. Filter by specific category
+    if (selectedCategory) {
+      return e.category === selectedCategory;
+    }
+    
+    return true; 
+  });
+
+  // -------------------------------------------------------------------------
   // Pagination — Lab
   // -------------------------------------------------------------------------
-  const labTotalPages = Math.max(1, Math.ceil(labEntries.length / PAGE_SIZE));
-  const paginatedLabEntries = labEntries.slice(
+  const labTotalPages = Math.max(1, Math.ceil(filteredLabEntries.length / PAGE_SIZE));
+  const paginatedLabEntries = filteredLabEntries.slice(
     (labPage - 1) * PAGE_SIZE,
     labPage * PAGE_SIZE
   );
@@ -216,21 +245,11 @@ export default function CaredxDashboard() {
   // -------------------------------------------------------------------------
   // Pagination — Expenses
   // -------------------------------------------------------------------------
-  const expenseTotalPages = Math.max(1, Math.ceil(expenses.length / PAGE_SIZE));
-  const paginatedExpenses = expenses.slice(
+  const expenseTotalPages = Math.max(1, Math.ceil(filteredExpenses.length / PAGE_SIZE));
+  const paginatedExpenses = filteredExpenses.slice(
     (expensePage - 1) * PAGE_SIZE,
     expensePage * PAGE_SIZE
   );
-
-  // ===== CAPITAL PAGINATION (REMOVED) =====
-  // const capitalTotalPages = Math.max(
-  //   1,
-  //   Math.ceil(capitalEntries.length / PAGE_SIZE)
-  // );
-  // const paginatedCapital = capitalEntries.slice(
-  //   (capitalPage - 1) * PAGE_SIZE,
-  //   capitalPage * PAGE_SIZE
-  // );
 
   // -------------------------------------------------------------------------
   // Reset
@@ -240,6 +259,21 @@ export default function CaredxDashboard() {
     setEndDate("");
     setLabSearch("");
     setLastImportResult(null);
+    setSelectedCategory(null);
+    setTypeFilter("");
+  };
+
+  // -------------------------------------------------------------------------
+  // Categories Handlers
+  // -------------------------------------------------------------------------
+  const handleAllCategories = () => {
+    setSelectedCategory(null);
+    setTypeFilter("");
+  };
+
+  const handleCategorySelect = (cat) => {
+    setSelectedCategory(cat);
+    if (typeFilter === "Capital") setTypeFilter(""); // Keeping this for safety
   };
 
   // -------------------------------------------------------------------------
@@ -372,36 +406,73 @@ export default function CaredxDashboard() {
     }
   };
 
-  // ===== CAPITAL ACTIONS (REMOVED) =====
-  // const openNewCapital = () => {
-  //   setEditingCapital(null);
-  //   setCapitalFormOpen(true);
-  // };
-  //
-  // const openEditCapital = (entry) => {
-  //   setEditingCapital(entry);
-  //   setCapitalFormOpen(true);
-  // };
-  //
-  // const handleCapitalDelete = async (entry) => {
-  //   const confirmed = window.confirm(
-  //     `Delete the capital entry for "${entry.client_name || "—"}" dated ${
-  //       entry.entry_date
-  //     }?`
-  //   );
-  //   if (!confirmed) return;
-  //
-  //   try {
-  //     await api.delete(`/caredx/capital/${entry.id}`);
-  //     toast.success("Capital entry deleted.");
-  //     await refetchAll();
-  //   } catch (error) {
-  //     console.error("Delete capital error:", error);
-  //     toast.error(
-  //       error.response?.data?.message || "Failed to delete capital entry."
-  //     );
-  //   }
-  // };
+  // -------------------------------------------------------------------------
+  // Render Categories Panel
+  // -------------------------------------------------------------------------
+  const renderCategoryPanel = () => (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <p className="section-title" style={{ marginBottom: 12 }}>Categories</p>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+          gap: 10,
+        }}
+      >
+        {/* All Categories */}
+        <button
+          type="button"
+          className={`btn ${!selectedCategory && !typeFilter ? "btn-primary" : "btn-secondary"}`}
+          onClick={handleAllCategories}
+          style={categoryBtnStyle}
+        >
+          All Categories
+        </button>
+
+        {/* Type Filters (Income/Expenses) */}
+        <button
+          type="button"
+          className={`btn ${typeFilter === "Income" ? "btn-primary" : "btn-secondary"}`}
+          onClick={() => { setTypeFilter("Income"); setSelectedCategory(null); }}
+          style={categoryBtnStyle}
+        >
+          Income
+        </button>
+        <button
+          type="button"
+          className={`btn ${typeFilter === "Expenses" ? "btn-primary" : "btn-secondary"}`}
+          onClick={() => { setTypeFilter("Expenses"); setSelectedCategory(null); }}
+          style={categoryBtnStyle}
+        >
+          Expenses
+        </button>
+
+        {/* Standard Categories */}
+        {STANDARD_CATEGORIES.map((cat) => (
+          <button
+            key={cat}
+            type="button"
+            className={`btn ${selectedCategory === cat ? "btn-primary" : "btn-secondary"}`}
+            onClick={() => handleCategorySelect(cat)}
+            style={categoryBtnStyle}
+          >
+            {cat}
+          </button>
+        ))}
+
+        {/* Clear */}
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={handleAllCategories}
+          style={{ ...categoryBtnStyle, gap: 6 }}
+          title="Clear category filter"
+        >
+          <RotateCcw size={14} /> Clear
+        </button>
+      </div>
+    </div>
+  );
 
   // -------------------------------------------------------------------------
   // Render
@@ -469,6 +540,9 @@ export default function CaredxDashboard() {
               }.`
             : "Showing all entries (no date filter applied)."}
         </p>
+
+        {/* ============ CATEGORIES PANEL ============ */}
+        {renderCategoryPanel()}
 
         {/* ============ SUMMARY CARDS ============ */}
         {summaryLoading ? (
@@ -538,21 +612,6 @@ export default function CaredxDashboard() {
                 </div>
               </div>
 
-              {/* ===== CAPITAL CARD (REMOVED) ===== */}
-              {/*
-              <div className="card stat-card">
-                <div className="stat-icon stat-icon--funds">
-                  <Landmark size={22} />
-                </div>
-                <div>
-                  <p className="stat-label">Total Capital</p>
-                  <p className="stat-value">
-                    {formatCurrency(summary.total_capital)}
-                  </p>
-                </div>
-              </div>
-              */}
-
               <div className="card stat-card">
                 <div className="stat-icon stat-icon--profit">
                   <TrendingUp size={22} />
@@ -577,141 +636,118 @@ export default function CaredxDashboard() {
         )}
 
         {/* ============ LAB DATA ENTRY ============ */}
-        <div className="section-header">
-          <p className="section-title">Lab Data Entry</p>
-          <div className="filter-actions">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xlsm"
-              onChange={handleFileSelected}
-              className="file-input-hidden"
-              id="lab-import-input"
-            />
-            <button
-              type="button"
-              onClick={handleImportClick}
-              disabled={importing}
-              className="btn btn-secondary"
-            >
-              <Upload size={16} /> {importing ? "Importing..." : "Import Excel"}
-            </button>
-            <button
-              type="button"
-              onClick={handleLabExport}
-              className="btn btn-secondary"
-            >
-              <Download size={16} /> Export Excel
-            </button>
-            <button
-              type="button"
-              onClick={openNewLabEntry}
-              className="btn btn-primary"
-            >
-              <Plus size={16} /> Add Entry
-            </button>
-          </div>
-        </div>
-
-        {lastImportResult && (
-          <div className="import-summary">
-            <strong>Last import:</strong> {lastImportResult.imported || 0} row(s) imported.
-            {Number(lastImportResult.skipped || 0) > 0 && (
-              <> {lastImportResult.skipped} row(s) skipped.</>
-            )}
-            {Array.isArray(lastImportResult.errors) &&
-              lastImportResult.errors.length > 0 && (
-                <>
-                  {" "}
-                  First skipped row(s):{" "}
-                  {lastImportResult.errors.slice(0, 3).join(" ")}
-                </>
-              )}
-          </div>
-        )}
-
-        {labLoading ? (
-          <div className="card empty-state">Loading lab entries...</div>
-        ) : (
+        {/* Only show if typeFilter is not "Expenses" */}
+        {typeFilter !== "Expenses" && (
           <>
-            <CaredxLabTable
-              entries={paginatedLabEntries}
-              onEdit={openEditLabEntry}
-              onDelete={handleLabDelete}
-            />
-            <Pagination
-              currentPage={labPage}
-              totalPages={labTotalPages}
-              onPageChange={setLabPage}
-              totalItems={labEntries.length}
-              pageSize={PAGE_SIZE}
-            />
+            <div className="section-header">
+              <p className="section-title">Lab Data Entry</p>
+              <div className="filter-actions">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xlsm"
+                  onChange={handleFileSelected}
+                  className="file-input-hidden"
+                  id="lab-import-input"
+                />
+                <button
+                  type="button"
+                  onClick={handleImportClick}
+                  disabled={importing}
+                  className="btn btn-secondary"
+                >
+                  <Upload size={16} /> {importing ? "Importing..." : "Import Excel"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLabExport}
+                  className="btn btn-secondary"
+                >
+                  <Download size={16} /> Export Excel
+                </button>
+                <button
+                  type="button"
+                  onClick={openNewLabEntry}
+                  className="btn btn-primary"
+                >
+                  <Plus size={16} /> Add Entry
+                </button>
+              </div>
+            </div>
+
+            {lastImportResult && (
+              <div className="import-summary">
+                <strong>Last import:</strong> {lastImportResult.imported || 0} row(s) imported.
+                {Number(lastImportResult.skipped || 0) > 0 && (
+                  <> {lastImportResult.skipped} row(s) skipped.</>
+                )}
+                {Array.isArray(lastImportResult.errors) &&
+                  lastImportResult.errors.length > 0 && (
+                    <>
+                      {" "}
+                      First skipped row(s):{" "}
+                      {lastImportResult.errors.slice(0, 3).join(" ")}
+                    </>
+                  )}
+              </div>
+            )}
+
+            {labLoading ? (
+              <div className="card empty-state">Loading lab entries...</div>
+            ) : (
+              <>
+                <CaredxLabTable
+                  entries={paginatedLabEntries}
+                  onEdit={openEditLabEntry}
+                  onDelete={handleLabDelete}
+                />
+                <Pagination
+                  currentPage={labPage}
+                  totalPages={labTotalPages}
+                  onPageChange={setLabPage}
+                  totalItems={filteredLabEntries.length}
+                  pageSize={PAGE_SIZE}
+                />
+              </>
+            )}
           </>
         )}
 
         {/* ============ EXPENSES ============ */}
-        <div className="section-header">
-          <p className="section-title">Expenses</p>
-          <button
-            type="button"
-            onClick={openNewExpense}
-            className="btn btn-primary"
-          >
-            <Plus size={16} /> Add Expense
-          </button>
-        </div>
-
-        {expensesLoading ? (
-          <div className="card empty-state">Loading expenses...</div>
-        ) : (
+        {/* Only show if typeFilter is not "Income" */}
+        {typeFilter !== "Income" && (
           <>
-            <CaredxExpenseTable
-              expenses={paginatedExpenses}
-              onEdit={openEditExpense}
-              onDelete={handleExpenseDelete}
-            />
-            <Pagination
-              currentPage={expensePage}
-              totalPages={expenseTotalPages}
-              onPageChange={setExpensePage}
-              totalItems={expenses.length}
-              pageSize={PAGE_SIZE}
-            />
+            <div className="section-header">
+              <p className="section-title">Expenses</p>
+              <button
+                type="button"
+                onClick={openNewExpense}
+                className="btn btn-primary"
+              >
+                <Plus size={16} /> Add Expense
+              </button>
+            </div>
+
+            {expensesLoading ? (
+              <div className="card empty-state">Loading expenses...</div>
+            ) : (
+              <>
+                <CaredxExpenseTable
+                  expenses={paginatedExpenses}
+                  onEdit={openEditExpense}
+                  onDelete={handleExpenseDelete}
+                />
+                <Pagination
+                  currentPage={expensePage}
+                  totalPages={expenseTotalPages}
+                  onPageChange={setExpensePage}
+                  totalItems={filteredExpenses.length}
+                  pageSize={PAGE_SIZE}
+                />
+              </>
+            )}
           </>
         )}
-
-        {/* ===== CAPITAL SECTION (REMOVED) ===== */}
-        {/*
-        <div className="section-header">
-          <p className="section-title">Capital</p>
-          <button
-            type="button"
-            onClick={openNewCapital}
-            className="btn btn-primary"
-          >
-            <Plus size={16} /> Add Capital
-          </button>
-        </div>
-
-        {capitalLoading ? (
-          <div className="card empty-state">Loading capital entries...</div>
-        ) : (
-          <>
-            <CaredxCapitalTable
-              entries={paginatedCapital}
-              onEdit={openEditCapital}
-              onDelete={handleCapitalDelete}
-            />
-            <Pagination
-              currentPage={capitalPage}
-              totalPages={capitalTotalPages}
-              onPageChange={setCapitalPage}
-              totalItems={capitalEntries.length}
-              pageSize={PAGE_SIZE}
-            />
-          </>
-        )}
-        */}
       </main>
 
       {/* ============ MODALS ============ */}
@@ -728,19 +764,6 @@ export default function CaredxDashboard() {
         onSaved={refetchAll}
         editingExpense={editingExpense}
       />
-
-      {/* ===== CAPITAL MODAL (REMOVED) ===== */}
-      {/*
-      <CaredxCapitalForm
-        open={capitalFormOpen}
-        onClose={() => {
-          setCapitalFormOpen(false);
-          setEditingCapital(null);
-        }}
-        onSaved={refetchAll}
-        editingCapital={editingCapital}
-      />
-      */}
     </div>
   );
 }

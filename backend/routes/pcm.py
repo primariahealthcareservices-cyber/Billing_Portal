@@ -220,6 +220,8 @@ def update_entry(entry_id):
     entry = FinanceEntry.query.filter_by(id=entry_id, department=DEPARTMENT).first()
     if not entry:
         return jsonify({"message": "Entry not found."}), 404
+    if entry.department == "Corporate":
+        return jsonify({"message": "Unauthorized. You cannot edit Corporate entries."}), 403
 
     data = request.get_json(silent=True) or {}
 
@@ -329,6 +331,8 @@ def delete_entry(entry_id):
     entry = FinanceEntry.query.filter_by(id=entry_id, department=DEPARTMENT).first()
     if not entry:
         return jsonify({"message": "Entry not found."}), 404
+    if entry.department == "Corporate":
+        return jsonify({"message": "Unauthorized. You cannot delete Corporate entries."}), 403
     db.session.delete(entry)
     db.session.commit()
     return jsonify({"message": "Entry deleted."}), 200

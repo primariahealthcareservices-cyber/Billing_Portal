@@ -50,10 +50,6 @@ CAPITAL_CATEGORIES = (
 )
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _parse_date(value, default=None):
     if not value:
         return default
@@ -136,10 +132,6 @@ def _lab_entry_from_payload(data, existing=None):
     }
     return kwargs, errors
 
-
-# ===========================================================================
-# 1. LAB DATA ENTRY
-# ===========================================================================
 
 @caredx_bp.route("/lab-entries", methods=["GET", "POST"])
 @role_required("Caredx")
@@ -228,10 +220,6 @@ def delete_lab_entry(entry_id):
     return jsonify({"message": "Lab entry deleted."}), 200
 
 
-# ===========================================================================
-# EXCEL IMPORT / EXPORT
-# ===========================================================================
-
 @caredx_bp.route("/lab-entries/import", methods=["POST"])
 @role_required("Caredx")
 def import_lab_entries():
@@ -306,10 +294,6 @@ def export_lab_entries():
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
-
-# ===========================================================================
-# 2. EXPENSES
-# ===========================================================================
 
 @caredx_bp.route("/expenses", methods=["GET", "POST"])
 @role_required("Caredx")
@@ -392,12 +376,10 @@ def expenses():
     ).all()
 
     salary_query = FinanceEntry.query.filter(
-        FinanceEntry.category == SALARY_CATEGORY,
-        or_(
-            FinanceEntry.department == "Caredx",
-            (FinanceEntry.department == "Corporate") & (FinanceEntry.exec_department == "Caredx"),
-        )
+        FinanceEntry.category.in_([SALARY_CATEGORY, "Corpus Fund"]),
+        FinanceEntry.department == "Caredx"
     )
+
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
     if start_date:
@@ -422,14 +404,14 @@ def expenses():
         salary_items.append({
             "id": -s.id,
             "expense_date": s.entry_date.isoformat(),
-            "category": SALARY_CATEGORY,
+            "category": s.category,
             "amount": float(s.amount),
             "referral_amount": 0,
-            "remarks": f"Salary for {s.employee_name} ({s.exec_department}) - {s.remarks or ''}",
+            "remarks": f"{s.category} for {s.exec_department} - {s.remarks or ''}", 
             "employee_name": s.employee_name,
             "purpose": s.remarks,
             "vehicle_type": s.vehicle_type,
-            "_isSalary": True,
+            "_isSalary": True, 
         })
 
     all_items = [e.to_dict() for e in caredx_expenses] + salary_items
@@ -513,10 +495,6 @@ def delete_expense(expense_id):
 
     return jsonify({"message": "Expense deleted."}), 200
 
-
-# ===========================================================================
-# 3. CAPITAL
-# ===========================================================================
 
 @caredx_bp.route("/capital/options", methods=["GET"])
 @role_required("Caredx")
@@ -748,10 +726,6 @@ def capital_summary():
     }), 200
 
 
-# ===========================================================================
-# 4. COMBINED DASHBOARD SUMMARY
-# ===========================================================================
-
 @caredx_bp.route("/lab-entries/summary", methods=["GET"])
 @role_required("Caredx")
 def lab_entries_summary():
@@ -764,11 +738,8 @@ def lab_entries_summary():
     caredx_expenses = exp_query.all()
 
     salary_query = FinanceEntry.query.filter(
-        FinanceEntry.category == SALARY_CATEGORY,
-        or_(
-            FinanceEntry.department == "Caredx",
-            (FinanceEntry.department == "Corporate") & (FinanceEntry.exec_department == "Caredx"),
-        )
+        FinanceEntry.category.in_([SALARY_CATEGORY, "Corpus Fund"]),
+        FinanceEntry.department == "Caredx"
     )
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
@@ -843,9 +814,11 @@ def lab_entries_summary():
             float(expense.amount or 0) + float(expense.referral_amount or 0)
         )
 
-    if salary_total > 0:
-        by_category.setdefault(SALARY_CATEGORY, {"category": SALARY_CATEGORY, "amount": 0})
-        by_category[SALARY_CATEGORY]["amount"] += salary_total
+    for s in salary_entries:
+        cat_name = s.category or SALARY_CATEGORY
+        if float(s.amount or 0) > 0:
+            by_category.setdefault(cat_name, {"category": cat_name, "amount": 0})
+            by_category[cat_name]["amount"] += float(s.amount or 0)
 
     if total_paid_to_other_labs > 0:
         by_category.setdefault("Paid to Other Labs", {"category": "Paid to Other Labs", "amount": 0})

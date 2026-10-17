@@ -95,8 +95,25 @@ const CATEGORY_ALIASES = {
   "Miscellaneous": ["miscellaneous", "misc", "other", "others"],
 };
 
+/* ---------------------------------------------------------------------------
+   Corpus Fund detector.
+   Corpus Fund rows must NEVER be treated as salary rows, even when the backend
+   delivers them in the same list as salaries (Caredx).
+--------------------------------------------------------------------------- */
+const isCorpusEntry = (e) => {
+  if (!e) return false;
+  if (e._isCorpus) return true;
+  const catText = normalizeCat(
+    e.category ?? e.expense_category ?? e.expense_type ?? e.entry_type ?? e.type ?? ""
+  );
+  if (catText.includes("corpus")) return true;
+  if (/^corpus fund for /i.test((e.remarks || "").toString())) return true;
+  return false;
+};
+
 const isSalaryEntry = (e) => {
   if (!e) return false;
+  if (isCorpusEntry(e)) return false; // Corpus Fund is never a salary
   if (e._isSalary || e.is_salary || e.isSalary) return true;
   const catText = normalizeCat(e.category ?? e.expense_category ?? e.expense_type ?? e.type ?? "");
   if (/salar|payroll|wage/.test(catText)) return true;
@@ -106,14 +123,11 @@ const isSalaryEntry = (e) => {
 
 const getEntryCategory = (e) => {
   if (!e) return null;
+  if (isCorpusEntry(e)) return CORPUS_FUND_LABEL; // check Corpus BEFORE Salary
   if (isSalaryEntry(e)) return "Salary & Payrolls";
 
   const raw = normalizeCat(e.category ?? e.expense_category ?? e.expense_type ?? "");
   if (!raw) return null;
-
-  // Corpus Fund is its own category (Corporate: Expenses → Corpus Fund,
-  // departments: the separate Corpus Fund entry).
-  if (raw === "corpus fund") return CORPUS_FUND_LABEL;
 
   for (const cat of STANDARD_CATEGORIES) {
     if (normalizeCat(cat) === raw) return cat;
@@ -127,11 +141,10 @@ const getEntryCategory = (e) => {
 
 const entryMatchesCategory = (e, selected) => {
   if (!selected) return true;
+  if (selected === CORPUS_FUND_LABEL) return isCorpusEntry(e);
+
   const resolved = getEntryCategory(e);
-  if (selected === CORPUS_FUND_LABEL) {
-    return resolved === CORPUS_FUND_LABEL || getEntryKind(e) === "corpusfund";
-  }
-  if (resolved) return resolved === selected;
+  if (resolved) return resolved === selected; // Salary & Payrolls now excludes Corpus Fund
   return selected === "Miscellaneous";
 };
 
@@ -164,7 +177,7 @@ const mergeCaredxExpenses = (...lists) => {
   lists.flat().forEach((e) => {
     if (!e) return;
     const key = [
-      isSalaryEntry(e) ? "s" : "e",
+      isCorpusEntry(e) ? "c" : isSalaryEntry(e) ? "s" : "e",
       e.id ?? e._key ?? "",
       e.expense_date || e.entry_date || "",
       e.amount ?? "",
@@ -204,7 +217,7 @@ const categoryBtnStyle = {
 const categoryBtnActiveStyle = {
   ...categoryBtnStyle,
   background: "#2f5dd4",
-  borderColor: "#2f5dd4",
+  border: "1px solid #2f5dd4",
   color: "#ffffff",
   fontWeight: 600,
 };
@@ -275,7 +288,7 @@ const average = (arr) => {
 
 /* ---------------------------------------------------------------------------
    Entry-kind classifier.
-   ⚠️  "Corpus Fund" MUST be checked BEFORE "Capital" — it is its own kind and
+   "Corpus Fund" MUST be checked BEFORE "Capital" — it is its own kind and
    must never match the Capital filter.
 --------------------------------------------------------------------------- */
 const getEntryKind = (entry) => {
@@ -851,8 +864,10 @@ export default function SuperAdminDashboard() {
   }, [caredxLabEntries, dataView, selectedCategory]);
 
   const visibleCaredxExpenses = React.useMemo(() => {
-    if (dataView === "income" || dataView === "capital" || dataView === "corpusfund") return [];
+    if (dataView === "income" || dataView === "capital") return [];
     let list = caredxExpenses;
+    // Transaction Type dropdown → Corpus Fund: show ONLY corpus rows
+    if (dataView === "corpusfund") list = list.filter(isCorpusEntry);
     if (selectedCategory) {
       list = list.filter(e => entryMatchesCategory(e, selectedCategory));
     }
@@ -917,9 +932,6 @@ export default function SuperAdminDashboard() {
                Products & Innovation · General Operations
         Row 2: Camps & Events · Marketing & Promos · Travel & Hospitality ·
                Miscellaneous · Corpus Fund
-
-     NOTE: The inner "Categories" heading has been removed — the panel is now
-     titled externally by the parent section ("Categories Panel").
   --------------------------------------------------------------------------- */
   const renderCategoryPanel = () => {
     if (categoryPanelOptions.length === 0) return null;
@@ -933,13 +945,15 @@ export default function SuperAdminDashboard() {
     const allActive =
       !selectedCategory && dataView !== "capital" && dataView !== "corpusfund";
 
-    // Corporate: Corpus Fund is a category (Expenses → Corpus Fund rows).
-    // Other departments: Corpus Fund is the separate entry type posted by Corporate.
-    const corpusFundActive = isCorporateView
+    // Corporate & Caredx: Corpus Fund is a CATEGORY filter.
+    // Other departments: separate Corpus Fund entry type (dataView).
+    const corpusAsCategory = isCorporateView || activeDept === "Caredx";
+
+    const corpusFundActive = corpusAsCategory
       ? selectedCategory === CORPUS_FUND_LABEL
       : dataView === "corpusfund";
 
-    const onCorpusFundClick = isCorporateView
+    const onCorpusFundClick = corpusAsCategory
       ? () => handleCategorySelect(CORPUS_FUND_LABEL)
       : handleCorpusFundFilterSelect;
 
@@ -1687,11 +1701,13 @@ export default function SuperAdminDashboard() {
                         </thead>
                         <tbody>
                           {visibleCaredxExpenses.map((e, i) => {
-                            const salary = isSalaryEntry(e);
+                            const corpus = isCorpusEntry(e);
+                            const salary = !corpus && isSalaryEntry(e);
+                            const isFinanceRow = corpus || salary; // both come from FinanceEntry
                             return (
-                              <tr key={`${salary ? "s" : "e"}-${e.id ?? e._key ?? i}-${i}`}>
+                              <tr key={`${corpus ? "c" : salary ? "s" : "e"}-${e.id ?? e._key ?? i}-${i}`}>
                                 <td style={{ whiteSpace: "nowrap" }}>{e.expense_date || e.entry_date}</td>
-                                <td>{salary ? "Salary & Payrolls" : e.category}</td>
+                                <td>{corpus ? CORPUS_FUND_LABEL : salary ? "Salary & Payrolls" : e.category}</td>
                                 <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(entryAmount(e))}</td>
                                 <td style={remarkCellStyle}>
                                   <RemarkCell
@@ -1702,7 +1718,7 @@ export default function SuperAdminDashboard() {
                                   <button
                                     type="button"
                                     className="btn-icon"
-                                    onClick={() => setViewEntry({ type: salary ? "finance" : "expense", data: e })}
+                                    onClick={() => setViewEntry({ type: isFinanceRow ? "finance" : "expense", data: e })}
                                     title="View"
                                   >
                                     <Eye size={15} />

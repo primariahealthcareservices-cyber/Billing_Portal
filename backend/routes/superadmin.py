@@ -764,14 +764,24 @@ def _get_caredx_entries_and_summary(for_summary=False):
         ).all()
 
         salary_items = []
-        if category == "" or category == SALARY_CAT:
+        # Salary rows AND Corpus Fund rows both live in FinanceEntry for Caredx.
+        if category == "" or category == SALARY_CAT or category == "Corpus Fund":
+            # Employee monthly salaries are posted from Corporate with
+            # exec_department == "Caredx" (same rule the overview uses), or
+            # directly under Caredx. Corpus Fund rows live under Caredx.
             salary_query = FinanceEntry.query.filter(
-                FinanceEntry.category == SALARY_CAT,
                 or_(
-                    FinanceEntry.department == "Caredx",
-                    (FinanceEntry.department == "Corporate") & (FinanceEntry.exec_department == "Caredx")
+                    (FinanceEntry.department == "Caredx")
+                    & FinanceEntry.category.in_([SALARY_CAT, "Corpus Fund"]),
+                    (FinanceEntry.department == "Corporate")
+                    & (FinanceEntry.exec_department == "Caredx")
+                    & (FinanceEntry.category == SALARY_CAT),
                 )
             )
+            if category == SALARY_CAT:
+                salary_query = salary_query.filter(FinanceEntry.category == SALARY_CAT)
+            elif category == "Corpus Fund":
+                salary_query = salary_query.filter(FinanceEntry.category == "Corpus Fund")
             if start_date: salary_query = salary_query.filter(FinanceEntry.entry_date >= start_date)
             if end_date: salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
             if search:
@@ -784,14 +794,25 @@ def _get_caredx_entries_and_summary(for_summary=False):
             ).all()
 
             for s in salary_entries:
+                is_corpus = (s.category == "Corpus Fund")
+                if is_corpus:
+                    row_remarks = f"Corpus Fund for {s.exec_department or 'Caredx'} - {s.remarks or ''}"
+                else:
+                    who = s.employee_name or "employee"
+                    row_remarks = f"Salary for {who} - {s.remarks or ''}".rstrip(" -")
                 salary_items.append({
-                    "id": -s.id, "expense_date": s.entry_date.isoformat(),
-                    "category": SALARY_CAT, "amount": float(s.amount),
-                    "remarks": f"Salary for {s.employee_name} ({s.exec_department}) - {s.remarks or ''}",
-                    "employee_name": s.employee_name, "purpose": s.remarks,
-                    "vehicle_type": s.vehicle_type, "_isSalary": True,
+                    "id": -s.id,
+                    "expense_date": s.entry_date.isoformat(),
+                    "category": s.category,          # "Salary & Payrolls" OR "Corpus Fund"
+                    "entry_type": s.entry_type,
+                    "amount": float(s.amount),
+                    "remarks": row_remarks,
+                    "employee_name": s.employee_name,
+                    "purpose": s.remarks,
+                    "vehicle_type": s.vehicle_type,
+                    "_isSalary": not is_corpus,      # Corpus Fund is NOT a salary
+                    "_isCorpus": is_corpus,
                 })
-
         all_expenses = [e.to_dict() for e in caredx_expenses] + salary_items
         all_expenses.sort(key=lambda x: x["expense_date"], reverse=True)
         expenses = all_expenses

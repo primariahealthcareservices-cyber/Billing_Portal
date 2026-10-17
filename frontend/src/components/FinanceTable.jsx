@@ -56,6 +56,7 @@ export default function FinanceTable({
   onEdit,
   onDelete,
   onView,
+  currentDepartment, 
 }) {
   if (!entries || entries.length === 0) {
     return (

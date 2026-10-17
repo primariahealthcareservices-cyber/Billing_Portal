@@ -347,20 +347,17 @@ export default function FinanceDashboard({ department, title, roleColor, onCoppe
           All Categories
         </button>
 
-        {STANDARD_CATEGORIES
-  .filter((cat) => isCorporate || cat !== "Corpus Fund")
-  .map((cat) => (
-    <button
-      key={cat}
-      type="button"
-      className={`btn ${selectedCategory === cat ? "btn-primary" : "btn-secondary"}`}
-      onClick={() => handleCategorySelect(cat)}
-      style={categoryBtnStyle}
-    >
-      {cat}
-    </button>
-  ))}
-
+       {STANDARD_CATEGORIES.map((cat) => (
+  <button
+    key={cat}
+    type="button"
+    className={`btn ${selectedCategory === cat ? "btn-primary" : "btn-secondary"}`}
+    onClick={() => handleCategorySelect(cat)}
+    style={categoryBtnStyle}
+  >
+    {cat}
+  </button>
+))}
         {/* Capital — filters by entry_type=Capital */}
        {/* Capital — filters by entry_type=Capital (Corporate only) */}
 {isCorporate && (
