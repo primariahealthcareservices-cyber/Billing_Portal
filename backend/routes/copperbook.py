@@ -1,6 +1,7 @@
 # billing-portal/backend/routes/copperbook.py
 import os
 import json
+import math
 import traceback
 from datetime import datetime, timedelta
 import requests
@@ -21,13 +22,34 @@ cb_bp = Blueprint("copperbook", __name__, url_prefix="/api/copperbook")
 BRAND = "Primaria HealthCare Services"
 PAYROLL_CATEGORY = "Salary & Payrolls"
 
-# Chips on the main CopperBook page
+# Capital Equity = requests raised from StaffPortal with
+#   department = "Corporate Management"  AND  category = "Capital Equity"
+CAPITAL_EQUITY_CATEGORY = "Capital Equity"
+CAPITAL_EQUITY_DEPARTMENT = "Corporate Management"
+
+# Business Unit dropdown - exactly these departments (same names as StaffPortal)
+BUSINESS_UNITS = [
+    "Office Administration",
+    "CareDx",
+    "MedTech",
+    "IT Development",
+    "IT Sales",
+    "PCM",
+    "Everglades",
+    "Corporate Management",
+]
+
+# Largest amount the `amount` column can hold (DECIMAL(12,2) -> 9,999,999,999.99).
+# If you later widen the column, raise this number too.
+MAX_AMOUNT = 9_999_999_999.99
+
+# Roles allowed to Edit / Delete a request
+MANAGE_ROLES = ("SuperAdmin", "admin", "Corporate")
+
 VIEW_STATUSES = ("pending", "forwarded_to_ceo", "approved", "rejected")
-# Statuses that are decided per employee entry for payroll requests
 ENTRY_VIEWS = ("pending", "approved", "rejected")
 
 
-# ─────────────────────────────────────────────────────────────────
 def _service_token_ok():
     expected = os.getenv("FINANCEHUB_SERVICE_TOKEN") or ""
     got = request.headers.get("X-Service-Token") or ""
@@ -41,8 +63,35 @@ def _fmt_money(v):
         return "—"
 
 
+def _parse_date(raw):
+    if raw is None:
+        return None
+    raw = str(raw).strip()
+    if not raw or raw.lower() in ("null", "none", "undefined"):
+        return None
+    for fmt, size in (("%Y-%m-%d", 10), ("%d-%m-%Y", 10), ("%d/%m/%Y", 10), ("%Y/%m/%d", 10)):
+        try:
+            return datetime.strptime(raw[:size], fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+REFERENCE_DATE_KEYS = (
+    "reference_date", "referenceDate", "ref_date", "refDate",
+    "reference", "date_reference", "entry_date",
+)
+
+
+def _extract_reference_date(form):
+    for k in REFERENCE_DATE_KEYS:
+        v = form.get(k)
+        if v not in (None, ""):
+            return _parse_date(v)
+    return None
+
+
 def _request_amount(r):
-    """Stored amount, or fall back to the sum of payroll entries."""
     if r.amount is not None:
         return float(r.amount)
     if r.is_payroll and r.employee_entries:
@@ -51,7 +100,6 @@ def _request_amount(r):
 
 
 def _roll_up_status(req):
-    """Request status derived from its employee entries."""
     statuses = [e.status for e in req.employee_entries]
     if not statuses:
         return req.status
@@ -60,8 +108,8 @@ def _roll_up_status(req):
     if all(s == "rejected" for s in statuses):
         return "rejected"
     if any(s == "pending" for s in statuses):
-        return "forwarded_to_ceo"      # still has entries waiting
-    return "partially_approved"        # mix of approved + rejected, none pending
+        return "forwarded_to_ceo"
+    return "partially_approved"
 
 
 def _sum_by(r, status):
@@ -73,15 +121,6 @@ def _count_by(r, status):
 
 
 def _status_groups(r):
-    """Split a request into (status_key, amount, entry_count) groups.
-
-    Payroll requests with employee entries produce ONE group per entry status,
-    so CB-1025 with one approved + one rejected entry becomes two rows:
-        (approved, 46.00, 1) and (rejected, 129.00, 1)
-    Pending entries inherit the request-level status (pending / forwarded_to_ceo,
-    or approved / rejected if Finance decided the whole request).
-    Everything else stays a single group using the request's own status.
-    """
     entries = r.employee_entries
     if r.is_payroll and entries:
         groups = []
@@ -100,11 +139,8 @@ def _status_groups(r):
 def _serialize_row(r, group, is_split):
     key, amount, count = group
     d = _serialize(r)
-    # Keep the whole-request values under new names...
     d["request_status"] = r.status
     d["request_amount"] = _request_amount(r)
-    # ...and make the standard fields describe THIS row only, so existing
-    # pages that read `amount` / `status` show the per-status split.
     d["status"] = key
     d["amount"] = amount
     d["row_key"] = f"{r.id}-{key}"
@@ -113,6 +149,113 @@ def _serialize_row(r, group, is_split):
     d["display_count"] = count
     d["is_split"] = is_split
     return d
+
+
+# ─────────────────────────────────────────────────────────────────
+# CAPITAL EQUITY helpers
+# ─────────────────────────────────────────────────────────────────
+def _is_capital_equity(r):
+    """Corporate Management + Capital Equity category."""
+    cat = (r.category or "").strip().lower()
+    dept = (r.department or "").strip().lower()
+    return cat == CAPITAL_EQUITY_CATEGORY.lower() and CAPITAL_EQUITY_DEPARTMENT.lower() in dept
+
+
+def _effective_date(r):
+    """Reference date if present, otherwise the created date."""
+    ref = getattr(r, "reference_date", None)
+    if ref:
+        return ref
+    return r.created_at.date() if r.created_at else None
+
+
+def _amounts_by_status(r):
+    """Split a request's amount into approved / rejected / pending buckets."""
+    out = {"approved": 0.0, "rejected": 0.0, "pending": 0.0}
+    if r.is_payroll and r.employee_entries:
+        for e in r.employee_entries:
+            key = e.status if e.status in out else "pending"
+            out[key] += float(e.total_amount or 0)
+        return out
+    amt = float(_request_amount(r) or 0)
+    if r.status == "approved":
+        out["approved"] = amt
+    elif r.status == "rejected":
+        out["rejected"] = amt
+    else:
+        out["pending"] = amt
+    return out
+
+
+def _capital_equity_summary(start, end, department=None):
+    """
+    Capital Equity / Approved / Rejected / Balance for the selected period.
+
+      Capital Equity = total Capital Equity given in the period  (SAME for every department)
+      Approved       = approved spending of the selected department (all departments if none)
+      Rejected       = rejected spending of the selected department (all departments if none)
+      Balance        = carried forward + Capital Equity - Approved of ALL departments
+                       (SAME for every department - it is the shared pool that is left)
+
+    Example: month 1 -> equity 10,00,000, approved 8,00,000 => balance 2,00,000
+             month 2 -> equity 10,00,000 => balance 2,00,000 + 10,00,000 = 12,00,000
+    """
+    dept_key = _dept_key(department)
+    rows = CopperBookRequest.query.options(
+        selectinload(CopperBookRequest.employee_entries)
+    ).all()
+
+    open_equity = open_approved = 0.0
+    equity = approved_all = 0.0
+    approved_dept = rejected_dept = 0.0
+
+    for r in rows:
+        d = _effective_date(r)
+        if d is None:
+            continue
+
+        before = bool(start and d < start)
+        after = bool(end and d > end)
+        if after:
+            continue
+
+        if _is_capital_equity(r):
+            if r.status == "rejected":
+                continue
+            amt = float(_request_amount(r) or 0)
+            if before:
+                open_equity += amt
+            else:
+                equity += amt
+        else:
+            b = _amounts_by_status(r)
+            in_dept = (not dept_key) or (_dept_key(r.department) == dept_key)
+            if before:
+                open_approved += b["approved"]
+            else:
+                approved_all += b["approved"]
+                if in_dept:
+                    approved_dept += b["approved"]
+                    rejected_dept += b["rejected"]
+
+    opening_balance = open_equity - open_approved
+    balance = opening_balance + equity - approved_all
+    return {
+        "capital_equity": round(equity, 2),
+        "opening_balance": round(opening_balance, 2),
+        "approved": round(approved_dept, 2),
+        "rejected": round(rejected_dept, 2),
+        "balance": round(balance, 2),
+    }
+
+
+def _dept_key(name):
+    """'Everglades (Pharmacy)' and 'Everglades' are the same business unit."""
+    return (name or "").split("(")[0].strip().lower()
+
+
+def _can_manage(user):
+    return bool(user) and user.role in MANAGE_ROLES
 
 
 def _branded_html(heading: str, intro: str, details: dict, message: str, closing: str) -> str:
@@ -171,7 +314,6 @@ def _notify_role_async(
     email_message=None,
     email_closing=None,
 ):
-    """Bulk-insert notification rows + fire branded HTML emails."""
     if isinstance(role_names, str):
         role_names = [role_names]
 
@@ -193,9 +335,7 @@ def _notify_role_async(
         intro=email_intro or "Hello,",
         details=email_details or {},
         message=email_message or in_app_message,
-        closing=email_closing or (
-            "Thank you.\n\nWarm regards,\n" + BRAND
-        ),
+        closing=email_closing or ("Thank you.\n\nWarm regards,\n" + BRAND),
     )
     plain = f"{email_heading or 'CopperBook Update'}\n\n{email_intro or ''}\n"
     for k, v in (email_details or {}).items():
@@ -234,7 +374,7 @@ def _serialize(r, with_files=False):
         "remote_id": r.remote_id,
         "request_number": r.request_number,
         "department": r.department,
-        "business_unit": r.department,  # Department == Business Unit
+        "business_unit": r.department,
         "category": r.category,
         "assignee_mode": r.assignee_mode,
         "assignee_names": [a.employee_name for a in r.assignees],
@@ -246,11 +386,14 @@ def _serialize(r, with_files=False):
         "status": r.status,
         "assigned_to_role": r.assigned_to_role,
         "is_payroll": bool(r.is_payroll),
+        "is_capital_equity": _is_capital_equity(r),
         "amount": _request_amount(r),
-        # what the main page should show for the active chip
+        "reference_date": (
+            r.reference_date.isoformat()
+            if getattr(r, "reference_date", None) else None
+        ),
         "display_amount": _request_amount(r),
         "display_status": r.status,
-        # per-status split of the payroll entries
         "approved_amount": _sum_by(r, "approved"),
         "rejected_amount": _sum_by(r, "rejected"),
         "pending_amount": _sum_by(r, "pending"),
@@ -276,29 +419,71 @@ def _sync_to_staffportal(req: CopperBookRequest):
         return
     payload = {
         "remote_id": req.remote_id,
-        "status": req.status,  # may now be "partially_approved"
+        "status": req.status,
         "finance_action_by": req.finance_action_by,
         "finance_remarks": req.finance_remarks,
         "ceo_action_by": req.ceo_action_by,
         "ceo_remarks": req.ceo_remarks,
-        # includes employee_id, which the staff portal uses to match entries
         "employee_entries": [_entry_to_dict(e) for e in req.employee_entries],
+    }
+    try:
+        requests.post(
+            f"{base}/api/copperbook/sync",
+            json=payload,
+            headers={"X-Service-Token": token},
+            timeout=3,
+        )
+    except Exception:
+        pass
+
+
+def _sync_edit_to_staffportal(req: CopperBookRequest):
+    """Push an edit made in the Billing Portal to the Staff Portal.
+    Returns (ok, message). Never raises."""
+    base = (os.getenv("STAFFPORTAL_BASE_URL") or "").rstrip("/")
+    token = os.getenv("COPPERBOOK_CALLBACK_TOKEN") or ""
+    if not base or not token:
+        return False, "STAFFPORTAL_BASE_URL / COPPERBOOK_CALLBACK_TOKEN not set."
+    payload = {
+        "event": "edit",
+        "remote_id": req.remote_id,
+        "request_number": req.request_number,
+        "department": req.department,
+        "category": req.category,
+        "purpose": req.purpose,
+        "description": req.description,
+        "remarks": req.remarks,
+        "amount": None if req.is_payroll else _request_amount(req),
+        "reference_date": (
+            req.reference_date.isoformat()
+            if getattr(req, "reference_date", None) else None
+        ),
     }
     try:
         resp = requests.post(
             f"{base}/api/copperbook/sync",
             json=payload,
             headers={"X-Service-Token": token},
-            timeout=3,
+            timeout=8,
         )
-        print(f"[copperbook→staffportal] {req.request_number} {resp.status_code}")
+        if resp.ok:
+            return True, "ok"
+        print(f"[copperbook] edit sync failed {req.request_number}: {resp.status_code} {resp.text[:300]}")
+        return False, f"Staff Portal responded {resp.status_code}"
     except Exception as e:
-        print("[copperbook→staffportal] FAILED:", e)
+        print(f"[copperbook] edit sync error {req.request_number}:", e)
+        return False, str(e)
 
 
-# ─────────────────────────────────────────────────────────────────
-# INTAKE
-# ─────────────────────────────────────────────────────────────────
+@cb_bp.route("/intake-ping", methods=["GET", "OPTIONS"])
+def intake_ping():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    if not _service_token_ok():
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+    return jsonify({"ok": True}), 200
+
+
 @cb_bp.route("/intake", methods=["POST", "OPTIONS"])
 def intake():
     if request.method == "OPTIONS":
@@ -320,6 +505,22 @@ def intake():
         if is_payroll and not category:
             category = PAYROLL_CATEGORY
 
+        reference_date = _extract_reference_date(d)
+
+        incoming_no = (d.get("request_number") or "").strip()
+        if incoming_no and incoming_no != "PENDING":
+            existing = CopperBookRequest.query.filter_by(request_number=incoming_no).first()
+            if existing:
+                if hasattr(existing, "reference_date") and reference_date and not existing.reference_date:
+                    existing.reference_date = reference_date
+                if not existing.remote_id and d.get("remote_id"):
+                    try:
+                        existing.remote_id = int(d.get("remote_id"))
+                    except (TypeError, ValueError):
+                        pass
+                db.session.commit()
+                return jsonify({"message": "Already received", "id": existing.id, "request_number": existing.request_number}), 200
+
         req = CopperBookRequest(
             request_number=d.get("request_number") or "PENDING",
             remote_id=int(d.get("remote_id")) if d.get("remote_id") else None,
@@ -336,6 +537,9 @@ def intake():
             is_payroll=is_payroll,
             amount=amount_val,
         )
+        if hasattr(CopperBookRequest, "reference_date"):
+            req.reference_date = reference_date
+
         db.session.add(req)
         db.session.flush()
 
@@ -366,13 +570,12 @@ def intake():
                 )
                 f = request.files.get(f"employee_file_{idx}")
                 if f and f.filename:
-                    row.attachment_data = f.read()  # previously the content was dropped
+                    row.attachment_data = f.read()
                     row.attachment_filename = f.filename
                     row.attachment_original_name = f.filename
                     row.attachment_mimetype = f.mimetype or "application/octet-stream"
                 db.session.add(row)
 
-        # Fallback: per-employee payroll without an amount → store the grand total
         if is_payroll and req.amount is None and entries:
             req.amount = round(sum(
                 float(e.get("monthly_salary") or 0) + float(e.get("td_da") or 0)
@@ -386,7 +589,6 @@ def intake():
                     filename=f.filename, mimetype=f.mimetype or "application/octet-stream",
                 ))
 
-        # ── Professional email to Finance + CEO ─────────────────────
         detail_rows = {
             "Request Number": req.request_number,
             "Submitted By": req.raised_by_name or "—",
@@ -395,28 +597,18 @@ def intake():
             "Purpose": req.purpose,
             "Submitted On": datetime.utcnow().strftime("%d %b %Y, %I:%M %p UTC"),
         }
+        if getattr(req, "reference_date", None):
+            detail_rows["Reference Date"] = req.reference_date.strftime("%d %b %Y")
         if req.amount is not None:
             detail_rows["Requested Amount"] = _fmt_money(req.amount)
-        if is_payroll and entries:
-            detail_rows["Payroll Entries"] = str(len(entries))
 
         _notify_role_async(
             ["SuperAdmin", "Corporate"],
-            in_app_message=f"New CopperBook {req.request_number} from {req.raised_by_name} ({req.department}) — pending Finance review.",
+            in_app_message=f"New CopperBook {req.request_number} pending review.",
             related_id=req.id,
-            email_subject=f"CopperBook — New Request {req.request_number} Pending Your Review",
-            email_heading="A New CopperBook Request Requires Your Review",
-            email_intro=(
-                "Hello,\n\n"
-                "A new CopperBook request has been submitted through the Staff Portal and is now pending "
-                "Finance review. Please log in to the Finance Hub to review the full details and record a decision."
-            ),
+            email_subject=f"CopperBook — New Request {req.request_number}",
+            email_heading="New CopperBook Request",
             email_details=detail_rows,
-            email_message=(
-                "You can approve the request, reject it with remarks, or forward it to the CEO "
-                "for a final decision — all from the CopperBook page in the Finance Hub."
-            ),
-            email_closing="Thank you for your timely attention.\n\nBest regards,\n" + BRAND,
         )
         db.session.commit()
 
@@ -428,9 +620,6 @@ def intake():
         return jsonify({"error": str(e)}), 500
 
 
-# ─────────────────────────────────────────────────────────────────
-# LIST — supports status, scope, payroll, category, date range, and search
-# ─────────────────────────────────────────────────────────────────
 @cb_bp.route("/list", methods=["GET", "OPTIONS"])
 @jwt_required()
 def list_all():
@@ -444,32 +633,49 @@ def list_all():
     start_date_str = (request.args.get("start_date") or "").strip()
     end_date_str = (request.args.get("end_date") or "").strip()
     search = (request.args.get("search") or "").strip()
+    department = (request.args.get("department") or "").strip()
     page = max(1, request.args.get("page", 1, type=int))
     per_page = min(100, max(1, request.args.get("per_page", 25, type=int)))
 
+    # "Capital Equity" chip is handled after grouping (so chip counts stay stable)
+    equity_chip = status == "capital_equity"
+    if equity_chip:
+        status = None
+
     q = CopperBookRequest.query.options(selectinload(CopperBookRequest.employee_entries))
+
+    if category:
+        q = q.filter(CopperBookRequest.category == category)
     if scope == "ceo":
         q = q.filter(CopperBookRequest.assigned_to_role == "ceo")
     if payroll_only:
         q = q.filter(CopperBookRequest.is_payroll == True)  # noqa: E712
-    if category:
-        q = q.filter(CopperBookRequest.category == category)
+    if department:
+        _dk = _dept_key(department)
+        _col = func.lower(func.trim(CopperBookRequest.department))
+        q = q.filter(or_(_col == _dk, _col.like(_dk + " (%")))
 
-    # ── Date range filter ─────────────────────────────────────────
+    # Date filter uses the same "effective date" as the ordering:
+    # reference_date if present, otherwise the created date.
+    eff_date_col = func.coalesce(
+        CopperBookRequest.reference_date,
+        func.date(CopperBookRequest.created_at),
+    )
+
+    start_d = end_d = None
     if start_date_str:
         try:
-            sd = datetime.strptime(start_date_str, "%Y-%m-%d")
-            q = q.filter(CopperBookRequest.created_at >= sd)
+            start_d = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            q = q.filter(eff_date_col >= start_d)
         except ValueError:
-            pass
+            start_d = None
     if end_date_str:
         try:
-            ed = datetime.strptime(end_date_str, "%Y-%m-%d") + timedelta(days=1)
-            q = q.filter(CopperBookRequest.created_at < ed)
+            end_d = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+            q = q.filter(eff_date_col <= end_d)
         except ValueError:
-            pass
+            end_d = None
 
-    # ── Search filter ─────────────────────────────────────────────
     if search:
         like = f"%{search}%"
         q = q.filter(or_(
@@ -481,17 +687,21 @@ def list_all():
             CopperBookRequest.raised_by_name.ilike(like),
         ))
 
-    all_rows = q.order_by(CopperBookRequest.created_at.desc()).all()
+    all_rows = (
+        q.order_by(
+            eff_date_col.desc(),
+            CopperBookRequest.created_at.desc(),
+        )
+        .all()
+    )
 
-    # ── Expand each request into one row per status group ─────────
-    flat = []  # (request, group, is_split)
+    flat = []
     for r in all_rows:
         groups = _status_groups(r)
         split = len(groups) > 1
         for g in groups:
             flat.append((r, g, split))
 
-    # ── Chip counts + totals (same filters, one entry per chip) ───
     summary = {"all": {
         "count": len(flat),
         "amount": round(sum((g[1] or 0) for _, g, _ in flat), 2),
@@ -502,9 +712,22 @@ def list_all():
             "count": len(m),
             "amount": round(sum((x[1][1] or 0) for x in m), 2),
         }
+    eq_rows = [x for x in flat if _is_capital_equity(x[0])]
+    summary["capital_equity"] = {
+        "count": len(eq_rows),
+        "amount": round(sum((x[1][1] or 0) for x in eq_rows), 2),
+    }
 
-    # ── Apply the selected chip, then paginate ────────────────────
-    sel = [x for x in flat if x[1][0] == status] if status else flat
+    if equity_chip:
+        sel = eq_rows
+    elif status:
+        sel = [x for x in flat if x[1][0] == status]
+    else:
+        sel = flat
+
+    # Business Unit dropdown options: the fixed list of departments
+    departments = list(BUSINESS_UNITS)
+
     total = len(sel)
     start = (page - 1) * per_page
     page_rows = sel[start:start + per_page]
@@ -512,6 +735,8 @@ def list_all():
     return jsonify({
         "requests": [_serialize_row(r, g, sp) for r, g, sp in page_rows],
         "summary": summary,
+        "equity": _capital_equity_summary(start_d, end_d, department),
+        "departments": departments,
         "view_total": round(sum((x[1][1] or 0) for x in sel), 2),
         "pagination": {
             "page": page, "per_page": per_page, "total": total,
@@ -530,7 +755,121 @@ def detail(rid):
 
 
 # ─────────────────────────────────────────────────────────────────
-# FINANCE ACTION
+# EDIT (PUT) and DELETE routes
+# ─────────────────────────────────────────────────────────────────
+@cb_bp.route("/<int:rid>", methods=["PUT", "OPTIONS"])
+@jwt_required()
+def update_request(rid):
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    uid = int(get_jwt_identity())
+    user = User.query.get(uid)
+    req = CopperBookRequest.query.get_or_404(rid)
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    if not _can_manage(user):
+        return jsonify({"error": "You do not have permission to edit requests."}), 403
+
+    data = request.get_json(silent=True) or {}
+    purpose = (data.get("purpose") or req.purpose or "").strip()
+    description = (data.get("description") or req.description or "").strip()
+    remarks = (data.get("remarks") or "").strip() or None
+    category = (data.get("category") or req.category or "").strip()
+    department = (data.get("department") or req.department or "").strip()
+
+    if not purpose:
+        return jsonify({"error": "Purpose is required."}), 400
+    # Only enforce the length rule when the description is actually being changed
+    if description != (req.description or "").strip() and len(description) < 10:
+        return jsonify({"error": "Description must be at least 10 characters."}), 400
+
+    req.purpose = purpose
+    req.description = description
+    req.remarks = remarks
+    if department:
+        req.department = department
+    if not req.is_payroll:
+        req.category = category or None
+
+    raw_ref = (data.get("reference_date") or "").strip()
+    if raw_ref and hasattr(CopperBookRequest, "reference_date"):
+        try:
+            req.reference_date = datetime.strptime(raw_ref, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"error": "Invalid reference_date (YYYY-MM-DD)."}), 400
+
+    # Payroll amount is derived from employee entries, so it is not editable.
+    if not req.is_payroll and data.get("amount") not in (None, ""):
+        try:
+            amt = float(data.get("amount"))
+        except (TypeError, ValueError):
+            db.session.rollback()
+            return jsonify({"error": "Invalid amount."}), 400
+        if not math.isfinite(amt):
+            db.session.rollback()
+            return jsonify({"error": "Invalid amount."}), 400
+        if amt > MAX_AMOUNT:
+            db.session.rollback()
+            return jsonify({
+                "error": f"Amount is too large. The maximum allowed is {_fmt_money(MAX_AMOUNT)}."
+            }), 400
+        if amt > 0:
+            req.amount = round(amt, 2)
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({"error": f"Could not save the changes: {e.__class__.__name__}. Check the amount and date values."}), 400
+
+    # Mirror the edit (including the reference date) to the Staff Portal
+    synced, sync_msg = _sync_edit_to_staffportal(req)
+
+    return jsonify({
+        "message": "Updated.",
+        "request": _serialize(req, with_files=True),
+        "staffportal_synced": synced,
+        "staffportal_message": None if synced else sync_msg,
+    }), 200
+
+
+@cb_bp.route("/<int:rid>", methods=["DELETE", "OPTIONS"])
+@jwt_required()
+def delete_request(rid):
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    uid = int(get_jwt_identity())
+    user = User.query.get(uid)
+    req = CopperBookRequest.query.get_or_404(rid)
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    if not _can_manage(user):
+        return jsonify({"error": "You do not have permission to delete requests."}), 403
+
+    request_number = req.request_number  # read before the object is deleted
+
+    try:
+        CopperBookEmployeeEntry.query.filter_by(request_id=req.id).delete(synchronize_session=False)
+        CopperBookAssignee.query.filter_by(request_id=req.id).delete(synchronize_session=False)
+        CopperBookAttachment.query.filter_by(request_id=req.id).delete(synchronize_session=False)
+        db.session.expire(req)
+        db.session.delete(req)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({"error": f"Delete failed: {e}"}), 500
+
+    return jsonify({"message": f"Deleted {request_number}."}), 200
+
+
+# ─────────────────────────────────────────────────────────────────
+# ACTIONS (Finance, CEO, Employee)
 # ─────────────────────────────────────────────────────────────────
 @cb_bp.route("/<int:rid>/finance-action", methods=["POST", "OPTIONS"])
 @jwt_required()
@@ -538,8 +877,10 @@ def finance_action(rid):
     if request.method == "OPTIONS":
         return ("", 204)
     uid = get_jwt_identity()
-    try: uid = int(uid)
-    except: pass
+    try:
+        uid = int(uid)
+    except Exception:
+        pass
     user = User.query.get(uid)
     if not user or user.role not in ("SuperAdmin", "admin", "Corporate"):
         return jsonify({"error": "Forbidden"}), 403
@@ -558,10 +899,9 @@ def finance_action(rid):
     elif action == "reject":
         r.status = "rejected"
     else:
-        r.status = "forwarded_to_ceo"; r.assigned_to_role = "ceo"
+        r.status = "forwarded_to_ceo"
+        r.assigned_to_role = "ceo"
 
-    # Whole-request approve/reject also decides the entries still pending,
-    # so the Approved / Rejected chips stay consistent.
     if r.is_payroll and action in ("approve", "reject"):
         new_entry_status = "approved" if action == "approve" else "rejected"
         for e in r.employee_entries:
@@ -585,34 +925,23 @@ def finance_action(rid):
         related_id=r.id,
         email_subject=f"CopperBook — Request {r.request_number} {verb.title()}",
         email_heading=f"CopperBook Request {verb.title()}",
-        email_intro=f"Hello,\n\n{user.name} has {verb} CopperBook request {r.request_number}.",
         email_details={
             "Request Number": r.request_number,
-            "Department": r.department or "—",
-            "Category": r.category or "—",
             "Amount": _fmt_money(_request_amount(r)),
             "Action": verb.title(),
-            "Action By": user.name,
-            "Action On": datetime.utcnow().strftime("%d %b %Y, %I:%M %p UTC"),
             **({"Remarks": remarks} if remarks else {}),
         },
-        email_message="This is a system notification. No action is required from your side.",
-        email_closing="Best regards,\n" + BRAND,
     )
-    db.session.commit()  # persist the notification rows added above
+    db.session.commit()
 
     return jsonify({"message": f"Marked {r.status}.", "request": _serialize(r)}), 200
 
 
-# ─────────────────────────────────────────────────────────────────
-# CEO ACTION (final decision on requests forwarded by Finance)
-# ─────────────────────────────────────────────────────────────────
 @cb_bp.route("/<int:rid>/ceo-action", methods=["POST", "OPTIONS"])
 @jwt_required()
 def ceo_action(rid):
     if request.method == "OPTIONS":
         return ("", 204)
-
     uid = get_jwt_identity()
     try:
         uid = int(uid)
@@ -623,20 +952,15 @@ def ceo_action(rid):
         return jsonify({"error": "Only SuperAdmin / CEO can act."}), 403
 
     r = CopperBookRequest.query.get_or_404(rid)
-
-    # Only allow CEO to act on requests that were actually forwarded
     if r.status != "forwarded_to_ceo":
-        return jsonify({
-            "error": f"Request {r.request_number} is not pending CEO action "
-                     f"(current status: {r.status})."
-        }), 400
+        return jsonify({"error": f"Request {r.request_number} is not pending CEO action."}), 400
 
     payload = request.get_json(silent=True) or {}
     action = payload.get("action")
     remarks = (payload.get("remarks") or "").strip()
 
     if action not in ("approve", "reject"):
-        return jsonify({"error": "Invalid action. Must be 'approve' or 'reject'."}), 400
+        return jsonify({"error": "Invalid action."}), 400
     if action == "reject" and not remarks:
         return jsonify({"error": "Rejection reason is required."}), 400
 
@@ -644,7 +968,6 @@ def ceo_action(rid):
 
     if action == "approve":
         r.status = "approved"
-        # Approve any employee entries that are still pending
         if r.is_payroll:
             for e in r.employee_entries:
                 if e.status == "pending":
@@ -667,55 +990,36 @@ def ceo_action(rid):
     r.ceo_remarks = remarks or None
     db.session.commit()
 
-    # Sync back to the staff portal
     _sync_to_staffportal(r)
 
-    # Notify Finance + SuperAdmin
     verb = "approved" if action == "approve" else "rejected"
     _notify_role_async(
         ["SuperAdmin", "Corporate"],
-        in_app_message=(
-            f"CopperBook {r.request_number} was {verb} by CEO {user.name}."
-        ),
+        in_app_message=f"CopperBook {r.request_number} was {verb} by CEO {user.name}.",
         related_id=r.id,
         email_subject=f"CopperBook — Request {r.request_number} {verb.title()} by CEO",
         email_heading=f"CEO {verb.title()} CopperBook Request {r.request_number}",
-        email_intro=(
-            f"Hello,\n\nCEO {user.name} has {verb} CopperBook request "
-            f"{r.request_number}."
-        ),
         email_details={
             "Request Number": r.request_number,
-            "Department": r.department or "—",
-            "Category": r.category or "—",
-            "Amount": _fmt_money(_request_amount(r)),
             "Decision": verb.title(),
-            "Decided By": user.name,
-            "Decided On": now.strftime("%d %b %Y, %I:%M %p UTC"),
             **({"Remarks": remarks} if remarks else {}),
         },
-        email_message="This is a system notification. No action is required from your side.",
-        email_closing="Best regards,\n" + BRAND,
     )
-    db.session.commit()  # persist the notification rows added above
+    db.session.commit()
 
-    return jsonify({
-        "message": f"Request {verb}.",
-        "request": _serialize(r, with_files=True),
-    }), 200
+    return jsonify({"message": f"Request {verb}.", "request": _serialize(r, with_files=True)}), 200
 
 
-# ─────────────────────────────────────────────────────────────────
-# PER-EMPLOYEE ACTION
-# ─────────────────────────────────────────────────────────────────
 @cb_bp.route("/employee-entry/<int:entry_id>/action", methods=["POST", "OPTIONS"])
 @jwt_required()
 def employee_entry_action(entry_id):
     if request.method == "OPTIONS":
         return ("", 204)
     uid = get_jwt_identity()
-    try: uid = int(uid)
-    except: pass
+    try:
+        uid = int(uid)
+    except Exception:
+        pass
     user = User.query.get(uid)
     if not user or user.role not in ("SuperAdmin", "admin"):
         return jsonify({"error": "Only SuperAdmin / CEO can act."}), 403
@@ -734,57 +1038,30 @@ def employee_entry_action(entry_id):
     entry.action_by = user.name
     entry.action_at = datetime.utcnow()
 
-    # Request status is derived from the entries (approved / rejected / partially_approved)
     req.status = _roll_up_status(req)
-    if req.status != "forwarded_to_ceo":  # nothing pending anymore
+    if req.status != "forwarded_to_ceo":
         req.ceo_action_by = user.name
         req.ceo_action_at = datetime.utcnow()
 
     db.session.commit()
     _sync_to_staffportal(req)
 
-    verb = "approved" if entry.status == "approved" else "rejected"
-    _notify_role_async(
-        ["SuperAdmin", "Corporate"],
-        in_app_message=f"Payroll entry for {entry.employee_name} in {req.request_number} was {entry.status}.",
-        related_id=req.id,
-        email_subject=f"Payroll — Entry for {entry.employee_name} {verb.title()}",
-        email_heading=f"Payroll Entry {verb.title()}",
-        email_intro=(
-            f"Hello,\n\nThe payroll entry for {entry.employee_name} in request "
-            f"{req.request_number} has been {verb} by {user.name}."
-        ),
-        email_details={
-            "Request Number": req.request_number,
-            "Employee": entry.employee_name,
-            "Monthly Salary": _fmt_money(entry.monthly_salary),
-            "TD / DA": _fmt_money(entry.td_da),
-            "Total": _fmt_money(entry.total_amount),
-            "Status": entry.status.title(),
-            **({"Remarks": entry.remarks} if entry.remarks else {}),
-        },
-        email_message="This is a system notification. No action is required from your side.",
-        email_closing="Best regards,\n" + BRAND,
-    )
-    db.session.commit()  # persist the notification rows added above
-
     return jsonify({"message": "Entry updated.", "entry": _entry_to_dict(entry)}), 200
 
 
-# ─────────────────────────────────────────────────────────────────
-# BATCH APPROVE
-# ─────────────────────────────────────────────────────────────────
 @cb_bp.route("/<int:rid>/approve-all-entries", methods=["POST", "OPTIONS"])
 @jwt_required()
 def approve_all_entries(rid):
     if request.method == "OPTIONS":
         return ("", 204)
     uid = get_jwt_identity()
-    try: uid = int(uid)
-    except: pass
+    try:
+        uid = int(uid)
+    except Exception:
+        pass
     user = User.query.get(uid)
     if not user or user.role not in ("SuperAdmin", "admin"):
-        return jsonify({"error": "Only SuperAdmin / CEO can act."}), 403
+        return jsonify({"error": "Forbidden"}), 403
 
     req = CopperBookRequest.query.get_or_404(rid)
     if not req.is_payroll:
@@ -804,7 +1081,6 @@ def approve_all_entries(rid):
         e.action_at = now
         approved_count += 1
 
-    # Previously rejected entries stay rejected → request may be "partially_approved"
     req.status = _roll_up_status(req)
     req.ceo_action_by = user.name
     req.ceo_action_at = now
@@ -836,7 +1112,7 @@ def approve_all_entries(rid):
         email_message="This is a system notification. No action is required from your side.",
         email_closing="Best regards,\n" + BRAND,
     )
-    db.session.commit()  # persist the notification rows added above
+    db.session.commit()
 
     return jsonify({
         "message": f"Approved {approved_count} entries.",

@@ -24,6 +24,9 @@ class CopperBookRequest(db.Model):
     is_payroll = db.Column(db.Boolean, default=False)
     amount = db.Column(db.Numeric(14, 2), nullable=True)
 
+    # ✅ NEW — reference date sent from the Staff Portal (YYYY-MM-DD)
+    reference_date = db.Column(db.Date, nullable=True)
+
     finance_action_by = db.Column(db.String(150), nullable=True)
     finance_action_at = db.Column(db.DateTime, nullable=True)
     finance_remarks = db.Column(db.Text, nullable=True)
