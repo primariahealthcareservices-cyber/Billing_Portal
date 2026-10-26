@@ -2,6 +2,8 @@
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import event
+from flask import has_request_context, request
 
 db = SQLAlchemy()
 
@@ -16,6 +18,9 @@ ROLES = [
 # TARGET department (IT, IT Sales, PCM ...). Corporate itself records the same
 # money as an Expenses entry with category "Corpus Fund".
 ENTRY_TYPES = ["Income", "Expenses", "Capital", "Corpus Fund"]
+
+# ---------- PAYMENT TYPES ----------
+PAYMENT_TYPES = ["UPI", "Cash", "Card"]
 
 # ---------- STANDARD CATEGORIES (used by ALL departments for Income & Expenses) ----------
 STANDARD_CATEGORIES = [
@@ -177,8 +182,6 @@ DEPARTMENT_CONFIG = {
 
     # =================== Corporate ===================
     "Corporate": {
-        # Corpus Fund is an Expenses CATEGORY for Corporate.
-        # Saving one also posts a separate "Corpus Fund" entry to the chosen department.
         "entry_types": ["Income", "Expenses", "Capital"],
         "categories": _build_categories(),
         "revenue_types": [],
@@ -291,6 +294,7 @@ class FinanceEntry(db.Model):
     gst_tax_percent = db.Column(db.Numeric(5, 2), nullable=True)
     gst_tax_amount = db.Column(db.Numeric(14, 2), nullable=True, default=0)
     tax_invoice_number = db.Column(db.String(50), nullable=True)
+    payment_type = db.Column(db.String(20), nullable=True)          # ← NEW
 
     exec_department = db.Column(db.String(50), nullable=True)
     employee_name = db.Column(db.String(150), nullable=True)
@@ -312,9 +316,6 @@ class FinanceEntry(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     extra_data = db.Column(db.JSON, nullable=True)
-
-    # Links the department-side "Corpus Fund" row to the Corporate
-    # "Expenses / Corpus Fund" row that created it (so edit/delete stay in sync).
     linked_entry_id = db.Column(db.Integer, nullable=True, index=True)
 
     items = db.relationship(
@@ -341,6 +342,7 @@ class FinanceEntry(db.Model):
             "gst_tax_percent": float(self.gst_tax_percent) if self.gst_tax_percent is not None else None,
             "gst_tax_amount": float(self.gst_tax_amount) if self.gst_tax_amount is not None else None,
             "tax_invoice_number": self.tax_invoice_number,
+            "payment_type": self.payment_type,                       # ← NEW
             "exec_department": self.exec_department,
             "employee_name": self.employee_name,
             "salary_amount": float(self.salary_amount) if self.salary_amount is not None else None,
@@ -359,6 +361,44 @@ class FinanceEntry(db.Model):
             "created_by": self.creator.name if self.creator else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+
+# ===========================================================================
+# ✅ AUTOMATIC EVENT LISTENERS (No need to edit every route file!)
+# ===========================================================================
+@event.listens_for(FinanceEntry, 'before_insert')
+@event.listens_for(FinanceEntry, 'before_update')
+def auto_assign_payment_type(mapper, connection, target):
+    """
+    Automatically extracts 'payment_type' from the incoming Flask request 
+    and assigns it to the model before saving.
+    Works for JSON, FormData, and batch inserts.
+    """
+    if not has_request_context():
+        return
+
+    ptype = None
+
+    # 1. Check standard JSON payload
+    if request.is_json:
+        data = request.get_json(silent=True) or {}
+        ptype = data.get('payment_type')
+        
+        # 2. If it's a batch insert (e.g. [{...}, {...}]), find the matching row
+        if not ptype and 'entries' in data and isinstance(data['entries'], list):
+            for row in data['entries']:
+                if row.get('payment_type'):
+                    ptype = row.get('payment_type')
+                    break
+
+    # 3. Check FormData (multipart uploads for invoices)
+    if not ptype and request.form:
+        ptype = request.form.get('payment_type')
+
+    # 4. Assign the value if found
+    if ptype:
+        target.payment_type = str(ptype).strip()
+# ===========================================================================
 
 
 # ---------- FinanceEntryItem model ----------
@@ -390,6 +430,7 @@ class MedTechLedger(db.Model):
     entry_date = db.Column(db.Date, nullable=False)
     total_amount = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     paid = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    payment_type = db.Column(db.String(20), nullable=True)          
     balance = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     remarks = db.Column(db.Text, nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
@@ -406,6 +447,7 @@ class MedTechLedger(db.Model):
             "entry_date": self.entry_date.isoformat() if self.entry_date else None,
             "total_amount": float(self.total_amount or 0),
             "paid": float(self.paid or 0),
+            "payment_type": self.payment_type,                       
             "balance": float(self.balance or 0),
             "remarks": self.remarks,
             "invoice_url": f"/api/files/invoices/{self.invoice_filename}" if self.invoice_filename else None,
@@ -423,6 +465,7 @@ class EvergladesLedger(db.Model):
     entry_date = db.Column(db.Date, nullable=False)
     total_amount = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     paid = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    payment_type = db.Column(db.String(20), nullable=True)          
     balance = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     remarks = db.Column(db.Text, nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
@@ -439,6 +482,7 @@ class EvergladesLedger(db.Model):
             "entry_date": self.entry_date.isoformat() if self.entry_date else None,
             "total_amount": float(self.total_amount or 0),
             "paid": float(self.paid or 0),
+            "payment_type": self.payment_type,                       
             "balance": float(self.balance or 0),
             "remarks": self.remarks,
             "invoice_url": f"/api/files/invoices/{self.invoice_filename}" if self.invoice_filename else None,
@@ -601,6 +645,7 @@ def ensure_schema_columns():
         ("finance_entries", "gst_tax_percent",        "DECIMAL(5,2) NULL"),
         ("finance_entries", "gst_tax_amount",         "DECIMAL(14,2) NULL DEFAULT 0"),
         ("finance_entries", "tax_invoice_number",     "VARCHAR(50) NULL"),
+        ("finance_entries", "payment_type",           "VARCHAR(20) NULL"),
         ("finance_entries", "exec_department",        "VARCHAR(50) NULL"),
         ("finance_entries", "employee_name",          "VARCHAR(150) NULL"),
         ("finance_entries", "salary_amount",          "DECIMAL(14,2) NULL"),
@@ -629,10 +674,12 @@ def ensure_schema_columns():
         ("caredx_lab_entries", "referral_amount",    "DECIMAL(14,2) NOT NULL DEFAULT 0"),
         ("caredx_lab_entries", "sales",              "DECIMAL(14,2) NOT NULL DEFAULT 0"),
 
+        ("medtech_ledger", "payment_type",          "VARCHAR(20) NULL"),
         ("medtech_ledger", "invoice_filename",      "VARCHAR(255) NULL"),
         ("medtech_ledger", "invoice_original_name", "VARCHAR(255) NULL"),
         ("medtech_ledger", "invoice_mimetype",      "VARCHAR(100) NULL"),
 
+        ("everglades_ledger", "payment_type",          "VARCHAR(20) NULL"),
         ("everglades_ledger", "invoice_filename",      "VARCHAR(255) NULL"),
         ("everglades_ledger", "invoice_original_name", "VARCHAR(255) NULL"),
         ("everglades_ledger", "invoice_mimetype",      "VARCHAR(100) NULL"),
@@ -702,16 +749,13 @@ def ensure_entry_type_is_varchar():
 
 
 # ===========================================================================
-# ✅ NEW — Ensure users.role column is VARCHAR (not ENUM)
+# Ensure users.role column is VARCHAR (not ENUM)
 # ===========================================================================
 def ensure_user_role_is_varchar():
     """
     Older schemas created users.role as ENUM('SuperAdmin','admin', ...) which
     rejects any new role (e.g. 'Everglades', 'SalesEnterprise') with
     MySQL 1265 'Data truncated for column role'.
-
-    This converts the column to VARCHAR(50) once. Idempotent — safe to run
-    on every boot.
     """
     from sqlalchemy import text
     try:

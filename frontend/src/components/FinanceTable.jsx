@@ -67,7 +67,7 @@ export default function FinanceTable({
     );
   }
 
-  // ---- Column visibility: only render a column if at least one row has the field ----
+  // ---- Column visibility ----
   const showSubCategory       = entries.some((e) => e?.sub_category);
   const showClientName        = entries.some((e) => e?.client_name);
   const showGstNumber         = entries.some((e) => e?.gst_number);
@@ -95,6 +95,19 @@ export default function FinanceTable({
   const showTeam              = entries.some((e) => e?.team);
   const showLedgerDetails     = entries.some((e) => e._type === "ledger");
   const showInvoice           = entries.some((e) => e?.invoice_url);
+  
+  // ✅ FORCED TRUE: Always show the Payment Type column
+  const showPaymentType       = true; 
+
+  // Helper for Payment Type badge colors
+  const getPaymentBadgeStyle = (type) => {
+    switch (type) {
+      case "UPI": return { bg: "#e0e7ff", color: "#3730a3" };
+      case "Cash": return { bg: "#dcfce7", color: "#166534" };
+      case "Card": return { bg: "#fee2e2", color: "#991b1b" };
+      default: return { bg: "#f3f4f6", color: "#374151" };
+    }
+  };
 
   return (
     <div className="table-responsive">
@@ -122,23 +135,21 @@ export default function FinanceTable({
             {showAllowanceAmount && <th className="text-right">Allowance</th>}
             {showTeam && <th>Team</th>}
             <th className="text-right">Amount</th>
+            
+            {/* ✅ Payment Type Header */}
+            {showPaymentType && <th>Payment Type</th>}
+
             {showLedgerDetails && <th>Customer / Details</th>}
-<th className="col-remarks" style={{ minWidth: 90 }}>Remarks</th>
-{showInvoice && <th className="col-invoice">Invoice</th>}
+            <th className="col-remarks" style={{ minWidth: 90 }}>Remarks</th>
+            {showInvoice && <th className="col-invoice">Invoice</th>}
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {entries.map((entry) => {
             const items = Array.isArray(entry.items) ? entry.items : [];
-            const itemNames = items
-              .map((item) => {
-                const qty = Number(item.quantity || 0);
-                return `${item.item_name || "Item"} (x${qty})`;
-              })
-              .join(", ");
-
             const isLedger = entry._type === "ledger";
+            const pBadge = getPaymentBadgeStyle(entry.payment_type);
 
             return (
               <tr key={entry.id}>
@@ -170,15 +181,15 @@ export default function FinanceTable({
                 {showTaxInvoiceNumber && (
                   <td>{entry.tax_invoice_number || "—"}</td>
                 )}
-             {showItems && (
-  <td style={itemCellStyle}>
-    {items.length > 0 ? (
-      <ItemCell items={items} />
-    ) : (
-      "—"
-    )}
-  </td>
-)}
+                {showItems && (
+                  <td style={itemCellStyle}>
+                    {items.length > 0 ? (
+                      <ItemCell items={items} />
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                )}
                 {showPatientName && <td>{entry.patient_name || "—"}</td>}
                 {showPatientPlace && <td>{entry.patient_place || "—"}</td>}
                 {showGeneratedBy && <td>{entry.generated_by || "—"}</td>}
@@ -212,6 +223,30 @@ export default function FinanceTable({
                 <td className="text-right" style={{ fontWeight: 600 }}>
                   {formatCurrency(entry.amount)}
                 </td>
+
+                {/* ✅ Payment Type Data Cell */}
+                {showPaymentType && (
+                  <td>
+                    {entry.payment_type ? (
+                      <span
+                        style={{
+                          padding: "2px 8px",
+                          borderRadius: "12px",
+                          fontSize: "12px",
+                          fontWeight: "600",
+                          backgroundColor: pBadge.bg,
+                          color: pBadge.color,
+                          display: "inline-block",
+                        }}
+                      >
+                        {entry.payment_type}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                )}
+
                 {showLedgerDetails && (
                   <td>
                     {isLedger ? (
@@ -225,8 +260,9 @@ export default function FinanceTable({
                     )}
                   </td>
                 )}
-<td className="col-remarks" style={{ ...remarkCellStyle, minWidth: 90, maxWidth: 120 }}>  <ItemCell text={entry.remarks} previewLabel="View" />
-</td>
+                <td className="col-remarks" style={{ ...remarkCellStyle, minWidth: 90, maxWidth: 120 }}>
+                  <ItemCell text={entry.remarks} previewLabel="View" />
+                </td>
                 {showInvoice && (
                   <td>
                     {entry.invoice_url ? (

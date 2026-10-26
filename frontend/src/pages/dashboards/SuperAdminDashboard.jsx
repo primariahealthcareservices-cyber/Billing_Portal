@@ -1697,18 +1697,39 @@ export default function SuperAdminDashboard() {
                     <div className="card table-wrap">
                       <table className="data-table">
                         <thead>
-                          <tr><th>Date</th><th>Category</th><th className="text-right">Amount</th><th style={{ minWidth: remarkCellStyle.minWidth }}>Remarks</th><th className="text-right">Actions</th></tr>
+                          <tr>
+                            <th>Date</th>
+                            <th>Category</th>
+                            <th className="text-right">Amount</th>
+                            <th>Payment Type</th>
+                            <th style={{ minWidth: remarkCellStyle.minWidth }}>Remarks</th>
+                            <th className="text-right">Actions</th>
+                          </tr>
                         </thead>
                         <tbody>
                           {visibleCaredxExpenses.map((e, i) => {
                             const corpus = isCorpusEntry(e);
                             const salary = !corpus && isSalaryEntry(e);
                             const isFinanceRow = corpus || salary; // both come from FinanceEntry
+                            
+                            // Payment Badge styling helper
+                            const pBadgeBg = e.payment_type === "UPI" ? "#e0e7ff" : e.payment_type === "Cash" ? "#dcfce7" : e.payment_type === "Card" ? "#fee2e2" : "#f3f4f6";
+                            const pBadgeColor = e.payment_type === "UPI" ? "#3730a3" : e.payment_type === "Cash" ? "#166534" : e.payment_type === "Card" ? "#991b1b" : "#374151";
+
                             return (
                               <tr key={`${corpus ? "c" : salary ? "s" : "e"}-${e.id ?? e._key ?? i}-${i}`}>
                                 <td style={{ whiteSpace: "nowrap" }}>{e.expense_date || e.entry_date}</td>
                                 <td>{corpus ? CORPUS_FUND_LABEL : salary ? "Salary & Payrolls" : e.category}</td>
                                 <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(entryAmount(e))}</td>
+                                <td>
+                                  {e.payment_type ? (
+                                    <span style={{ padding: "2px 8px", borderRadius: "12px", fontSize: "12px", fontWeight: "600", backgroundColor: pBadgeBg, color: pBadgeColor, display: "inline-block" }}>
+                                      {e.payment_type}
+                                    </span>
+                                  ) : (
+                                    "—"
+                                  )}
+                                </td>
                                 <td style={remarkCellStyle}>
                                   <RemarkCell
                                     text={e.remarks || (e.employee_name ? `Salary for ${e.employee_name}` : "")}

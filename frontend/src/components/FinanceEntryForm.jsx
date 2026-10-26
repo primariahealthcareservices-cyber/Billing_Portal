@@ -96,6 +96,9 @@ const ITEM_CATEGORIES = ["Products & Innovation"];
 
 const CORPUS_FUND = "Corpus Fund";
 
+// Payment options
+const PAYMENT_TYPES = ["UPI", "Cash", "Card"];
+
 const STANDARD_CATEGORY_FIELDS = {
   "Salary & Payrolls": {
     showEmployeeName: true, showVehicleType: false,
@@ -157,6 +160,7 @@ export default function FinanceEntryForm({
     gst_tax_percent: "",
     tax_invoice_number: "",
     amount: "",
+    payment_type: "",
     remarks: "",
     entry_date: today(),
     exec_department: "",
@@ -190,10 +194,7 @@ export default function FinanceEntryForm({
 
   const isCapital = form.entry_type === "Capital";
 
-  // Legacy shape: entry_type itself is "Corpus Fund"
   const isLegacyCorpusType = form.entry_type === CORPUS_FUND;
-  // Current shape: Expenses -> Corpus Fund (any department can select this;
-  // gating is handled by isCorpusFundBlocked below)
   const isCorpusFundExpense =
     form.entry_type === "Expenses" && form.category === CORPUS_FUND;
   const isCorpusFundType = isLegacyCorpusType || isCorpusFundExpense;
@@ -206,12 +207,8 @@ export default function FinanceEntryForm({
   const requireItemsForCategory =
     (isMedTech || isEverglades) && ITEM_CATEGORIES.includes(form.category);
 
-  // NEW: any category named "Corpus Fund" for a non-Corporate department is restricted
   const isCorpusFundRestricted =
     form.category === CORPUS_FUND && !isCorporate;
-
-  // Kept for backward-compat (submit block + button disable)
-  const isCorpusFundBlocked = isCorpusFundType && !isCorporate;
 
   const showInvoiceField =
     !isCapital &&
@@ -232,7 +229,6 @@ export default function FinanceEntryForm({
     !isSalaryCategory &&
     categoryFieldConfig;
 
-  // Departments that can receive a Corpus Fund
   const corpusDepartments = (
     options?.corpus_fund_departments ||
     (options?.exec_departments || []).filter((d) => d !== "Corporate")
@@ -254,7 +250,6 @@ export default function FinanceEntryForm({
   useEffect(() => {
     if (!open) return;
 
-    // Always start with one fresh Corpus Fund row
     setCorpusRows([emptyCorpusRow()]);
 
     const populateForm = (entry) => {
@@ -268,6 +263,7 @@ export default function FinanceEntryForm({
           client_name: entry.client_name || "",
           gst_number: "", gst_tax_percent: "", tax_invoice_number: "",
           amount: entry.amount != null ? String(entry.amount) : "",
+          payment_type: entry.payment_type || "",
           remarks: entry.remarks || "",
           entry_date: entry.entry_date || today(),
           exec_department: entry.exec_department || "",
@@ -294,6 +290,7 @@ export default function FinanceEntryForm({
           client_name: entry.client_name || "",
           gst_number: "", gst_tax_percent: "", tax_invoice_number: "",
           amount: entry.amount != null ? String(entry.amount) : "",
+          payment_type: entry.payment_type || "",
           remarks: entry.remarks || "",
           entry_date: entry.entry_date || today(),
           exec_department: entry.exec_department || "",
@@ -322,6 +319,7 @@ export default function FinanceEntryForm({
         gst_tax_percent: entry.gst_tax_percent != null ? String(entry.gst_tax_percent) : "",
         tax_invoice_number: entry.tax_invoice_number || "",
         amount: entry.amount != null ? String(entry.amount) : "",
+        payment_type: entry.payment_type || "",
         remarks: entry.remarks || "",
         entry_date: entry.entry_date || today(),
         exec_department: entry.exec_department || "",
@@ -486,6 +484,7 @@ export default function FinanceEntryForm({
         sub_category: "Capital",
         client_name: "",
         amount: "",
+        payment_type: "",
         purpose: "",
         remarks: "",
         entry_date: prev.entry_date || today(),
@@ -504,6 +503,7 @@ export default function FinanceEntryForm({
         sub_category: "",
         client_name: "",
         amount: "",
+        payment_type: "",
         purpose: "",
         remarks: "",
         exec_department: "",
@@ -576,7 +576,6 @@ export default function FinanceEntryForm({
     setEmployees((prev) => prev.filter((emp) => emp._key !== key));
   };
 
-  // ---- Corpus Fund rows ----
   const handleCorpusRowChange = (key, field, value) => {
     setCorpusRows((prev) =>
       prev.map((row) => (row._key !== key ? row : { ...row, [field]: value }))
@@ -670,6 +669,7 @@ export default function FinanceEntryForm({
     const amount = Number(form.amount);
     if (!Number.isFinite(amount) || amount <= 0) { toast.error("Enter a valid amount."); return; }
     if (!form.entry_date) { toast.error("Select the entry date."); return; }
+    if (!form.payment_type) { toast.error("Select a payment type."); return; }
 
     setSaving(true);
     try {
@@ -681,6 +681,7 @@ export default function FinanceEntryForm({
         sub_category: "Capital",
         client_name: form.client_name.trim(),
         amount,
+        payment_type: form.payment_type || null,
         purpose: form.purpose.trim(),
         remarks: form.remarks || "",
         entry_date: form.entry_date,
@@ -706,12 +707,12 @@ export default function FinanceEntryForm({
 
     const url = `/${apiBase}/entries`;
 
-    // ---------- EDIT: single row ----------
     if (isEditingExisting) {
       if (!form.exec_department) { toast.error("Select a department."); return; }
       if (!form.purpose.trim()) { toast.error("Purpose is required."); return; }
       const amount = Number(form.amount);
       if (!Number.isFinite(amount) || amount <= 0) { toast.error("Enter a valid amount."); return; }
+      if (!form.payment_type) { toast.error("Select a payment type."); return; }
 
       setSaving(true);
       try {
@@ -722,6 +723,7 @@ export default function FinanceEntryForm({
           client_name: form.client_name || "",
           generated_by: form.generated_by || "",
           amount,
+          payment_type: form.payment_type || null,
           purpose: form.purpose.trim(),
           remarks: form.remarks || "",
           entry_date: form.entry_date,
@@ -740,7 +742,6 @@ export default function FinanceEntryForm({
       return;
     }
 
-    // ---------- NEW: one or more department rows ----------
     for (let i = 0; i < corpusRows.length; i += 1) {
       const row = corpusRows[i];
       const n = i + 1;
@@ -749,6 +750,7 @@ export default function FinanceEntryForm({
       if (!Number.isFinite(amt) || amt <= 0) { toast.error(`Row ${n}: enter a valid amount.`); return; }
       if (!row.purpose.trim()) { toast.error(`Row ${n}: purpose is required.`); return; }
     }
+    if (!form.payment_type) { toast.error("Select a payment type."); return; }
 
     setSaving(true);
     try {
@@ -759,10 +761,12 @@ export default function FinanceEntryForm({
         client_name: form.client_name || "",
         generated_by: form.generated_by || "",
         remarks: form.remarks || "",
+        payment_type: form.payment_type || null,
         entries: corpusRows.map((row) => ({
           exec_department: row.exec_department,
           amount: Number(row.amount),
           purpose: row.purpose.trim(),
+          payment_type: form.payment_type || null,
         })),
       };
       const res = await api.post(url, body);
@@ -783,7 +787,6 @@ export default function FinanceEntryForm({
 
     if (isCapital) return submitCapitalEntry();
 
-    // Block Corpus Fund (any entry type) for non-Corporate departments
     if (isCorpusFundRestricted) {
       toast.error("Corpus Fund must be entered by Corporate Management only.");
       return;
@@ -812,6 +815,9 @@ export default function FinanceEntryForm({
       }
       if (totalAmount <= 0) { toast.error("Total amount must be > 0."); return; }
       const paid = parseFloat(ledgerPaid) || 0;
+      if (paid > 0 && !form.payment_type) {
+        toast.error("Select a payment type for the paid amount."); return;
+      }
 
       setSaving(true);
       try {
@@ -826,6 +832,7 @@ export default function FinanceEntryForm({
           fd.append("entry_date", form.entry_date);
           fd.append("total_amount", String(totalAmount));
           fd.append("paid", String(paid));
+          fd.append("payment_type", form.payment_type || "");
           fd.append("remarks", form.remarks || "");
           if (invoiceFile) fd.append("invoice", invoiceFile);
           if (removeInvoice) fd.append("remove_invoice", "true");
@@ -839,6 +846,7 @@ export default function FinanceEntryForm({
             entry_date: form.entry_date,
             total_amount: totalAmount,
             paid,
+            payment_type: form.payment_type || null,
             remarks: form.remarks || "",
           };
         }
@@ -878,6 +886,7 @@ export default function FinanceEntryForm({
         }
       }
       if (!valid) return;
+      if (!form.payment_type) { toast.error("Select a payment type."); return; }
       return submitSalaryEntries();
     }
 
@@ -921,6 +930,8 @@ export default function FinanceEntryForm({
         toast.error("Please enter a valid amount."); return;
       }
     }
+
+    if (!form.payment_type) { toast.error("Please select a payment type."); return; }
 
     submitSingleEntry(cleanItems);
   };
@@ -968,6 +979,7 @@ export default function FinanceEntryForm({
       } else {
         body = { ...form };
         body.amount = parseFloat(form.amount) || 0;
+        body.payment_type = form.payment_type || null;
         if (showCategoryFields) {
           body.employee_name = form.employee_name || null;
           body.purpose = form.purpose || null;
@@ -1039,6 +1051,7 @@ export default function FinanceEntryForm({
           salary_amount: salaryAmount,
           allowance_amount: allowanceAmount,
           amount: salaryAmount + allowanceAmount,
+          payment_type: form.payment_type || null,
           remarks: emp.remarks || "",
           entry_date: form.entry_date,
         };
@@ -1051,6 +1064,7 @@ export default function FinanceEntryForm({
             employee_name: emp.employee_name.trim(),
             salary_amount: parseFloat(emp.salary_amount) || 0,
             allowance_amount: parseFloat(emp.allowance_amount) || 0,
+            payment_type: form.payment_type || null,
             remarks: emp.remarks || "",
             entry_date: form.entry_date,
           })),
@@ -1089,6 +1103,16 @@ export default function FinanceEntryForm({
           <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
                  className="form-control" required />
         </div>
+        <div className="form-group">
+          <label className="form-label">Payment Type <span style={{ color: "red" }}>*</span></label>
+          <select name="payment_type" value={form.payment_type || ""} onChange={handleChange}
+                  className="form-control" required>
+            <option value="">Select payment type</option>
+            {PAYMENT_TYPES.map((pt) => (
+              <option key={pt} value={pt}>{pt}</option>
+            ))}
+          </select>
+        </div>
       </div>
       <div className="form-group">
         <label className="form-label">Purpose <span style={{ color: "red" }}>*</span></label>
@@ -1111,7 +1135,6 @@ export default function FinanceEntryForm({
   };
 
   const renderCorpusFundFields = () => {
-    // ---------- EDIT: single entry ----------
     if (isEditingExisting) {
       const targetLabel = deptLabel(form.exec_department);
       return (
@@ -1158,6 +1181,16 @@ export default function FinanceEntryForm({
               <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
                      className="form-control" required />
             </div>
+            <div className="form-group">
+              <label className="form-label">Payment Type <span style={{ color: "red" }}>*</span></label>
+              <select name="payment_type" value={form.payment_type || ""}
+                      onChange={handleChange} className="form-control" required>
+                <option value="">Select payment type</option>
+                {PAYMENT_TYPES.map((pt) => (
+                  <option key={pt} value={pt}>{pt}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="form-group">
@@ -1176,7 +1209,6 @@ export default function FinanceEntryForm({
       );
     }
 
-    // ---------- NEW: split across departments ----------
     return (
       <>
         <div className="form-group">
@@ -1261,10 +1293,22 @@ export default function FinanceEntryForm({
           </div>
         </div>
 
-        <div className="form-group">
-          <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
-          <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
-                 className="form-control" required />
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
+            <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
+                   className="form-control" required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Payment Type <span style={{ color: "red" }}>*</span></label>
+            <select name="payment_type" value={form.payment_type || ""}
+                    onChange={handleChange} className="form-control" required>
+              <option value="">Select payment type</option>
+              {PAYMENT_TYPES.map((pt) => (
+                <option key={pt} value={pt}>{pt}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="form-group">
@@ -1543,6 +1587,16 @@ export default function FinanceEntryForm({
                    }}
                    placeholder="0.00" className="form-control" />
           </div>
+          <div className="form-group">
+            <label className="form-label">Payment Type</label>
+            <select name="payment_type" value={form.payment_type || ""}
+                    onChange={handleChange} className="form-control">
+              <option value="">Select payment type</option>
+              {PAYMENT_TYPES.map((pt) => (
+                <option key={pt} value={pt}>{pt}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {!isEditingLedger && (
@@ -1635,7 +1689,6 @@ export default function FinanceEntryForm({
                   ))}
               </select>
             </div>
-            {/* Category stays visible for Expenses → Corpus Fund so it can be changed back */}
             {!isCapital && !isLegacyCorpusType && (
               <div className="form-group">
                 <label className="form-label">Category</label>
@@ -1723,6 +1776,16 @@ export default function FinanceEntryForm({
                   <input type="date" name="entry_date" value={form.entry_date}
                          onChange={handleChange} className="form-control" required />
                 </div>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">Payment Type <span style={{ color: "red" }}>*</span></label>
+                  <select name="payment_type" value={form.payment_type || ""}
+                          onChange={handleChange} className="form-control" required>
+                    <option value="">Select payment type</option>
+                    {PAYMENT_TYPES.map((pt) => (
+                      <option key={pt} value={pt}>{pt}</option>
+                    ))}
+                  </select>
+                </div>
                 {options.show_gst_tax && (
                   <div className="form-group" style={{ flex: 1 }}>
                     <label className="form-label">GST Tax (%)</label>
@@ -1767,7 +1830,7 @@ export default function FinanceEntryForm({
             </div>
           )}
 
-          {/* ============ AMOUNT + DATE (standard) ============ */}
+          {/* ============ AMOUNT + DATE + PAYMENT TYPE (standard) ============ */}
           {!isCapital &&
            !isCorpusFundType &&
            !isCorpusFundRestricted &&
@@ -1784,6 +1847,16 @@ export default function FinanceEntryForm({
                 <label className="form-label">Date</label>
                 <input type="date" name="entry_date" value={form.entry_date}
                        onChange={handleChange} className="form-control" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Payment Type <span style={{ color: "red" }}>*</span></label>
+                <select name="payment_type" value={form.payment_type || ""}
+                        onChange={handleChange} className="form-control" required>
+                  <option value="">Select payment type</option>
+                  {PAYMENT_TYPES.map((pt) => (
+                    <option key={pt} value={pt}>{pt}</option>
+                  ))}
+                </select>
               </div>
             </div>
           )}
@@ -1886,6 +1959,16 @@ export default function FinanceEntryForm({
                   <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
                   <input type="date" name="entry_date" value={form.entry_date}
                          onChange={handleChange} className="form-control" required />
+                </div>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">Payment Type <span style={{ color: "red" }}>*</span></label>
+                  <select name="payment_type" value={form.payment_type || ""}
+                          onChange={handleChange} className="form-control" required>
+                    <option value="">Select payment type</option>
+                    {PAYMENT_TYPES.map((pt) => (
+                      <option key={pt} value={pt}>{pt}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div style={{ marginTop: 12, textAlign: "right", fontWeight: "bold" }}>

@@ -367,6 +367,7 @@ def _get_medtech_entries_with_ledger():
             "entry_date": le.entry_date.isoformat(), "remarks": le.remarks,
             "customer_name": le.customer_name, "paid": float(le.paid or 0),
             "balance": float(le.balance or 0), "_type": "ledger",
+            "payment_type": le.payment_type,             # <--- ADDED HERE
             "created_at": le.created_at.isoformat() if le.created_at else None,
         })
 
@@ -578,6 +579,7 @@ def _get_everglades_entries_with_ledger():
             "entry_date": le.entry_date.isoformat(), "remarks": le.remarks,
             "customer_name": le.customer_name, "paid": float(le.paid or 0),
             "balance": float(le.balance or 0), "_type": "ledger",
+            "payment_type": le.payment_type,            # <--- ADDED HERE
             "created_at": le.created_at.isoformat() if le.created_at else None,
         })
 
@@ -810,6 +812,7 @@ def _get_caredx_entries_and_summary(for_summary=False):
                     "employee_name": s.employee_name,
                     "purpose": s.remarks,
                     "vehicle_type": s.vehicle_type,
+                    "payment_type": s.payment_type,  # <--- ADDED HERE
                     "_isSalary": not is_corpus,      # Corpus Fund is NOT a salary
                     "_isCorpus": is_corpus,
                 })
@@ -1177,6 +1180,7 @@ def department_import(department):
             gst_number=row.get("gst_number"),
             amount=row["amount"],
             remarks=row.get("remarks"),
+            payment_type=row.get("payment_type"), # <--- ADDED HERE
             entry_date=row["entry_date"],
             created_by_id=created_by_id,
         ))
