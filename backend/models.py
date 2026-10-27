@@ -21,8 +21,7 @@ ENTRY_TYPES = ["Income", "Expenses", "Capital", "Corpus Fund"]
 
 # ---------- PAYMENT TYPES ----------
 # "Cash + UPI" is used by Caredx lab entries to record split payments.
-PAYMENT_TYPES = ["UPI", "Cash", "Card", "Cash + UPI"]
-
+PAYMENT_TYPES = ["UPI", "Cash", "Card", "Cheque", "NEFT", "Cash + UPI"]
 # ---------- STANDARD CATEGORIES (used by ALL departments for Income & Expenses) ----------
 STANDARD_CATEGORIES = [
     "Salary & Payrolls",

@@ -32,6 +32,8 @@ const PAYMENT_TYPE_OPTIONS = [
   { value: "UPI", label: "UPI (Online)" },
   { value: "Cash + UPI", label: "Cash + UPI" },
   { value: "Card", label: "Card" },
+  { value: "Cheque", label: "Cheque" },
+  { value: "NEFT", label: "NEFT" },
 ];
 
 // Which amount fields are relevant for a given payment type

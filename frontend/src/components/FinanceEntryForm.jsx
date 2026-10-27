@@ -97,8 +97,8 @@ const ITEM_CATEGORIES = ["Products & Innovation"];
 const CORPUS_FUND = "Corpus Fund";
 
 // Payment options
-const PAYMENT_TYPES = ["UPI", "Cash", "Card"];
-
+// Payment options
+const PAYMENT_TYPES = ["UPI", "Cash", "Card", "Cheque", "NEFT"];
 const STANDARD_CATEGORY_FIELDS = {
   "Salary & Payrolls": {
     showEmployeeName: true, showVehicleType: false,
