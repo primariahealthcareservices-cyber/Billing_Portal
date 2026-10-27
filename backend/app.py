@@ -24,16 +24,6 @@ def create_app():
     db.init_app(app)
 
     # ── Data migrations (must run inside app context) ───────────────────
-    #   1. ensure_schema_columns()           → adds any missing DB columns
-    #      (fixes "Unknown column" errors caused by db.create_all() never
-    #       altering existing tables)
-    #   2. ensure_entry_type_is_varchar()    → converts finance_entries.entry_type
-    #      from ENUM → VARCHAR(20) so "Corpus Fund" is accepted
-    #   3. ensure_user_role_is_varchar()     → converts users.role from ENUM
-    #      → VARCHAR(50) so new roles like "Everglades" / "SalesEnterprise"
-    #      are accepted (fixes MySQL 1265 "Data truncated for column 'role'")
-    #   4. migrate_all_categories()          → rewrites legacy category names
-    #      to the standardized 9 categories. Fail-safe — never blocks boot.
     with app.app_context():
         ensure_schema_columns()
         ensure_entry_type_is_varchar()
@@ -42,7 +32,7 @@ def create_app():
 
     JWTManager(app)
 
-    # ── CORS: allow the FinanceHub Vite dev server on 5174 ──────────────
+    # ── CORS ────────────────────────────────────────────────────────────
     CORS(app, resources={
         r"/api/*": {
             "origins": [
@@ -94,12 +84,6 @@ def create_app():
     app.register_blueprint(notifications_bp)
 
     # ── Create any missing tables (safe, non-destructive) ───────────────
-    # We import the new models here so SQLAlchemy registers them with the
-    # metadata BEFORE db.create_all() runs. This creates:
-    #   - notifications
-    #   - copper_book_requests
-    #   - copper_book_assignees
-    #   - copper_book_attachments
     with app.app_context():
         from models import Notification  # noqa: F401
         from models_copperbook import (  # noqa: F401

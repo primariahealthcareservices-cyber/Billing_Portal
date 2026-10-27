@@ -25,6 +25,7 @@ from models import (
     FinanceEntry,
     DEPARTMENT_CONFIG,
     SALARY_CATEGORY,
+    PAYMENT_TYPES,          # ← NEW: shared Cash / UPI / Card list
 )
 
 from utils import role_required
@@ -83,8 +84,6 @@ def _apply_date_filters(query, date_column):
     if end_date:
         query = query.filter(date_column <= end_date)
     return query
-
-
 def _lab_entry_from_payload(data, existing=None):
     errors = []
     entry_date = _parse_date(data.get("entry_date"))
@@ -106,6 +105,8 @@ def _lab_entry_from_payload(data, existing=None):
         "rmp",
         "salaries_expense",
         "referral_amount",
+        "referral_cash",       # NEW
+        "referral_online",     # NEW
         "sales",
     ]
 
@@ -121,6 +122,24 @@ def _lab_entry_from_payload(data, existing=None):
             errors.append(f"{field} must be a number.")
             parsed_numbers[field] = 0.0
 
+    # ── payment_type normalisation (main + referral) ──────────────────
+    def _normalize_ptype(raw_value, field_name):
+        raw = (raw_value or "").strip()
+        if not raw:
+            return None
+        for allowed in PAYMENT_TYPES:
+            if raw.lower() == allowed.lower():
+                return allowed
+        errors.append(
+            f"{field_name} must be one of: " + ", ".join(PAYMENT_TYPES) + "."
+        )
+        return None
+
+    payment_type = _normalize_ptype(data.get("payment_type"), "payment_type")
+    referral_payment_type = _normalize_ptype(
+        data.get("referral_payment_type"), "referral_payment_type"
+    )
+
     kwargs = {
         "entry_date": entry_date,
         "patient_name": patient_name,
@@ -128,6 +147,8 @@ def _lab_entry_from_payload(data, existing=None):
         "employee_name": (data.get("employee_name") or "").strip() or None,
         "expense_details": (data.get("expense_details") or "").strip() or None,
         "referral_by": (data.get("referral_by") or "").strip() or None,
+        "payment_type": payment_type,
+        "referral_payment_type": referral_payment_type,   # NEW
         **parsed_numbers,
     }
     return kwargs, errors

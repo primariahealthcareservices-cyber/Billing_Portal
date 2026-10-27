@@ -20,7 +20,8 @@ ROLES = [
 ENTRY_TYPES = ["Income", "Expenses", "Capital", "Corpus Fund"]
 
 # ---------- PAYMENT TYPES ----------
-PAYMENT_TYPES = ["UPI", "Cash", "Card"]
+# "Cash + UPI" is used by Caredx lab entries to record split payments.
+PAYMENT_TYPES = ["UPI", "Cash", "Card", "Cash + UPI"]
 
 # ---------- STANDARD CATEGORIES (used by ALL departments for Income & Expenses) ----------
 STANDARD_CATEGORIES = [
@@ -294,7 +295,7 @@ class FinanceEntry(db.Model):
     gst_tax_percent = db.Column(db.Numeric(5, 2), nullable=True)
     gst_tax_amount = db.Column(db.Numeric(14, 2), nullable=True, default=0)
     tax_invoice_number = db.Column(db.String(50), nullable=True)
-    payment_type = db.Column(db.String(20), nullable=True)          # ← NEW
+    payment_type = db.Column(db.String(20), nullable=True)
 
     exec_department = db.Column(db.String(50), nullable=True)
     employee_name = db.Column(db.String(150), nullable=True)
@@ -342,7 +343,7 @@ class FinanceEntry(db.Model):
             "gst_tax_percent": float(self.gst_tax_percent) if self.gst_tax_percent is not None else None,
             "gst_tax_amount": float(self.gst_tax_amount) if self.gst_tax_amount is not None else None,
             "tax_invoice_number": self.tax_invoice_number,
-            "payment_type": self.payment_type,                       # ← NEW
+            "payment_type": self.payment_type,
             "exec_department": self.exec_department,
             "employee_name": self.employee_name,
             "salary_amount": float(self.salary_amount) if self.salary_amount is not None else None,
@@ -370,7 +371,7 @@ class FinanceEntry(db.Model):
 @event.listens_for(FinanceEntry, 'before_update')
 def auto_assign_payment_type(mapper, connection, target):
     """
-    Automatically extracts 'payment_type' from the incoming Flask request 
+    Automatically extracts 'payment_type' from the incoming Flask request
     and assigns it to the model before saving.
     Works for JSON, FormData, and batch inserts.
     """
@@ -379,23 +380,19 @@ def auto_assign_payment_type(mapper, connection, target):
 
     ptype = None
 
-    # 1. Check standard JSON payload
     if request.is_json:
         data = request.get_json(silent=True) or {}
         ptype = data.get('payment_type')
-        
-        # 2. If it's a batch insert (e.g. [{...}, {...}]), find the matching row
+
         if not ptype and 'entries' in data and isinstance(data['entries'], list):
             for row in data['entries']:
                 if row.get('payment_type'):
                     ptype = row.get('payment_type')
                     break
 
-    # 3. Check FormData (multipart uploads for invoices)
     if not ptype and request.form:
         ptype = request.form.get('payment_type')
 
-    # 4. Assign the value if found
     if ptype:
         target.payment_type = str(ptype).strip()
 # ===========================================================================
@@ -430,7 +427,7 @@ class MedTechLedger(db.Model):
     entry_date = db.Column(db.Date, nullable=False)
     total_amount = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     paid = db.Column(db.Numeric(14, 2), nullable=False, default=0)
-    payment_type = db.Column(db.String(20), nullable=True)          
+    payment_type = db.Column(db.String(20), nullable=True)
     balance = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     remarks = db.Column(db.Text, nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
@@ -447,7 +444,7 @@ class MedTechLedger(db.Model):
             "entry_date": self.entry_date.isoformat() if self.entry_date else None,
             "total_amount": float(self.total_amount or 0),
             "paid": float(self.paid or 0),
-            "payment_type": self.payment_type,                       
+            "payment_type": self.payment_type,
             "balance": float(self.balance or 0),
             "remarks": self.remarks,
             "invoice_url": f"/api/files/invoices/{self.invoice_filename}" if self.invoice_filename else None,
@@ -465,7 +462,7 @@ class EvergladesLedger(db.Model):
     entry_date = db.Column(db.Date, nullable=False)
     total_amount = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     paid = db.Column(db.Numeric(14, 2), nullable=False, default=0)
-    payment_type = db.Column(db.String(20), nullable=True)          
+    payment_type = db.Column(db.String(20), nullable=True)
     balance = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     remarks = db.Column(db.Text, nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
@@ -482,7 +479,7 @@ class EvergladesLedger(db.Model):
             "entry_date": self.entry_date.isoformat() if self.entry_date else None,
             "total_amount": float(self.total_amount or 0),
             "paid": float(self.paid or 0),
-            "payment_type": self.payment_type,                       
+            "payment_type": self.payment_type,
             "balance": float(self.balance or 0),
             "remarks": self.remarks,
             "invoice_url": f"/api/files/invoices/{self.invoice_filename}" if self.invoice_filename else None,
@@ -510,6 +507,15 @@ class CaredxLabEntry(db.Model):
     referral_by = db.Column(db.String(150), nullable=True)
     referral_amount = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     sales = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+
+    # Payment type for the main "Total Amount Paid" (Cash / UPI / Cash + UPI / Card)
+    payment_type = db.Column(db.String(20), nullable=True)
+
+    # Payment type for the "Referral Amount" (Cash / UPI / Cash + UPI / Card)
+    referral_payment_type = db.Column(db.String(20), nullable=True)
+    referral_cash = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    referral_online = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -531,11 +537,17 @@ class CaredxLabEntry(db.Model):
             "referral_by": self.referral_by,
             "referral_amount": float(self.referral_amount or 0),
             "sales": float(self.sales or 0),
+            "payment_type": self.payment_type,
+            "referral_payment_type": self.referral_payment_type,
+            "referral_cash": float(self.referral_cash or 0),
+            "referral_online": float(self.referral_online or 0),
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
 
 # ---------- CaredxExpense model ----------
+# ⚠️  THIS BLOCK WAS ACCIDENTALLY MISSING FROM THE LAST PASTE — it is what
+#     `routes/caredx.py` and `migrate_all_categories()` were failing to import.
 class CaredxExpense(db.Model):
     __tablename__ = "caredx_expenses"
     id = db.Column(db.Integer, primary_key=True)
@@ -664,15 +676,19 @@ def ensure_schema_columns():
         ("caredx_expenses", "purpose",         "TEXT NULL"),
         ("caredx_expenses", "vehicle_type",    "VARCHAR(100) NULL"),
 
-        ("caredx_lab_entries", "cash",               "DECIMAL(14,2) NOT NULL DEFAULT 0"),
-        ("caredx_lab_entries", "online",             "DECIMAL(14,2) NOT NULL DEFAULT 0"),
-        ("caredx_lab_entries", "paid_to_other_labs", "DECIMAL(14,2) NOT NULL DEFAULT 0"),
-        ("caredx_lab_entries", "rmp",                "DECIMAL(14,2) NOT NULL DEFAULT 0"),
-        ("caredx_lab_entries", "salaries_expense",   "DECIMAL(14,2) NOT NULL DEFAULT 0"),
-        ("caredx_lab_entries", "expense_details",    "TEXT NULL"),
-        ("caredx_lab_entries", "referral_by",        "VARCHAR(150) NULL"),
-        ("caredx_lab_entries", "referral_amount",    "DECIMAL(14,2) NOT NULL DEFAULT 0"),
-        ("caredx_lab_entries", "sales",              "DECIMAL(14,2) NOT NULL DEFAULT 0"),
+        ("caredx_lab_entries", "cash",                  "DECIMAL(14,2) NOT NULL DEFAULT 0"),
+        ("caredx_lab_entries", "online",                "DECIMAL(14,2) NOT NULL DEFAULT 0"),
+        ("caredx_lab_entries", "paid_to_other_labs",    "DECIMAL(14,2) NOT NULL DEFAULT 0"),
+        ("caredx_lab_entries", "rmp",                   "DECIMAL(14,2) NOT NULL DEFAULT 0"),
+        ("caredx_lab_entries", "salaries_expense",      "DECIMAL(14,2) NOT NULL DEFAULT 0"),
+        ("caredx_lab_entries", "expense_details",       "TEXT NULL"),
+        ("caredx_lab_entries", "referral_by",           "VARCHAR(150) NULL"),
+        ("caredx_lab_entries", "referral_amount",       "DECIMAL(14,2) NOT NULL DEFAULT 0"),
+        ("caredx_lab_entries", "sales",                 "DECIMAL(14,2) NOT NULL DEFAULT 0"),
+        ("caredx_lab_entries", "payment_type",          "VARCHAR(20) NULL"),
+        ("caredx_lab_entries", "referral_payment_type", "VARCHAR(20) NULL"),
+        ("caredx_lab_entries", "referral_cash",         "DECIMAL(14,2) NOT NULL DEFAULT 0"),
+        ("caredx_lab_entries", "referral_online",       "DECIMAL(14,2) NOT NULL DEFAULT 0"),
 
         ("medtech_ledger", "payment_type",          "VARCHAR(20) NULL"),
         ("medtech_ledger", "invoice_filename",      "VARCHAR(255) NULL"),

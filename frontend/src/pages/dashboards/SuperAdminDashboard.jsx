@@ -325,6 +325,40 @@ const matchesDataView = (entry, view) => {
 
 const CATEGORY_FETCH_LIMIT = 1000;
 
+/* ---------------------------------------------------------------------------
+   Payment-type badge style helper (used in both lab + expense tables)
+--------------------------------------------------------------------------- */
+const getPaymentBadgeStyle = (paymentType) => {
+  switch (paymentType) {
+    case "UPI":
+      return { backgroundColor: "#e0e7ff", color: "#3730a3" };
+    case "Cash":
+      return { backgroundColor: "#dcfce7", color: "#166534" };
+    case "Card":
+      return { backgroundColor: "#fee2e2", color: "#991b1b" };
+    default:
+      return { backgroundColor: "#f3f4f6", color: "#374151" };
+  }
+};
+
+const paymentBadgeStyle = {
+  padding: "2px 8px",
+  borderRadius: "12px",
+  fontSize: "12px",
+  fontWeight: "600",
+  display: "inline-block",
+};
+
+const renderPaymentBadge = (paymentType) => {
+  if (!paymentType) return "—";
+  const palette = getPaymentBadgeStyle(paymentType);
+  return (
+    <span style={{ ...paymentBadgeStyle, ...palette }}>
+      {paymentType}
+    </span>
+  );
+};
+
 export default function SuperAdminDashboard() {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -919,19 +953,6 @@ export default function SuperAdminDashboard() {
 
   /* ---------------------------------------------------------------------------
      Category panel
-
-     Corporate Management  → 6 columns (1×6), 12 buttons over 2 rows:
-        Row 1: All Categories · Salary & Payrolls · Referrals & Deposits ·
-               Products & Innovation · General Operations · Camps & Events
-        Row 2: Marketing & Promos · Travel & Hospitality · Miscellaneous ·
-               Corpus Fund · Capital · Clear
-
-     Other departments     → 5 columns (1×5), 10 buttons over 2 rows
-        (no Capital, no Clear):
-        Row 1: All Categories · Salary & Payrolls · Referrals & Deposits ·
-               Products & Innovation · General Operations
-        Row 2: Camps & Events · Marketing & Promos · Travel & Hospitality ·
-               Miscellaneous · Corpus Fund
   --------------------------------------------------------------------------- */
   const renderCategoryPanel = () => {
     if (categoryPanelOptions.length === 0) return null;
@@ -1646,33 +1667,53 @@ export default function SuperAdminDashboard() {
                       )}
                     </p>
                     <div className="card table-wrap">
-                      <table className="data-table">
-                        <thead>
-                          <tr>
-                            <th>Date</th><th>Patient</th><th>Test</th><th>Employee</th>
-                            <th className="text-right">Total Paid</th><th>Referral By</th>
-                            <th className="text-right">Referral Amount</th><th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {visibleCaredxLabEntries.map((e, i) => (
-                            <tr key={e.id ?? `lab-${i}`}>
-                              <td style={{ whiteSpace: "nowrap" }}>{e.entry_date}</td>
-                              <td>{e.patient_name}</td>
-                              <td>{e.test_name}</td>
-                              <td>{e.employee_name || "—"}</td>
-                              <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(e.total_amount_paid)}</td>
-                              <td>{e.referral_by || "—"}</td>
-                              <td className="text-right">{formatCurrency(e.referral_amount)}</td>
-                              <td>
-                                <button type="button" className="btn-icon" onClick={() => setViewEntry({ type: "lab", data: e })} title="View">
-                                  <Eye size={15} />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                   <table className="data-table">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Patient</th>
+      <th>Test</th>
+      <th>Employee</th>
+      <th className="text-right">Total Paid</th>
+      <th>Payment Type</th>
+      <th>Referral By</th>
+      <th className="text-right">Referral Amount</th>
+      <th>Referral Payment Type</th>
+      <th style={{ minWidth: remarkCellStyle.minWidth }}>Remarks</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {visibleCaredxLabEntries.map((e, i) => (
+      <tr key={e.id ?? `lab-${i}`}>
+        <td style={{ whiteSpace: "nowrap" }}>{e.entry_date}</td>
+        <td>{e.patient_name}</td>
+        <td>{e.test_name}</td>
+        <td>{e.employee_name || "—"}</td>
+        <td className="text-right" style={{ fontWeight: 600 }}>
+          {formatCurrency(e.total_amount_paid)}
+        </td>
+        <td>{renderPaymentBadge(e.payment_type)}</td>
+        <td>{e.referral_by || "—"}</td>
+        <td className="text-right">{formatCurrency(e.referral_amount)}</td>
+        <td>{renderPaymentBadge(e.referral_payment_type)}</td>
+        <td style={remarkCellStyle}>
+          <RemarkCell text={e.expense_details || ""} />
+        </td>
+        <td>
+          <button
+            type="button"
+            className="btn-icon"
+            onClick={() => setViewEntry({ type: "lab", data: e })}
+            title="View"
+          >
+            <Eye size={15} />
+          </button>
+        </td>
+      </tr>
+    ))}
+  </tbody>
+</table>
                       {renderPagination()}
                     </div>
                   </div>
@@ -1711,25 +1752,13 @@ export default function SuperAdminDashboard() {
                             const corpus = isCorpusEntry(e);
                             const salary = !corpus && isSalaryEntry(e);
                             const isFinanceRow = corpus || salary; // both come from FinanceEntry
-                            
-                            // Payment Badge styling helper
-                            const pBadgeBg = e.payment_type === "UPI" ? "#e0e7ff" : e.payment_type === "Cash" ? "#dcfce7" : e.payment_type === "Card" ? "#fee2e2" : "#f3f4f6";
-                            const pBadgeColor = e.payment_type === "UPI" ? "#3730a3" : e.payment_type === "Cash" ? "#166534" : e.payment_type === "Card" ? "#991b1b" : "#374151";
 
                             return (
                               <tr key={`${corpus ? "c" : salary ? "s" : "e"}-${e.id ?? e._key ?? i}-${i}`}>
                                 <td style={{ whiteSpace: "nowrap" }}>{e.expense_date || e.entry_date}</td>
                                 <td>{corpus ? CORPUS_FUND_LABEL : salary ? "Salary & Payrolls" : e.category}</td>
                                 <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(entryAmount(e))}</td>
-                                <td>
-                                  {e.payment_type ? (
-                                    <span style={{ padding: "2px 8px", borderRadius: "12px", fontSize: "12px", fontWeight: "600", backgroundColor: pBadgeBg, color: pBadgeColor, display: "inline-block" }}>
-                                      {e.payment_type}
-                                    </span>
-                                  ) : (
-                                    "—"
-                                  )}
-                                </td>
+                                <td>{renderPaymentBadge(e.payment_type)}</td>
                                 <td style={remarkCellStyle}>
                                   <RemarkCell
                                     text={e.remarks || (e.employee_name ? `Salary for ${e.employee_name}` : "")}
