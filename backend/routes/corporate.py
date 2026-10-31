@@ -50,6 +50,28 @@ def _to_float_or_none(value):
         return None
 
 
+def _clean_str(value):
+    """Trim a value and return None if the result is empty."""
+    if value is None:
+        return None
+    s = str(value).strip()
+    return s or None
+
+
+def _norm_exec_dept(value):
+    """
+    Normalize exec_department input:
+      - strips whitespace
+      - returns None for "" / null / whitespace-only
+      - raises ValueError for non-string garbage
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("exec_department must be a string.")
+    return value.strip() or None
+
+
 def _is_corporate_corpus_expense(entry):
     """Corporate-side row: Expenses -> Corpus Fund."""
     return (
@@ -108,9 +130,6 @@ def create_entry():
         target_dept = (data.get("exec_department") or data.get("department") or "").strip()
 
         # ========== EXPENSES -> CORPUS FUND (Corporate expense + dept Corpus Fund) ==========
-        # Triggered by:
-        #   1. entry_type = "Expenses", category = "Corpus Fund"
-        #   2. entry_type = "Corpus Fund" (legacy payload shape)
         is_corpus_fund_request = (
             entry_type_in == CORPUS_FUND_TYPE
             or (entry_type_in == "Expenses" and category_in == CORPUS_FUND_CATEGORY)
@@ -167,8 +186,8 @@ def create_entry():
         amount = data.get("amount")
         remarks = data.get("remarks", "")
         entry_date = _parse_date(data.get("entry_date"), default=date.today())
-        exec_department = data.get("exec_department") or None
-        employee_name = (data.get("employee_name") or "").strip() or None
+        exec_department = _clean_str(data.get("exec_department"))
+        employee_name = _clean_str(data.get("employee_name"))
         salary_amount = _to_float_or_none(data.get("salary_amount"))
         allowance_amount = _to_float_or_none(data.get("allowance_amount"))
 
@@ -230,21 +249,7 @@ def create_entry():
 
 
 def _create_corpus_fund_entry(data):
-    """
-    Expenses -> Corpus Fund, entered from the Corporate dashboard.
-
-    Creates TWO linked rows in one transaction:
-
-      1. Corporate row   : department="Corporate", entry_type="Expenses",
-                           category="Corpus Fund", exec_department=<target dept>
-                           -> counts in Corporate's Expenses.
-
-      2. Department row  : department=<target dept>, entry_type="Corpus Fund",
-                           category="Corpus Fund", linked_entry_id=<corporate row id>
-                           -> shows as a separate Corpus Fund in that department
-                              (not counted in its Income / Expenses / Capital).
-    """
-    # Several departments in one submit -> batch handler
+    """Expenses -> Corpus Fund, entered from the Corporate dashboard."""
     if isinstance(data.get("entries"), list):
         return _create_corpus_fund_batch(data)
 
@@ -282,7 +287,6 @@ def _create_corpus_fund_entry(data):
     user_id = get_jwt_identity()
 
     try:
-        # 1) Corporate-side expense
         corporate_row = FinanceEntry(
             department=DEPARTMENT,
             entry_type="Expenses",
@@ -297,9 +301,8 @@ def _create_corpus_fund_entry(data):
             created_by_id=user_id,
         )
         db.session.add(corporate_row)
-        db.session.flush()  # get corporate_row.id
+        db.session.flush()
 
-        # 2) Department-side separate Corpus Fund
         dept_row = FinanceEntry(
             department=target_dept,
             entry_type=CORPUS_FUND_TYPE,
@@ -335,24 +338,7 @@ def _create_corpus_fund_entry(data):
 
 
 def _create_corpus_fund_batch(data):
-    """
-    Split one Corpus Fund expense across several departments.
-
-    Payload:
-      {
-        "entry_type": "Expenses", "category": "Corpus Fund",
-        "entry_date": "YYYY-MM-DD", "generated_by": "...", "client_name": "...",
-        "remarks": "...",                     # shared (row-level overrides it)
-        "entries": [
-          {"exec_department": "IT", "amount": 50000, "purpose": "..."},
-          {"exec_department": "PCM", "amount": 30000, "purpose": "..."}
-        ]
-      }
-
-    Each row creates one Corporate Expenses/Corpus Fund entry plus one linked
-    "Corpus Fund" entry in that department. All-or-nothing: if any row is
-    invalid, nothing is saved.
-    """
+    """Split one Corpus Fund expense across several departments."""
     rows = data.get("entries") or []
     if not rows:
         return jsonify({"message": "Add at least one department."}), 400
@@ -496,8 +482,8 @@ def _create_capital_entry(data):
 
 def _validate_salary_entry(emp_data):
     errors = []
-    exec_department = emp_data.get("exec_department")
-    employee_name = (emp_data.get("employee_name") or "").strip()
+    exec_department = _clean_str(emp_data.get("exec_department"))
+    employee_name = _clean_str(emp_data.get("employee_name"))
     salary_amount = _to_float_or_none(emp_data.get("salary_amount"))
     allowance_amount = _to_float_or_none(emp_data.get("allowance_amount"))
 
@@ -530,8 +516,8 @@ def _create_single_salary_entry(emp_data):
         remarks=emp_data.get("remarks", ""),
         entry_date=_parse_date(emp_data.get("entry_date"), default=date.today()),
         created_by_id=get_jwt_identity(),
-        exec_department=emp_data.get("exec_department"),
-        employee_name=(emp_data.get("employee_name") or "").strip(),
+        exec_department=_clean_str(emp_data.get("exec_department")),
+        employee_name=_clean_str(emp_data.get("employee_name")),
         salary_amount=salary_amount,
         allowance_amount=allowance_amount,
     )
@@ -589,7 +575,7 @@ def update_entry(entry_id):
     # ---- Capital ----
     if entry.entry_type == "Capital":
         if "client_name" in data:
-            entry.client_name = (data["client_name"] or "").strip() or None
+            entry.client_name = _clean_str(data["client_name"])
         if "amount" in data:
             try:
                 amt = float(data["amount"])
@@ -598,7 +584,7 @@ def update_entry(entry_id):
             except (TypeError, ValueError):
                 pass
         if "purpose" in data:
-            entry.purpose = (data["purpose"] or "").strip() or None
+            entry.purpose = _clean_str(data["purpose"])
         if "entry_date" in data:
             parsed = _parse_date(data["entry_date"])
             if parsed:
@@ -618,7 +604,7 @@ def update_entry(entry_id):
         linked_rows = _linked_dept_rows(entry)
 
         if "exec_department" in data or "department" in data:
-            new_dept = (data.get("exec_department") or data.get("department") or "").strip()
+            new_dept = _clean_str(data.get("exec_department") or data.get("department"))
             if new_dept not in VALID_TRANSFER_TARGETS:
                 return jsonify({
                     "message": f"Department must be one of: {', '.join(VALID_TRANSFER_TARGETS)}."
@@ -638,7 +624,7 @@ def update_entry(entry_id):
             except (TypeError, ValueError):
                 pass
         if "purpose" in data:
-            val = (data["purpose"] or "").strip() or None
+            val = _clean_str(data["purpose"])
             entry.purpose = val
             for row in linked_rows:
                 row.purpose = val
@@ -647,12 +633,12 @@ def update_entry(entry_id):
             for row in linked_rows:
                 row.remarks = data["remarks"]
         if "generated_by" in data:
-            val = (data["generated_by"] or "").strip() or None
+            val = _clean_str(data["generated_by"])
             entry.generated_by = val
             for row in linked_rows:
                 row.generated_by = val
         if "client_name" in data:
-            val = (data["client_name"] or "").strip() or None
+            val = _clean_str(data["client_name"])
             entry.client_name = val
             for row in linked_rows:
                 row.client_name = val
@@ -680,7 +666,7 @@ def update_entry(entry_id):
             except (TypeError, ValueError):
                 pass
         if "purpose" in data:
-            entry.purpose = (data["purpose"] or "").strip() or None
+            entry.purpose = _clean_str(data["purpose"])
         if "remarks" in data:
             entry.remarks = data["remarks"]
         if "entry_date" in data:
@@ -697,6 +683,7 @@ def update_entry(entry_id):
             "message": "Cannot convert an entry to Corpus Fund. Create a new Corpus Fund expense instead."
         }), 400
 
+    # Apply simple field updates first (entry_type / category / strings / date)
     if "entry_type" in data and data["entry_type"] in ENTRY_TYPES:
         entry.entry_type = data["entry_type"]
     if "category" in data:
@@ -704,32 +691,74 @@ def update_entry(entry_id):
         if data["category"] in allowed:
             entry.category = data["category"]
     if "generated_by" in data:
-        entry.generated_by = (data["generated_by"] or "").strip() or None
+        entry.generated_by = _clean_str(data["generated_by"])
     if "client_name" in data:
-        entry.client_name = (data["client_name"] or "").strip() or None
-    if "amount" in data:
-        try:
-            amt = float(data["amount"])
-            if amt > 0:
-                entry.amount = amt
-        except (TypeError, ValueError):
-            pass
+        entry.client_name = _clean_str(data["client_name"])
     if "remarks" in data:
         entry.remarks = data["remarks"]
     if "entry_date" in data:
         parsed = _parse_date(data["entry_date"])
         if parsed:
             entry.entry_date = parsed
+
+    # ------------------------------------------------------------------
+    # exec_department handling (the actual bug fix)
+    # ------------------------------------------------------------------
     if "exec_department" in data:
-        if data["exec_department"] not in EXEC_DEPARTMENTS:
-            return jsonify({"message": f"exec_department must be one of: {', '.join(EXEC_DEPARTMENTS)}."}), 400
-        entry.exec_department = data["exec_department"]
+        try:
+            new_exec = _norm_exec_dept(data.get("exec_department"))
+        except ValueError as exc:
+            return jsonify({"message": str(exc)}), 400
+
+        if new_exec is None:
+            # Empty / whitespace -> clear the field (this was the 400 trigger).
+            entry.exec_department = None
+        elif new_exec not in EXEC_DEPARTMENTS:
+            return jsonify({
+                "message": f"exec_department must be one of: {', '.join(EXEC_DEPARTMENTS)}."
+            }), 400
+        else:
+            entry.exec_department = new_exec
+
+    # employee_name / salary_amount / allowance_amount (used for Salary rows)
     if "employee_name" in data:
-        entry.employee_name = (data["employee_name"] or "").strip() or None
+        entry.employee_name = _clean_str(data["employee_name"])
     if "salary_amount" in data:
         entry.salary_amount = _to_float_or_none(data["salary_amount"])
     if "allowance_amount" in data:
         entry.allowance_amount = _to_float_or_none(data["allowance_amount"])
+
+    # ------------------------------------------------------------------
+    # Salary revalidation + amount sync
+    # ------------------------------------------------------------------
+    if entry.entry_type == "Expenses" and entry.category == SALARY_CATEGORY:
+        sal = entry.salary_amount or 0
+        allow = entry.allowance_amount or 0
+        if not entry.exec_department:
+            return jsonify({"message": "exec_department is required for Salary & Payrolls."}), 400
+        if not entry.employee_name:
+            return jsonify({"message": "employee_name is required for Salary & Payrolls."}), 400
+        if sal <= 0 and allow <= 0:
+            return jsonify({"message": "At least one of Salary or TADA must be greater than 0."}), 400
+        # Keep amount in sync with salary + TADA (unless caller explicitly sent amount)
+        if "amount" not in data:
+            entry.amount = sal + allow
+        else:
+            try:
+                amt = float(data["amount"])
+                if amt > 0:
+                    entry.amount = amt
+            except (TypeError, ValueError):
+                pass
+    else:
+        # Non-salary rows: apply amount if present
+        if "amount" in data:
+            try:
+                amt = float(data["amount"])
+                if amt > 0:
+                    entry.amount = amt
+            except (TypeError, ValueError):
+                pass
 
     db.session.commit()
     print(f"✅ Entry {entry_id} updated.")
@@ -744,7 +773,6 @@ def delete_entry(entry_id):
     if not entry:
         return jsonify({"message": "Entry not found."}), 404
 
-    # Deleting the Corporate Corpus Fund expense also removes the department's copy.
     if _is_corporate_corpus_expense(entry):
         for row in _linked_dept_rows(entry):
             db.session.delete(row)
@@ -764,7 +792,6 @@ def finance_summary():
     total_expenses = sum(float(e.amount) for e in entries if e.entry_type == "Expenses")
     total_capital = sum(float(e.amount) for e in entries if e.entry_type == "Capital")
 
-    # Corpus Fund is part of Corporate Expenses (category), shown separately for info.
     total_corpus_fund = sum(
         float(e.amount) for e in entries
         if e.entry_type == "Expenses" and e.category == CORPUS_FUND_CATEGORY
@@ -790,7 +817,6 @@ def finance_summary():
         by_category.setdefault(e.category, {"category": e.category, "amount": 0})
         by_category[e.category]["amount"] += float(e.amount)
 
-    # Corpus Fund by target department (for a Corporate-side breakdown)
     corpus_by_dept = {}
     for e in entries:
         if e.entry_type == "Expenses" and e.category == CORPUS_FUND_CATEGORY:

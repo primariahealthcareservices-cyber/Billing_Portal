@@ -1,8 +1,26 @@
-mysqldump -u billing_user -p \
-  --no-create-info \
-  --skip-triggers \
-  --complete-insert \
-  billing_portal copper_book_requests \
-  > /tmp/copper_book_requests.sql
+CREATE TABLE `daily_collection_summary` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `summary_date` date NOT NULL,
+  `op_count` int DEFAULT '0',
+  `op_amount` decimal(14,2) DEFAULT '0.00',
+  `op_lab_amount` decimal(14,2) DEFAULT '0.00',
+  `op_radiology_amount` decimal(14,2) DEFAULT '0.00',
+  `ip_count` int DEFAULT '0',
+  `ip_amount` decimal(14,2) DEFAULT '0.00',
+  `ip_lab_amount` decimal(14,2) DEFAULT '0.00',
+  `ip_radiology_amount` decimal(14,2) DEFAULT '0.00',
+  `direct_count` int DEFAULT '0',
+  `direct_amount` decimal(14,2) DEFAULT '0.00',
+  `direct_lab_amount` decimal(14,2) DEFAULT '0.00',
+  `direct_radiology_amount` decimal(14,2) DEFAULT '0.00',
+  `total_amount` decimal(14,2) DEFAULT '0.00',
+  `expenses` decimal(14,2) DEFAULT '0.00',
+  `grand_total` decimal(14,2) DEFAULT '0.00',
+  `due_total` decimal(14,2) DEFAULT '0.00',
+  `credit_due` decimal(14,2) DEFAULT '0.00',
+  `insurance_due` decimal(14,2) DEFAULT '0.00',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `summary_date` (`summary_date`)
+);
 
-  scp /tmp/copper_book_sync.csv ubuntu@13.63.129.179:/tmp/copper_book_sync.csv

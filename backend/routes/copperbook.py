@@ -22,12 +22,9 @@ cb_bp = Blueprint("copperbook", __name__, url_prefix="/api/copperbook")
 BRAND = "Primaria HealthCare Services"
 PAYROLL_CATEGORY = "Salary & Payrolls"
 
-# Capital Equity = requests raised from StaffPortal with
-#   department = "Corporate Management"  AND  category = "Capital Equity"
 CAPITAL_EQUITY_CATEGORY = "Capital Equity"
 CAPITAL_EQUITY_DEPARTMENT = "Corporate Management"
 
-# Business Unit dropdown - exactly these departments (same names as StaffPortal)
 BUSINESS_UNITS = [
     "Office Administration",
     "CareDx",
@@ -39,15 +36,13 @@ BUSINESS_UNITS = [
     "Corporate Management",
 ]
 
-# Largest amount the `amount` column can hold (DECIMAL(12,2) -> 9,999,999,999.99).
-# If you later widen the column, raise this number too.
 MAX_AMOUNT = 9_999_999_999.99
-
-# Roles allowed to Edit / Delete a request
 MANAGE_ROLES = ("SuperAdmin", "admin", "Corporate")
 
 VIEW_STATUSES = ("pending", "forwarded_to_ceo", "approved", "rejected")
 ENTRY_VIEWS = ("pending", "approved", "rejected")
+
+ROLLBACK_MONTHS = 24
 
 
 def _service_token_ok():
@@ -151,18 +146,13 @@ def _serialize_row(r, group, is_split):
     return d
 
 
-# ─────────────────────────────────────────────────────────────────
-# CAPITAL EQUITY helpers
-# ─────────────────────────────────────────────────────────────────
 def _is_capital_equity(r):
-    """Corporate Management + Capital Equity category."""
     cat = (r.category or "").strip().lower()
     dept = (r.department or "").strip().lower()
     return cat == CAPITAL_EQUITY_CATEGORY.lower() and CAPITAL_EQUITY_DEPARTMENT.lower() in dept
 
 
 def _effective_date(r):
-    """Reference date if present, otherwise the created date."""
     ref = getattr(r, "reference_date", None)
     if ref:
         return ref
@@ -170,7 +160,6 @@ def _effective_date(r):
 
 
 def _amounts_by_status(r):
-    """Split a request's amount into approved / rejected / pending buckets."""
     out = {"approved": 0.0, "rejected": 0.0, "pending": 0.0}
     if r.is_payroll and r.employee_entries:
         for e in r.employee_entries:
@@ -188,25 +177,13 @@ def _amounts_by_status(r):
 
 
 def _capital_equity_summary(start, end, department=None):
-    """
-    Capital Equity / Approved / Rejected / Balance for the selected period.
-
-      Capital Equity = total Capital Equity given in the period  (SAME for every department)
-      Approved       = approved spending of the selected department (all departments if none)
-      Rejected       = rejected spending of the selected department (all departments if none)
-      Balance        = carried forward + Capital Equity - Approved of ALL departments
-                       (SAME for every department - it is the shared pool that is left)
-
-    Example: month 1 -> equity 10,00,000, approved 8,00,000 => balance 2,00,000
-             month 2 -> equity 10,00,000 => balance 2,00,000 + 10,00,000 = 12,00,000
-    """
     dept_key = _dept_key(department)
     rows = CopperBookRequest.query.options(
         selectinload(CopperBookRequest.employee_entries)
     ).all()
 
     open_equity = open_approved = 0.0
-    equity = approved_all = 0.0
+    equity = approved = rejected = 0.0
     approved_dept = rejected_dept = 0.0
 
     for r in rows:
@@ -229,28 +206,101 @@ def _capital_equity_summary(start, end, department=None):
                 equity += amt
         else:
             b = _amounts_by_status(r)
-            in_dept = (not dept_key) or (_dept_key(r.department) == dept_key)
             if before:
                 open_approved += b["approved"]
             else:
-                approved_all += b["approved"]
-                if in_dept:
+                approved += b["approved"]
+                rejected += b["rejected"]
+                
+                if dept_key and _dept_key(r.department) == dept_key:
                     approved_dept += b["approved"]
                     rejected_dept += b["rejected"]
 
     opening_balance = open_equity - open_approved
-    balance = opening_balance + equity - approved_all
+    balance = opening_balance + equity - approved
+    
     return {
         "capital_equity": round(equity, 2),
         "opening_balance": round(opening_balance, 2),
-        "approved": round(approved_dept, 2),
-        "rejected": round(rejected_dept, 2),
+        "approved": round(approved_dept if dept_key else approved, 2),
+        "rejected": round(rejected_dept if dept_key else rejected, 2),
         "balance": round(balance, 2),
     }
 
 
+def _all_time_equity():
+    rows = CopperBookRequest.query.options(
+        selectinload(CopperBookRequest.employee_entries)
+    ).all()
+
+    ce_total = 0.0
+    approved_total = 0.0
+    rejected_total = 0.0
+
+    for r in rows:
+        if _is_capital_equity(r):
+            if r.status == "rejected":
+                continue
+            ce_total += float(_request_amount(r) or 0)
+        else:
+            b = _amounts_by_status(r)
+            approved_total += b["approved"]
+            rejected_total += b["rejected"]
+
+    return {
+        "capital_equity": round(ce_total, 2),
+        "approved": round(approved_total, 2),
+        "rejected": round(rejected_total, 2),
+        "balance": round(ce_total - approved_total, 2),
+    }
+
+
+def _monthly_rollback():
+    rows = CopperBookRequest.query.options(
+        selectinload(CopperBookRequest.employee_entries)
+    ).all()
+
+    per_month = {}
+    for r in rows:
+        d = _effective_date(r)
+        if d is None:
+            continue
+        if _is_capital_equity(r):
+            if r.status == "rejected":
+                continue
+            ce, ap = float(_request_amount(r) or 0), 0.0
+        else:
+            ce, ap = 0.0, _amounts_by_status(r)["approved"]
+        b = per_month.setdefault((d.year, d.month), [0.0, 0.0])
+        b[0] += ce
+        b[1] += ap
+
+    if not per_month:
+        return []
+
+    today = datetime.utcnow().date()
+    first = min(per_month)
+    last = max(max(per_month), (today.year, today.month))
+
+    result = []
+    running = 0.0
+    y, m = first
+    while (y, m) <= last:
+        ce, ap = per_month.get((y, m), (0.0, 0.0))
+        running += ce - ap
+        result.append({
+            "month": f"{y:04d}-{m:02d}",
+            "capital_equity": round(ce, 2),
+            "approved": round(ap, 2),
+            "balance": round(ce - ap, 2),
+            "cumulative_balance": round(running, 2)
+        })
+        m += 1
+        if m == 13:
+            y, m = y + 1, 1
+    return result
+
 def _dept_key(name):
-    """'Everglades (Pharmacy)' and 'Everglades' are the same business unit."""
     return (name or "").split("(")[0].strip().lower()
 
 
@@ -438,12 +488,11 @@ def _sync_to_staffportal(req: CopperBookRequest):
 
 
 def _sync_edit_to_staffportal(req: CopperBookRequest):
-    """Push an edit made in the Billing Portal to the Staff Portal.
-    Returns (ok, message). Never raises."""
     base = (os.getenv("STAFFPORTAL_BASE_URL") or "").rstrip("/")
     token = os.getenv("COPPERBOOK_CALLBACK_TOKEN") or ""
     if not base or not token:
         return False, "STAFFPORTAL_BASE_URL / COPPERBOOK_CALLBACK_TOKEN not set."
+    
     payload = {
         "event": "edit",
         "remote_id": req.remote_id,
@@ -453,7 +502,7 @@ def _sync_edit_to_staffportal(req: CopperBookRequest):
         "purpose": req.purpose,
         "description": req.description,
         "remarks": req.remarks,
-        "amount": None if req.is_payroll else _request_amount(req),
+        "amount": _request_amount(req), # Send the updated amount
         "reference_date": (
             req.reference_date.isoformat()
             if getattr(req, "reference_date", None) else None
@@ -634,10 +683,10 @@ def list_all():
     end_date_str = (request.args.get("end_date") or "").strip()
     search = (request.args.get("search") or "").strip()
     department = (request.args.get("department") or "").strip()
+    equity_department = (request.args.get("equity_department") or "").strip()
     page = max(1, request.args.get("page", 1, type=int))
     per_page = min(100, max(1, request.args.get("per_page", 25, type=int)))
 
-    # "Capital Equity" chip is handled after grouping (so chip counts stay stable)
     equity_chip = status == "capital_equity"
     if equity_chip:
         status = None
@@ -655,8 +704,6 @@ def list_all():
         _col = func.lower(func.trim(CopperBookRequest.department))
         q = q.filter(or_(_col == _dk, _col.like(_dk + " (%")))
 
-    # Date filter uses the same "effective date" as the ordering:
-    # reference_date if present, otherwise the created date.
     eff_date_col = func.coalesce(
         CopperBookRequest.reference_date,
         func.date(CopperBookRequest.created_at),
@@ -725,7 +772,6 @@ def list_all():
     else:
         sel = flat
 
-    # Business Unit dropdown options: the fixed list of departments
     departments = list(BUSINESS_UNITS)
 
     total = len(sel)
@@ -735,9 +781,13 @@ def list_all():
     return jsonify({
         "requests": [_serialize_row(r, g, sp) for r, g, sp in page_rows],
         "summary": summary,
-        "equity": _capital_equity_summary(start_d, end_d, department),
+        "equity": _capital_equity_summary(start_d, end_d, equity_department),
         "departments": departments,
         "view_total": round(sum((x[1][1] or 0) for x in sel), 2),
+
+        "monthly_rollback": _monthly_rollback(),
+        "all_time_equity": _all_time_equity(),
+
         "pagination": {
             "page": page, "per_page": per_page, "total": total,
             "pages": (total + per_page - 1) // per_page,
@@ -754,9 +804,6 @@ def detail(rid):
     return jsonify(_serialize(r, with_files=True)), 200
 
 
-# ─────────────────────────────────────────────────────────────────
-# EDIT (PUT) and DELETE routes
-# ─────────────────────────────────────────────────────────────────
 @cb_bp.route("/<int:rid>", methods=["PUT", "OPTIONS"])
 @jwt_required()
 def update_request(rid):
@@ -781,7 +828,6 @@ def update_request(rid):
 
     if not purpose:
         return jsonify({"error": "Purpose is required."}), 400
-    # Only enforce the length rule when the description is actually being changed
     if description != (req.description or "").strip() and len(description) < 10:
         return jsonify({"error": "Description must be at least 10 characters."}), 400
 
@@ -800,7 +846,6 @@ def update_request(rid):
         except ValueError:
             return jsonify({"error": "Invalid reference_date (YYYY-MM-DD)."}), 400
 
-    # Payroll amount is derived from employee entries, so it is not editable.
     if not req.is_payroll and data.get("amount") not in (None, ""):
         try:
             amt = float(data.get("amount"))
@@ -815,7 +860,7 @@ def update_request(rid):
             return jsonify({
                 "error": f"Amount is too large. The maximum allowed is {_fmt_money(MAX_AMOUNT)}."
             }), 400
-        if amt > 0:
+        if amt >= 0: 
             req.amount = round(amt, 2)
 
     try:
@@ -825,7 +870,6 @@ def update_request(rid):
         traceback.print_exc()
         return jsonify({"error": f"Could not save the changes: {e.__class__.__name__}. Check the amount and date values."}), 400
 
-    # Mirror the edit (including the reference date) to the Staff Portal
     synced, sync_msg = _sync_edit_to_staffportal(req)
 
     return jsonify({
@@ -851,7 +895,7 @@ def delete_request(rid):
     if not _can_manage(user):
         return jsonify({"error": "You do not have permission to delete requests."}), 403
 
-    request_number = req.request_number  # read before the object is deleted
+    request_number = req.request_number
 
     try:
         CopperBookEmployeeEntry.query.filter_by(request_id=req.id).delete(synchronize_session=False)
@@ -868,9 +912,6 @@ def delete_request(rid):
     return jsonify({"message": f"Deleted {request_number}."}), 200
 
 
-# ─────────────────────────────────────────────────────────────────
-# ACTIONS (Finance, CEO, Employee)
-# ─────────────────────────────────────────────────────────────────
 @cb_bp.route("/<int:rid>/finance-action", methods=["POST", "OPTIONS"])
 @jwt_required()
 def finance_action(rid):
@@ -1121,9 +1162,6 @@ def approve_all_entries(rid):
     }), 200
 
 
-# ─────────────────────────────────────────────────────────────────
-# ATTACHMENTS
-# ─────────────────────────────────────────────────────────────────
 @cb_bp.route("/attachment/<int:aid>", methods=["GET", "OPTIONS"])
 @jwt_required()
 def download_attachment(aid):

@@ -53,6 +53,10 @@ const STANDARD_CATEGORIES = [
   "Miscellaneous",
 ];
 
+// ✅ Must match the values CaredxLabEntryForm saves.
+// The form options are: Cash, UPI, Cash + UPI, Card, Cheque, NEFT
+const PAYMENT_TYPES = ["Cash", "UPI", "Cash + UPI", "Card", "Cheque", "NEFT"];
+
 const categoryBtnStyle = {
   padding: "10px 12px",
   borderRadius: 8,
@@ -87,6 +91,9 @@ export default function CaredxDashboard() {
   // Categories & Type Filter
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [typeFilter, setTypeFilter] = useState("");
+
+  // ✅ Payment Type filter (Cash / UPI / Cash + UPI / Card / Cheque / NEFT)
+  const [paymentTypeFilter, setPaymentTypeFilter] = useState("");
 
   // -------------------------------------------------------------------------
   // Summary
@@ -152,6 +159,8 @@ export default function CaredxDashboard() {
     try {
       const params = { ...dateParams };
       if (labSearch.trim()) params.search = labSearch.trim();
+      // ✅ Send payment_type filter to backend
+      if (paymentTypeFilter) params.payment_type = paymentTypeFilter;
 
       const response = await api.get("/caredx/lab-entries", { params });
       setLabEntries(
@@ -168,12 +177,14 @@ export default function CaredxDashboard() {
     } finally {
       setLabLoading(false);
     }
-  }, [startDate, endDate, labSearch]);
+  }, [startDate, endDate, labSearch, paymentTypeFilter]);
 
   const fetchExpenses = useCallback(async () => {
     setExpensesLoading(true);
     try {
-      const response = await api.get("/caredx/expenses", { params: dateParams });
+      const response = await api.get("/caredx/expenses", {
+        params: dateParams,
+      });
       setExpenses(
         Array.isArray(response.data?.expenses) ? response.data.expenses : []
       );
@@ -191,11 +202,7 @@ export default function CaredxDashboard() {
   }, [startDate, endDate]);
 
   const refetchAll = useCallback(async () => {
-    await Promise.all([
-      fetchSummary(),
-      fetchLabEntries(),
-      fetchExpenses(),
-    ]);
+    await Promise.all([fetchSummary(), fetchLabEntries(), fetchExpenses()]);
   }, [fetchSummary, fetchLabEntries, fetchExpenses]);
 
   useEffect(() => {
@@ -203,40 +210,34 @@ export default function CaredxDashboard() {
   }, [refetchAll]);
 
   // -------------------------------------------------------------------------
-  // ✅ Filtering Logic
+  // Filtering Logic
   // -------------------------------------------------------------------------
   const filteredLabEntries = labEntries.filter((e) => {
-    // 1. Hide Lab Entries if "Expenses" is specifically selected
     if (typeFilter === "Expenses") return false;
-    
-    // 2. If a category is selected, ONLY show Lab entries if that category is 
-    // "Referrals & Deposits" (or if the entry itself matches the category)
+
     if (selectedCategory) {
       return (
-        selectedCategory === "Referrals & Deposits" || 
+        selectedCategory === "Referrals & Deposits" ||
         e.category === selectedCategory
       );
     }
-    
-    return true; // Show all if no filters applied
+
+    return true;
   });
 
   const filteredExpenses = expenses.filter((e) => {
-    // 1. Hide Expenses if "Income" is specifically selected
     if (typeFilter === "Income") return false;
-    
-    // 2. Filter by specific category
-    if (selectedCategory) {
-      return e.category === selectedCategory;
-    }
-    
-    return true; 
+    if (selectedCategory) return e.category === selectedCategory;
+    return true;
   });
 
   // -------------------------------------------------------------------------
   // Pagination — Lab
   // -------------------------------------------------------------------------
-  const labTotalPages = Math.max(1, Math.ceil(filteredLabEntries.length / PAGE_SIZE));
+  const labTotalPages = Math.max(
+    1,
+    Math.ceil(filteredLabEntries.length / PAGE_SIZE)
+  );
   const paginatedLabEntries = filteredLabEntries.slice(
     (labPage - 1) * PAGE_SIZE,
     labPage * PAGE_SIZE
@@ -245,7 +246,10 @@ export default function CaredxDashboard() {
   // -------------------------------------------------------------------------
   // Pagination — Expenses
   // -------------------------------------------------------------------------
-  const expenseTotalPages = Math.max(1, Math.ceil(filteredExpenses.length / PAGE_SIZE));
+  const expenseTotalPages = Math.max(
+    1,
+    Math.ceil(filteredExpenses.length / PAGE_SIZE)
+  );
   const paginatedExpenses = filteredExpenses.slice(
     (expensePage - 1) * PAGE_SIZE,
     expensePage * PAGE_SIZE
@@ -261,6 +265,7 @@ export default function CaredxDashboard() {
     setLastImportResult(null);
     setSelectedCategory(null);
     setTypeFilter("");
+    setPaymentTypeFilter("");
   };
 
   // -------------------------------------------------------------------------
@@ -273,7 +278,7 @@ export default function CaredxDashboard() {
 
   const handleCategorySelect = (cat) => {
     setSelectedCategory(cat);
-    if (typeFilter === "Capital") setTypeFilter(""); // Keeping this for safety
+    if (typeFilter === "Capital") setTypeFilter("");
   };
 
   // -------------------------------------------------------------------------
@@ -411,7 +416,9 @@ export default function CaredxDashboard() {
   // -------------------------------------------------------------------------
   const renderCategoryPanel = () => (
     <div className="card" style={{ marginBottom: 16 }}>
-      <p className="section-title" style={{ marginBottom: 12 }}>Categories</p>
+      <p className="section-title" style={{ marginBottom: 12 }}>
+        Categories
+      </p>
       <div
         style={{
           display: "grid",
@@ -419,40 +426,51 @@ export default function CaredxDashboard() {
           gap: 10,
         }}
       >
-        {/* All Categories */}
         <button
           type="button"
-          className={`btn ${!selectedCategory && !typeFilter ? "btn-primary" : "btn-secondary"}`}
+          className={`btn ${
+            !selectedCategory && !typeFilter ? "btn-primary" : "btn-secondary"
+          }`}
           onClick={handleAllCategories}
           style={categoryBtnStyle}
         >
           All Categories
         </button>
 
-        {/* Type Filters (Income/Expenses) */}
         <button
           type="button"
-          className={`btn ${typeFilter === "Income" ? "btn-primary" : "btn-secondary"}`}
-          onClick={() => { setTypeFilter("Income"); setSelectedCategory(null); }}
+          className={`btn ${
+            typeFilter === "Income" ? "btn-primary" : "btn-secondary"
+          }`}
+          onClick={() => {
+            setTypeFilter("Income");
+            setSelectedCategory(null);
+          }}
           style={categoryBtnStyle}
         >
           Income
         </button>
         <button
           type="button"
-          className={`btn ${typeFilter === "Expenses" ? "btn-primary" : "btn-secondary"}`}
-          onClick={() => { setTypeFilter("Expenses"); setSelectedCategory(null); }}
+          className={`btn ${
+            typeFilter === "Expenses" ? "btn-primary" : "btn-secondary"
+          }`}
+          onClick={() => {
+            setTypeFilter("Expenses");
+            setSelectedCategory(null);
+          }}
           style={categoryBtnStyle}
         >
           Expenses
         </button>
 
-        {/* Standard Categories */}
         {STANDARD_CATEGORIES.map((cat) => (
           <button
             key={cat}
             type="button"
-            className={`btn ${selectedCategory === cat ? "btn-primary" : "btn-secondary"}`}
+            className={`btn ${
+              selectedCategory === cat ? "btn-primary" : "btn-secondary"
+            }`}
             onClick={() => handleCategorySelect(cat)}
             style={categoryBtnStyle}
           >
@@ -460,7 +478,6 @@ export default function CaredxDashboard() {
           </button>
         ))}
 
-        {/* Clear */}
         <button
           type="button"
           className="btn btn-secondary"
@@ -510,9 +527,26 @@ export default function CaredxDashboard() {
               type="text"
               value={labSearch}
               onChange={(event) => setLabSearch(event.target.value)}
-              placeholder="Search by patient, test, or employee"
+              placeholder="Search by patient, test, employee, or payment type"
               className="form-control"
             />
+          </div>
+
+          {/* ✅ Payment Type filter */}
+          <div className="form-group">
+            <label className="form-label">Payment Type</label>
+            <select
+              value={paymentTypeFilter}
+              onChange={(event) => setPaymentTypeFilter(event.target.value)}
+              className="form-control"
+            >
+              <option value="">All</option>
+              {PAYMENT_TYPES.map((pt) => (
+                <option key={pt} value={pt}>
+                  {pt}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="filter-actions">
@@ -636,7 +670,6 @@ export default function CaredxDashboard() {
         )}
 
         {/* ============ LAB DATA ENTRY ============ */}
-        {/* Only show if typeFilter is not "Expenses" */}
         {typeFilter !== "Expenses" && (
           <>
             <div className="section-header">
@@ -656,7 +689,8 @@ export default function CaredxDashboard() {
                   disabled={importing}
                   className="btn btn-secondary"
                 >
-                  <Upload size={16} /> {importing ? "Importing..." : "Import Excel"}
+                  <Upload size={16} />{" "}
+                  {importing ? "Importing..." : "Import Excel"}
                 </button>
                 <button
                   type="button"
@@ -677,7 +711,8 @@ export default function CaredxDashboard() {
 
             {lastImportResult && (
               <div className="import-summary">
-                <strong>Last import:</strong> {lastImportResult.imported || 0} row(s) imported.
+                <strong>Last import:</strong>{" "}
+                {lastImportResult.imported || 0} row(s) imported.
                 {Number(lastImportResult.skipped || 0) > 0 && (
                   <> {lastImportResult.skipped} row(s) skipped.</>
                 )}
@@ -714,7 +749,6 @@ export default function CaredxDashboard() {
         )}
 
         {/* ============ EXPENSES ============ */}
-        {/* Only show if typeFilter is not "Income" */}
         {typeFilter !== "Income" && (
           <>
             <div className="section-header">

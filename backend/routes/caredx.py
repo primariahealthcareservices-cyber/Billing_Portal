@@ -1,15 +1,3 @@
-# backend/routes/caredx.py
-"""
-CareDx routes.
-
-Modules:
-1. Lab Data Entry
-2. Expenses (with Referral Amount)
-3. Capital
-4. Combined dashboard summary
-5. Excel import/export for lab entries
-"""
-
 from datetime import datetime, date
 from io import BytesIO
 
@@ -25,7 +13,7 @@ from models import (
     FinanceEntry,
     DEPARTMENT_CONFIG,
     SALARY_CATEGORY,
-    PAYMENT_TYPES,          # ← NEW: shared Cash / UPI / Card list
+    PAYMENT_TYPES,          # shared Cash / UPI / Card list
 )
 
 from utils import role_required
@@ -84,6 +72,8 @@ def _apply_date_filters(query, date_column):
     if end_date:
         query = query.filter(date_column <= end_date)
     return query
+
+
 def _lab_entry_from_payload(data, existing=None):
     errors = []
     entry_date = _parse_date(data.get("entry_date"))
@@ -105,8 +95,8 @@ def _lab_entry_from_payload(data, existing=None):
         "rmp",
         "salaries_expense",
         "referral_amount",
-        "referral_cash",       # NEW
-        "referral_online",     # NEW
+        "referral_cash",
+        "referral_online",
         "sales",
     ]
 
@@ -135,9 +125,18 @@ def _lab_entry_from_payload(data, existing=None):
         )
         return None
 
-    payment_type = _normalize_ptype(data.get("payment_type"), "payment_type")
+    # Preserve existing value on partial update when the field is missing
+    raw_main_pt = data.get("payment_type")
+    if raw_main_pt is None and existing is not None:
+        raw_main_pt = getattr(existing, "payment_type", None)
+
+    raw_ref_pt = data.get("referral_payment_type")
+    if raw_ref_pt is None and existing is not None:
+        raw_ref_pt = getattr(existing, "referral_payment_type", None)
+
+    payment_type = _normalize_ptype(raw_main_pt, "payment_type")
     referral_payment_type = _normalize_ptype(
-        data.get("referral_payment_type"), "referral_payment_type"
+        raw_ref_pt, "referral_payment_type"
     )
 
     kwargs = {
@@ -148,7 +147,7 @@ def _lab_entry_from_payload(data, existing=None):
         "expense_details": (data.get("expense_details") or "").strip() or None,
         "referral_by": (data.get("referral_by") or "").strip() or None,
         "payment_type": payment_type,
-        "referral_payment_type": referral_payment_type,   # NEW
+        "referral_payment_type": referral_payment_type,
         **parsed_numbers,
     }
     return kwargs, errors
@@ -178,6 +177,11 @@ def lab_entries():
 
     query = _apply_date_filters(CaredxLabEntry.query, CaredxLabEntry.entry_date)
 
+    # ✅ NEW: payment_type filter (Cash / UPI / Card)
+    payment_type_filter = (request.args.get("payment_type") or "").strip()
+    if payment_type_filter and payment_type_filter in PAYMENT_TYPES:
+        query = query.filter(CaredxLabEntry.payment_type == payment_type_filter)
+
     search = (request.args.get("search") or "").strip()
     if search:
         like = f"%{search}%"
@@ -185,6 +189,8 @@ def lab_entries():
             (CaredxLabEntry.patient_name.ilike(like))
             | (CaredxLabEntry.test_name.ilike(like))
             | (CaredxLabEntry.employee_name.ilike(like))
+            | (CaredxLabEntry.payment_type.ilike(like))          # ✅ NEW
+            | (CaredxLabEntry.referral_payment_type.ilike(like)) # ✅ NEW
         )
 
     query = query.order_by(
@@ -428,11 +434,11 @@ def expenses():
             "category": s.category,
             "amount": float(s.amount),
             "referral_amount": 0,
-            "remarks": f"{s.category} for {s.exec_department} - {s.remarks or ''}", 
+            "remarks": f"{s.category} for {s.exec_department} - {s.remarks or ''}",
             "employee_name": s.employee_name,
             "purpose": s.remarks,
             "vehicle_type": s.vehicle_type,
-            "_isSalary": True, 
+            "_isSalary": True,
         })
 
     all_items = [e.to_dict() for e in caredx_expenses] + salary_items
@@ -856,6 +862,18 @@ def lab_entries_summary():
     capital_entries = capital_query.all()
     total_capital = sum(float(e.amount or 0) for e in capital_entries)
 
+    # ✅ NEW: payment-type breakdown of lab-entry income
+    payment_type_totals = {}
+    for entry in lab_entries:
+        pt = getattr(entry, "payment_type", None) or "Unspecified"
+        payment_type_totals.setdefault(pt, 0.0)
+        payment_type_totals[pt] += float(entry.total_amount_paid or 0)
+
+    payment_type_breakdown = [
+        {"payment_type": pt, "amount": amt}
+        for pt, amt in payment_type_totals.items()
+    ]
+
     return jsonify({
         "entry_count": len(lab_entries),
         "total_amount_paid": total_amount_paid,
@@ -872,4 +890,5 @@ def lab_entries_summary():
         "expense_count": len(caredx_expenses) + len(salary_entries),
         "trend": trend,
         "category_breakdown": list(by_category.values()),
+        "payment_type_breakdown": payment_type_breakdown,   # ✅ NEW
     }), 200

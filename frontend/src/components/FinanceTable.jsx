@@ -4,8 +4,8 @@ import toast from "react-hot-toast";
 import { Pencil, Trash2, FileText, Eye } from "lucide-react";
 
 import api from "../api/axios.js";
-import RemarkCell, { remarkCellStyle } from "./RemarkCell.jsx";
 import ItemCell, { itemCellStyle } from "./ItemCell.jsx";
+import { remarkCellStyle } from "./RemarkCell.jsx";
 
 const formatCurrency = (value) => {
   const number = Number(value || 0);
@@ -30,8 +30,6 @@ const handleViewInvoice = (entry) => {
     return;
   }
 
-  // Build the absolute URL. Relative URLs (e.g. "/api/files/invoices/x.pdf")
-  // get prefixed with the backend origin.
   let url = entry.invoice_url;
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
     const origin = getApiOrigin() || window.location.origin;
@@ -41,9 +39,7 @@ const handleViewInvoice = (entry) => {
   // Attach JWT as a query param — a new tab can't send headers.
   const token = localStorage.getItem("token") || "";
   const sep = url.includes("?") ? "&" : "?";
-  const finalUrl = token
-    ? `${url}${sep}token=${encodeURIComponent(token)}`
-    : url;
+  const finalUrl = token ? `${url}${sep}token=${encodeURIComponent(token)}` : url;
 
   const newWindow = window.open(finalUrl, "_blank", "noopener,noreferrer");
   if (!newWindow) {
@@ -51,12 +47,24 @@ const handleViewInvoice = (entry) => {
   }
 };
 
+// Helper for Payment Type badge colors
+const getPaymentBadgeStyle = (type) => {
+  switch (type) {
+    case "UPI":  return { bg: "#e0e7ff", color: "#3730a3" };
+    case "Cash": return { bg: "#dcfce7", color: "#166534" };
+    case "Card": return { bg: "#fee2e2", color: "#991b1b" };
+    default:     return { bg: "#f3f4f6", color: "#374151" };
+  }
+};
+
+const hasValue = (v) => v !== null && v !== undefined && v !== "";
+
 export default function FinanceTable({
   entries = [],
   onEdit,
   onDelete,
   onView,
-  currentDepartment, 
+  currentDepartment,
 }) {
   if (!entries || entries.length === 0) {
     return (
@@ -67,84 +75,64 @@ export default function FinanceTable({
     );
   }
 
-  // ---- Column visibility ----
-  const showSubCategory       = entries.some((e) => e?.sub_category);
-  const showClientName        = entries.some((e) => e?.client_name);
-  const showGstNumber         = entries.some((e) => e?.gst_number);
-  const showGstTax            = entries.some(
-    (e) => e?.gst_tax_percent !== null && e?.gst_tax_percent !== undefined
-  );
-  const showTaxInvoiceNumber  = entries.some((e) => e?.tax_invoice_number);
-  const showItems             = entries.some(
-    (e) => Array.isArray(e?.items) && e.items.length > 0
-  );
-  const showPatientName       = entries.some((e) => e?.patient_name);
-  const showPatientPlace      = entries.some((e) => e?.patient_place);
-  const showGeneratedBy       = entries.some((e) => e?.generated_by);
-  const showRevenueType       = entries.some((e) => e?.revenue_type);
-  const showExecDepartment    = entries.some((e) => e?.exec_department);
-  const showEmployeeName      = entries.some((e) => e?.employee_name);
-  const showVehicleType       = entries.some((e) => e?.vehicle_type);
-  const showPurpose           = entries.some((e) => e?.purpose);
-  const showSalaryAmount      = entries.some(
-    (e) => e?.salary_amount !== null && e?.salary_amount !== undefined
-  );
-  const showAllowanceAmount   = entries.some(
-    (e) => e?.allowance_amount !== null && e?.allowance_amount !== undefined
-  );
-  const showTeam              = entries.some((e) => e?.team);
-  const showLedgerDetails     = entries.some((e) => e._type === "ledger");
-  const showInvoice           = entries.some((e) => e?.invoice_url);
-  
-  // ✅ FORCED TRUE: Always show the Payment Type column
-  const showPaymentType       = true; 
+  // ---- Column visibility (a column shows only if at least one row has data) ----
+  const showClientName       = entries.some((e) => e?.client_name);
+  const showItems            = entries.some((e) => Array.isArray(e?.items) && e.items.length > 0);
+  const showRevenueType      = entries.some((e) => e?.revenue_type);
+  const showGeneratedBy      = entries.some((e) => e?.generated_by);
+  const showExecDepartment   = entries.some((e) => e?.exec_department);
+  const showVehicleType      = entries.some((e) => e?.vehicle_type);
+  const showGstType          = entries.some((e) => hasValue(e?.gst_tax_percent));
+  const showTaxInvoiceNumber = entries.some((e) => e?.tax_invoice_number);
 
-  // Helper for Payment Type badge colors
-  const getPaymentBadgeStyle = (type) => {
-    switch (type) {
-      case "UPI": return { bg: "#e0e7ff", color: "#3730a3" };
-      case "Cash": return { bg: "#dcfce7", color: "#166534" };
-      case "Card": return { bg: "#fee2e2", color: "#991b1b" };
-      default: return { bg: "#f3f4f6", color: "#374151" };
-    }
-  };
+  // Extra columns used by other departments (shown only when data exists)
+  const showSubCategory      = entries.some((e) => e?.sub_category);
+  const showPatientName      = entries.some((e) => e?.patient_name);
+  const showPatientPlace     = entries.some((e) => e?.patient_place);
+  const showSalaryAmount     = entries.some((e) => hasValue(e?.salary_amount));
+  const showAllowanceAmount  = entries.some((e) => hasValue(e?.allowance_amount));
+  const showTeam             = entries.some((e) => e?.team);
+  const showLedgerDetails    = entries.some((e) => e._type === "ledger");
+  const showInvoice          = entries.some((e) => e?.invoice_url);
+
+  // ✅ Always show Payment Type
+  const showPaymentType = true;
 
   return (
     <div className="table-responsive">
       <table className="finance-table">
         <thead>
           <tr>
+            {/* ===== NEW ORDER ===== */}
             <th>Date</th>
             <th>Type</th>
             <th>Category</th>
-            {showSubCategory && <th>Sub-Category</th>}
             {showClientName && <th>Client Name</th>}
-            {showGstNumber && <th>GST Number</th>}
-            {showGstTax && <th className="text-right">GST Tax %</th>}
-            {showTaxInvoiceNumber && <th>Tax Invoice #</th>}
             {showItems && <th>Items</th>}
+            <th className="text-right">Amount</th>
+            {showPaymentType && <th>Payment Type</th>}
+            {showRevenueType && <th>Revenue Type</th>}
+            {showGeneratedBy && <th>Generated By</th>}
+            {showExecDepartment && <th>Exec Dept</th>}
+            {showVehicleType && <th>Vehicle Type</th>}
+            {showGstType && <th className="text-right">GST Type</th>}
+            {showTaxInvoiceNumber && <th>Invoice Number</th>}
+
+            {/* ===== Other-department columns (only if data exists) ===== */}
+            {showSubCategory && <th>Sub-Category</th>}
             {showPatientName && <th>Patient Name</th>}
             {showPatientPlace && <th>Patient Place</th>}
-            {showGeneratedBy && <th>Generated By</th>}
-            {showRevenueType && <th>Revenue Type</th>}
-            {showExecDepartment && <th>Exec Dept</th>}
-            {showEmployeeName && <th>Employee</th>}
-            {showVehicleType && <th>Vehicle Type</th>}
-            {showPurpose && <th>Purpose</th>}
             {showSalaryAmount && <th className="text-right">Salary</th>}
             {showAllowanceAmount && <th className="text-right">Allowance</th>}
             {showTeam && <th>Team</th>}
-            <th className="text-right">Amount</th>
-            
-            {/* ✅ Payment Type Header */}
-            {showPaymentType && <th>Payment Type</th>}
-
             {showLedgerDetails && <th>Customer / Details</th>}
+
             <th className="col-remarks" style={{ minWidth: 90 }}>Remarks</th>
             {showInvoice && <th className="col-invoice">Invoice</th>}
             <th>Actions</th>
           </tr>
         </thead>
+
         <tbody>
           {entries.map((entry) => {
             const items = Array.isArray(entry.items) ? entry.items : [];
@@ -153,78 +141,33 @@ export default function FinanceTable({
 
             return (
               <tr key={entry.id}>
-                <td style={{ whiteSpace: "nowrap" }}>
-                  {entry.entry_date || "—"}
-                </td>
+                {/* ===== NEW ORDER ===== */}
+                <td style={{ whiteSpace: "nowrap" }}>{entry.entry_date || "—"}</td>
+
                 <td>
                   <span
                     className={`badge ${
-                      entry.entry_type === "Income"
-                        ? "badge-income"
-                        : "badge-expense"
+                      entry.entry_type === "Income" ? "badge-income" : "badge-expense"
                     }`}
                   >
                     {entry.entry_type || "—"}
                   </span>
                 </td>
+
                 <td>{entry.category || "—"}</td>
-                {showSubCategory && <td>{entry.sub_category || "—"}</td>}
+
                 {showClientName && <td>{entry.client_name || "—"}</td>}
-                {showGstNumber && <td>{entry.gst_number || "—"}</td>}
-                {showGstTax && (
-                  <td className="text-right">
-                    {entry.gst_tax_percent !== null && entry.gst_tax_percent !== undefined
-                      ? `${Number(entry.gst_tax_percent)}%`
-                      : "—"}
-                  </td>
-                )}
-                {showTaxInvoiceNumber && (
-                  <td>{entry.tax_invoice_number || "—"}</td>
-                )}
+
                 {showItems && (
                   <td style={itemCellStyle}>
-                    {items.length > 0 ? (
-                      <ItemCell items={items} />
-                    ) : (
-                      "—"
-                    )}
+                    {items.length > 0 ? <ItemCell items={items} /> : "—"}
                   </td>
                 )}
-                {showPatientName && <td>{entry.patient_name || "—"}</td>}
-                {showPatientPlace && <td>{entry.patient_place || "—"}</td>}
-                {showGeneratedBy && <td>{entry.generated_by || "—"}</td>}
-                {showRevenueType && <td>{entry.revenue_type || "—"}</td>}
-                {showExecDepartment && <td>{entry.exec_department || "—"}</td>}
-                {showEmployeeName && <td>{entry.employee_name || "—"}</td>}
-                {showVehicleType && <td>{entry.vehicle_type || "—"}</td>}
-                {showPurpose && (
-                  <td
-                    style={{
-                      maxWidth: 220,
-                      whiteSpace: "normal",
-                      wordBreak: "break-word",
-                    }}
-                    title={entry.purpose || ""}
-                  >
-                    {entry.purpose || "—"}
-                  </td>
-                )}
-                {showSalaryAmount && (
-                  <td className="text-right">
-                    {formatCurrency(entry.salary_amount)}
-                  </td>
-                )}
-                {showAllowanceAmount && (
-                  <td className="text-right">
-                    {formatCurrency(entry.allowance_amount)}
-                  </td>
-                )}
-                {showTeam && <td>{entry.team || "—"}</td>}
+
                 <td className="text-right" style={{ fontWeight: 600 }}>
                   {formatCurrency(entry.amount)}
                 </td>
 
-                {/* ✅ Payment Type Data Cell */}
                 {showPaymentType && (
                   <td>
                     {entry.payment_type ? (
@@ -247,6 +190,33 @@ export default function FinanceTable({
                   </td>
                 )}
 
+                {showRevenueType && <td>{entry.revenue_type || "—"}</td>}
+                {showGeneratedBy && <td>{entry.generated_by || "—"}</td>}
+                {showExecDepartment && <td>{entry.exec_department || "—"}</td>}
+                {showVehicleType && <td>{entry.vehicle_type || "—"}</td>}
+
+                {showGstType && (
+                  <td className="text-right">
+                    {hasValue(entry.gst_tax_percent)
+                      ? `${Number(entry.gst_tax_percent)}%`
+                      : "—"}
+                  </td>
+                )}
+
+                {showTaxInvoiceNumber && <td>{entry.tax_invoice_number || "—"}</td>}
+
+                {/* ===== Other-department columns ===== */}
+                {showSubCategory && <td>{entry.sub_category || "—"}</td>}
+                {showPatientName && <td>{entry.patient_name || "—"}</td>}
+                {showPatientPlace && <td>{entry.patient_place || "—"}</td>}
+                {showSalaryAmount && (
+                  <td className="text-right">{formatCurrency(entry.salary_amount)}</td>
+                )}
+                {showAllowanceAmount && (
+                  <td className="text-right">{formatCurrency(entry.allowance_amount)}</td>
+                )}
+                {showTeam && <td>{entry.team || "—"}</td>}
+
                 {showLedgerDetails && (
                   <td>
                     {isLedger ? (
@@ -260,9 +230,14 @@ export default function FinanceTable({
                     )}
                   </td>
                 )}
-                <td className="col-remarks" style={{ ...remarkCellStyle, minWidth: 90, maxWidth: 120 }}>
+
+                <td
+                  className="col-remarks"
+                  style={{ ...remarkCellStyle, minWidth: 90, maxWidth: 120 }}
+                >
                   <ItemCell text={entry.remarks} previewLabel="View" />
                 </td>
+
                 {showInvoice && (
                   <td>
                     {entry.invoice_url ? (
@@ -279,6 +254,7 @@ export default function FinanceTable({
                     )}
                   </td>
                 )}
+
                 <td>
                   <div className="actions-cell">
                     {onView && (

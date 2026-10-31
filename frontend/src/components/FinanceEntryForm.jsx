@@ -97,8 +97,7 @@ const ITEM_CATEGORIES = ["Products & Innovation"];
 const CORPUS_FUND = "Corpus Fund";
 
 // Payment options
-// Payment options
-const PAYMENT_TYPES = ["UPI", "Cash", "Card", "Cheque", "NEFT"];
+const PAYMENT_TYPES = ["UPI", "Cash", "Card", "Cheque", "NEFT", "Bank", "Others"];
 const STANDARD_CATEGORY_FIELDS = {
   "Salary & Payrolls": {
     showEmployeeName: true, showVehicleType: false,
@@ -173,6 +172,7 @@ export default function FinanceEntryForm({
   });
 
   const [form, setForm] = useState(createEmptyForm());
+  const [customPaymentType, setCustomPaymentType] = useState("");
   const [otherCategory, setOtherCategory] = useState("");
   const [items, setItems] = useState([emptyItem()]);
   const [invoiceFile, setInvoiceFile] = useState(null);
@@ -204,8 +204,9 @@ export default function FinanceEntryForm({
 
   const isLedger = (isMedTech || isEverglades) && form.category === ledgerCategoryName;
   const isSalaryCategory = form.category === salaryCategoryName;
-  const requireItemsForCategory =
-    (isMedTech || isEverglades) && ITEM_CATEGORIES.includes(form.category);
+  
+  // Only MedTech gets the line-item block for "Products & Innovation"
+  const requireItemsForCategory = isMedTech && ITEM_CATEGORIES.includes(form.category);
 
   const isCorpusFundRestricted =
     form.category === CORPUS_FUND && !isCorporate;
@@ -253,6 +254,19 @@ export default function FinanceEntryForm({
     setCorpusRows([emptyCorpusRow()]);
 
     const populateForm = (entry) => {
+      // Handle Payment Type parsing
+      const rawPt = entry.payment_type || "";
+      if (rawPt && !PAYMENT_TYPES.includes(rawPt)) {
+        setForm((prev) => ({ ...prev, payment_type: "Others" }));
+        setCustomPaymentType(rawPt);
+      } else if (rawPt === "Others") {
+        setForm((prev) => ({ ...prev, payment_type: "Others" }));
+        setCustomPaymentType("");
+      } else {
+        setForm((prev) => ({ ...prev, payment_type: rawPt }));
+        setCustomPaymentType("");
+      }
+
       if (entry.entry_type === "Capital") {
         setForm({
           entry_type: "Capital",
@@ -383,6 +397,7 @@ export default function FinanceEntryForm({
       populateForm(editingEntry);
     } else {
       setForm(createEmptyForm());
+      setCustomPaymentType("");
       setOtherCategory("");
       setItems([emptyItem()]);
       setEmployees([emptyEmployee()]);
@@ -628,6 +643,13 @@ export default function FinanceEntryForm({
     setRemoveInvoice(false);
   };
 
+  const getFinalPaymentType = () => {
+    if (form.payment_type === "Others") {
+      return customPaymentType.trim();
+    }
+    return form.payment_type;
+  };
+
   const renderInvoiceField = () => {
     if (!showInvoiceField) return null;
     return (
@@ -661,6 +683,37 @@ export default function FinanceEntryForm({
     );
   };
 
+  const renderPaymentTypeField = (required = true) => (
+    <div className="form-group">
+      <label className="form-label">
+        Payment Type {required && <span style={{ color: "red" }}>*</span>}
+      </label>
+      <select 
+        name="payment_type" 
+        value={form.payment_type || ""} 
+        onChange={handleChange}
+        className="form-control" 
+        required={required}
+      >
+        <option value="">Select payment type</option>
+        {PAYMENT_TYPES.map((pt) => (
+          <option key={pt} value={pt}>{pt}</option>
+        ))}
+      </select>
+      {form.payment_type === "Others" && (
+        <input
+          type="text"
+          value={customPaymentType}
+          onChange={(e) => setCustomPaymentType(e.target.value)}
+          placeholder="Enter custom payment type"
+          className="form-control"
+          style={{ marginTop: 8 }}
+          required={required}
+        />
+      )}
+    </div>
+  );
+
   /* ---------------- SUBMIT: Capital ---------------- */
   const submitCapitalEntry = async () => {
     const capitalCategory = form.category || DEFAULT_CAPITAL_CATEGORY;
@@ -670,6 +723,9 @@ export default function FinanceEntryForm({
     if (!Number.isFinite(amount) || amount <= 0) { toast.error("Enter a valid amount."); return; }
     if (!form.entry_date) { toast.error("Select the entry date."); return; }
     if (!form.payment_type) { toast.error("Select a payment type."); return; }
+    if (form.payment_type === "Others" && !customPaymentType.trim()) {
+      toast.error("Please enter the custom payment type."); return;
+    }
 
     setSaving(true);
     try {
@@ -681,7 +737,7 @@ export default function FinanceEntryForm({
         sub_category: "Capital",
         client_name: form.client_name.trim(),
         amount,
-        payment_type: form.payment_type || null,
+        payment_type: getFinalPaymentType(),
         purpose: form.purpose.trim(),
         remarks: form.remarks || "",
         entry_date: form.entry_date,
@@ -713,6 +769,9 @@ export default function FinanceEntryForm({
       const amount = Number(form.amount);
       if (!Number.isFinite(amount) || amount <= 0) { toast.error("Enter a valid amount."); return; }
       if (!form.payment_type) { toast.error("Select a payment type."); return; }
+      if (form.payment_type === "Others" && !customPaymentType.trim()) {
+        toast.error("Please enter the custom payment type."); return;
+      }
 
       setSaving(true);
       try {
@@ -723,7 +782,7 @@ export default function FinanceEntryForm({
           client_name: form.client_name || "",
           generated_by: form.generated_by || "",
           amount,
-          payment_type: form.payment_type || null,
+          payment_type: getFinalPaymentType(),
           purpose: form.purpose.trim(),
           remarks: form.remarks || "",
           entry_date: form.entry_date,
@@ -751,6 +810,9 @@ export default function FinanceEntryForm({
       if (!row.purpose.trim()) { toast.error(`Row ${n}: purpose is required.`); return; }
     }
     if (!form.payment_type) { toast.error("Select a payment type."); return; }
+    if (form.payment_type === "Others" && !customPaymentType.trim()) {
+      toast.error("Please enter the custom payment type."); return;
+    }
 
     setSaving(true);
     try {
@@ -761,12 +823,12 @@ export default function FinanceEntryForm({
         client_name: form.client_name || "",
         generated_by: form.generated_by || "",
         remarks: form.remarks || "",
-        payment_type: form.payment_type || null,
+        payment_type: getFinalPaymentType(),
         entries: corpusRows.map((row) => ({
           exec_department: row.exec_department,
           amount: Number(row.amount),
           purpose: row.purpose.trim(),
-          payment_type: form.payment_type || null,
+          payment_type: getFinalPaymentType(),
         })),
       };
       const res = await api.post(url, body);
@@ -818,6 +880,9 @@ export default function FinanceEntryForm({
       if (paid > 0 && !form.payment_type) {
         toast.error("Select a payment type for the paid amount."); return;
       }
+      if (paid > 0 && form.payment_type === "Others" && !customPaymentType.trim()) {
+        toast.error("Please enter the custom payment type."); return;
+      }
 
       setSaving(true);
       try {
@@ -832,7 +897,7 @@ export default function FinanceEntryForm({
           fd.append("entry_date", form.entry_date);
           fd.append("total_amount", String(totalAmount));
           fd.append("paid", String(paid));
-          fd.append("payment_type", form.payment_type || "");
+          fd.append("payment_type", getFinalPaymentType() || "");
           fd.append("remarks", form.remarks || "");
           if (invoiceFile) fd.append("invoice", invoiceFile);
           if (removeInvoice) fd.append("remove_invoice", "true");
@@ -846,7 +911,7 @@ export default function FinanceEntryForm({
             entry_date: form.entry_date,
             total_amount: totalAmount,
             paid,
-            payment_type: form.payment_type || null,
+            payment_type: getFinalPaymentType() || null,
             remarks: form.remarks || "",
           };
         }
@@ -887,6 +952,9 @@ export default function FinanceEntryForm({
       }
       if (!valid) return;
       if (!form.payment_type) { toast.error("Select a payment type."); return; }
+      if (form.payment_type === "Others" && !customPaymentType.trim()) {
+        toast.error("Please enter the custom payment type."); return;
+      }
       return submitSalaryEntries();
     }
 
@@ -932,6 +1000,9 @@ export default function FinanceEntryForm({
     }
 
     if (!form.payment_type) { toast.error("Please select a payment type."); return; }
+    if (form.payment_type === "Others" && !customPaymentType.trim()) {
+      toast.error("Please enter the custom payment type."); return;
+    }
 
     submitSingleEntry(cleanItems);
   };
@@ -960,6 +1031,8 @@ export default function FinanceEntryForm({
             formData.append(key, form[key]);
           }
         });
+        formData.set("payment_type", getFinalPaymentType()); // Overwrite with custom if needed
+        
         if (showCategoryFields) {
           formData.append("employee_name", form.employee_name || "");
           formData.append("purpose", form.purpose || "");
@@ -979,7 +1052,8 @@ export default function FinanceEntryForm({
       } else {
         body = { ...form };
         body.amount = parseFloat(form.amount) || 0;
-        body.payment_type = form.payment_type || null;
+        body.payment_type = getFinalPaymentType() || null;
+        
         if (showCategoryFields) {
           body.employee_name = form.employee_name || null;
           body.purpose = form.purpose || null;
@@ -1051,7 +1125,7 @@ export default function FinanceEntryForm({
           salary_amount: salaryAmount,
           allowance_amount: allowanceAmount,
           amount: salaryAmount + allowanceAmount,
-          payment_type: form.payment_type || null,
+          payment_type: getFinalPaymentType() || null,
           remarks: emp.remarks || "",
           entry_date: form.entry_date,
         };
@@ -1064,7 +1138,7 @@ export default function FinanceEntryForm({
             employee_name: emp.employee_name.trim(),
             salary_amount: parseFloat(emp.salary_amount) || 0,
             allowance_amount: parseFloat(emp.allowance_amount) || 0,
-            payment_type: form.payment_type || null,
+            payment_type: getFinalPaymentType() || null,
             remarks: emp.remarks || "",
             entry_date: form.entry_date,
           })),
@@ -1103,16 +1177,7 @@ export default function FinanceEntryForm({
           <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
                  className="form-control" required />
         </div>
-        <div className="form-group">
-          <label className="form-label">Payment Type <span style={{ color: "red" }}>*</span></label>
-          <select name="payment_type" value={form.payment_type || ""} onChange={handleChange}
-                  className="form-control" required>
-            <option value="">Select payment type</option>
-            {PAYMENT_TYPES.map((pt) => (
-              <option key={pt} value={pt}>{pt}</option>
-            ))}
-          </select>
-        </div>
+        {renderPaymentTypeField(true)}
       </div>
       <div className="form-group">
         <label className="form-label">Purpose <span style={{ color: "red" }}>*</span></label>
@@ -1181,16 +1246,7 @@ export default function FinanceEntryForm({
               <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
                      className="form-control" required />
             </div>
-            <div className="form-group">
-              <label className="form-label">Payment Type <span style={{ color: "red" }}>*</span></label>
-              <select name="payment_type" value={form.payment_type || ""}
-                      onChange={handleChange} className="form-control" required>
-                <option value="">Select payment type</option>
-                {PAYMENT_TYPES.map((pt) => (
-                  <option key={pt} value={pt}>{pt}</option>
-                ))}
-              </select>
-            </div>
+            {renderPaymentTypeField(true)}
           </div>
 
           <div className="form-group">
@@ -1299,16 +1355,7 @@ export default function FinanceEntryForm({
             <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
                    className="form-control" required />
           </div>
-          <div className="form-group">
-            <label className="form-label">Payment Type <span style={{ color: "red" }}>*</span></label>
-            <select name="payment_type" value={form.payment_type || ""}
-                    onChange={handleChange} className="form-control" required>
-              <option value="">Select payment type</option>
-              {PAYMENT_TYPES.map((pt) => (
-                <option key={pt} value={pt}>{pt}</option>
-              ))}
-            </select>
-          </div>
+          {renderPaymentTypeField(true)}
         </div>
 
         <div className="form-group">
@@ -1587,16 +1634,7 @@ export default function FinanceEntryForm({
                    }}
                    placeholder="0.00" className="form-control" />
           </div>
-          <div className="form-group">
-            <label className="form-label">Payment Type</label>
-            <select name="payment_type" value={form.payment_type || ""}
-                    onChange={handleChange} className="form-control">
-              <option value="">Select payment type</option>
-              {PAYMENT_TYPES.map((pt) => (
-                <option key={pt} value={pt}>{pt}</option>
-              ))}
-            </select>
-          </div>
+          {renderPaymentTypeField(false)}
         </div>
 
         {!isEditingLedger && (
@@ -1733,7 +1771,7 @@ export default function FinanceEntryForm({
           {/* ============ CORPUS FUND (Corporate only) ============ */}
           {isCorpusFundType && isCorporate && !isCorpusFundRestricted && renderCorpusFundFields()}
 
-          {/* ============ ITEMS (MedTech / Everglades only) ============ */}
+          {/* ============ ITEMS (MedTech only) ============ */}
           {!isCapital && !isCorpusFundType && !isCorpusFundRestricted && requireItemsForCategory && (
             <div className="form-group">
               <label className="form-label">Items</label>
@@ -1785,6 +1823,17 @@ export default function FinanceEntryForm({
                       <option key={pt} value={pt}>{pt}</option>
                     ))}
                   </select>
+                  {form.payment_type === "Others" && (
+                    <input
+                      type="text"
+                      value={customPaymentType}
+                      onChange={(e) => setCustomPaymentType(e.target.value)}
+                      placeholder="Enter custom payment type"
+                      className="form-control"
+                      style={{ marginTop: 8 }}
+                      required
+                    />
+                  )}
                 </div>
                 {options.show_gst_tax && (
                   <div className="form-group" style={{ flex: 1 }}>
@@ -1848,16 +1897,7 @@ export default function FinanceEntryForm({
                 <input type="date" name="entry_date" value={form.entry_date}
                        onChange={handleChange} className="form-control" />
               </div>
-              <div className="form-group">
-                <label className="form-label">Payment Type <span style={{ color: "red" }}>*</span></label>
-                <select name="payment_type" value={form.payment_type || ""}
-                        onChange={handleChange} className="form-control" required>
-                  <option value="">Select payment type</option>
-                  {PAYMENT_TYPES.map((pt) => (
-                    <option key={pt} value={pt}>{pt}</option>
-                  ))}
-                </select>
-              </div>
+              {renderPaymentTypeField(true)}
             </div>
           )}
 
@@ -1960,16 +2000,7 @@ export default function FinanceEntryForm({
                   <input type="date" name="entry_date" value={form.entry_date}
                          onChange={handleChange} className="form-control" required />
                 </div>
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">Payment Type <span style={{ color: "red" }}>*</span></label>
-                  <select name="payment_type" value={form.payment_type || ""}
-                          onChange={handleChange} className="form-control" required>
-                    <option value="">Select payment type</option>
-                    {PAYMENT_TYPES.map((pt) => (
-                      <option key={pt} value={pt}>{pt}</option>
-                    ))}
-                  </select>
-                </div>
+                {renderPaymentTypeField(true)}
               </div>
               <div style={{ marginTop: 12, textAlign: "right", fontWeight: "bold" }}>
                 Total Salary Expense: {formatCurrency(salaryTotal)}

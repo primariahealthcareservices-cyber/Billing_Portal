@@ -1,5 +1,5 @@
 // frontend/src/components/CopperBookPage.jsx
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import toast from "react-hot-toast";
 import { ArrowLeft, Paperclip, Loader2, Search, RotateCcw, Trash2, Edit } from "lucide-react";
 import api from "../api/axios.js";
@@ -45,6 +45,7 @@ const EMPTY_EQUITY = {
 };
 
 const PAGE_SIZE = 25;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const fmtLocalDate = (d) => {
   const yy = d.getFullYear();
@@ -98,6 +99,15 @@ const fmtDateOnly = (d) => {
   return dt.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
 };
 
+const fmtMonthLabel = (m) => {
+  if (!m) return "—";
+  const match = /^(\d{4})-(\d{2})$/.exec(String(m));
+  if (!match) return m;
+  const dt = new Date(Number(match[1]), Number(match[2]) - 1, 1);
+  if (isNaN(dt)) return m;
+  return dt.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+};
+
 const fmtMoney = (v) => {
   const n = Number(v || 0);
   return `₹ ${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -137,6 +147,8 @@ export default function CopperBookPage({ onBack }) {
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [equity, setEquity] = useState(EMPTY_EQUITY);
+  const [monthlyRollback, setMonthlyRollback] = useState([]);
+  const [allTimeEquity, setAllTimeEquity] = useState(EMPTY_EQUITY);
   const [viewTotal, setViewTotal] = useState(0);
   const [totalRows, setTotalRows] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -146,6 +158,7 @@ export default function CopperBookPage({ onBack }) {
 
   const [statusFilter, setStatusFilter] = useState("all");
   const [department, setDepartment] = useState("");
+  const [panelDept, setPanelDept] = useState(""); // Specific for Panel 1
   const [departments, setDepartments] = useState([]);
   const [period, setPeriod] = useState("all");
   const [fromDate, setFromDate] = useState("");
@@ -164,6 +177,11 @@ export default function CopperBookPage({ onBack }) {
   const [editForm, setEditForm] = useState({});
 
   const [showAllEmployees, setShowAllEmployees] = useState(false);
+  const [rollYear, setRollYear] = useState("all");
+  const [rollHideEmpty, setRollHideEmpty] = useState(true);
+  const [rollNewestFirst, setRollNewestFirst] = useState(true);
+  
+  const reqSeq = useRef(0);
 
   const currentUser = (() => {
     try { return JSON.parse(localStorage.getItem("user") || "{}"); }
@@ -173,7 +191,6 @@ export default function CopperBookPage({ onBack }) {
   const isFinance = role === "SuperAdmin" || role === "admin" || role === "Corporate";
   const isCEO = role === "SuperAdmin" || role === "admin";
   const isSuperAdmin = role === "SuperAdmin" || role === "admin";
-  // Who can Edit / Delete (same roles as the backend)
   const canManage = role === "SuperAdmin" || role === "admin" || role === "Corporate";
 
   useEffect(() => {
@@ -182,33 +199,45 @@ export default function CopperBookPage({ onBack }) {
   }, [searchInput]);
 
   const load = useCallback(async (pageNum = 1, append = false) => {
+    const mySeq = ++reqSeq.current;
     if (!append) setLoading(true);
     else setLoadingMore(true);
     try {
-      const params = { page: pageNum, per_page: PAGE_SIZE };
+      const params = { page: pageNum, per_page: PAGE_SIZE, equity_department: panelDept };
       if (statusFilter !== "all") params.status = statusFilter;
-      if (fromDate) params.start_date = fromDate;
-      if (toDate) params.end_date = toDate;
+
+      let s = ISO_DATE.test(fromDate) ? fromDate : "";
+      let e = ISO_DATE.test(toDate) ? toDate : "";
+      if (s && e && s > e) [s, e] = [e, s];
+      if (s) params.start_date = s;
+      if (e) params.end_date = e;
+
       if (search) params.search = search;
       if (department) params.department = department;
 
       const res = await api.get("/copperbook/list", { params });
+      if (mySeq !== reqSeq.current) return;
+
       const data = res.data;
       setPages(data.pagination?.pages || 1);
       setPage(data.pagination?.page || 1);
       setTotalRows(data.pagination?.total || 0);
       setSummary({ ...EMPTY_SUMMARY, ...(data.summary || {}) });
       setEquity({ ...EMPTY_EQUITY, ...(data.equity || {}) });
+      setMonthlyRollback(Array.isArray(data.monthly_rollback) ? data.monthly_rollback : []);
+      setAllTimeEquity({ ...EMPTY_EQUITY, ...(data.all_time_equity || {}) });
       setDepartments(data.departments || []);
       setViewTotal(Number(data.view_total) || 0);
       setRows((prev) => (append ? [...prev, ...(data.requests || [])] : data.requests || []));
     } catch {
-      toast.error("Failed to load CopperBook requests.");
+      if (mySeq === reqSeq.current) toast.error("Failed to load CopperBook requests.");
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (mySeq === reqSeq.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
-  }, [statusFilter, department, fromDate, toDate, search]);
+  }, [statusFilter, department, fromDate, toDate, search, panelDept]);
 
   useEffect(() => { load(1, false); }, [load]);
 
@@ -231,6 +260,7 @@ export default function CopperBookPage({ onBack }) {
   const resetFilters = () => {
     setStatusFilter("all");
     setDepartment("");
+    setPanelDept("");
     setPeriod("all");
     setFromDate("");
     setToDate("");
@@ -323,6 +353,11 @@ export default function CopperBookPage({ onBack }) {
   const counts = Object.fromEntries(CHIPS.map((c) => [c, summary[c]?.count || 0]));
   const chipTitle = statusFilter === "all" ? "All" : STATUS_LABEL[statusFilter];
 
+  const totalExpenses = Math.max(
+    0,
+    Number(summary.approved?.amount || 0) - Number(summary.capital_equity?.amount || 0)
+  );
+
   const allEntries = detail?.employee_entries || [];
   const groups = {
     pending: allEntries.filter((e) => e.status === "pending"),
@@ -334,22 +369,209 @@ export default function CopperBookPage({ onBack }) {
   if (showAllEmployees) {
     return <AllEmployeesPage onBack={() => setShowAllEmployees(false)} />;
   }
+  const rollYears = [...new Set(monthlyRollback.map((r) => String(r.month).slice(0, 4)))]
+  .sort()
+  .reverse();
 
-  // Footer boxes for the "All" view — order: Capital Equity, Approved, Rejected, Balance
+const rollRows = monthlyRollback
+  .filter((r) => rollYear === "all" || String(r.month).startsWith(rollYear))
+  .filter((r) =>
+    !rollHideEmpty ||
+    Number(r.capital_equity || 0) !== 0 ||
+    Number(r.approved || 0) !== 0
+  );
+if (rollNewestFirst) rollRows.reverse();
+  
+  // Panel 1 — Filtered
   const equityBoxes = [
     { label: "Capital Equity", value: equity.capital_equity, color: "#4338ca",
-      sub: department ? "All business units"
-         : Number(equity.opening_balance) !== 0 ? `incl. ${fmtMoney(equity.opening_balance)} carried fwd` : null },
-    { label: "Approved", value: equity.approved, color: "#16a34a" },
-    { label: "Rejected", value: equity.rejected, color: "#e11d48" },
+      sub: panelDept ? `For ${panelDept}` : "All departments" },
+    { label: "Approved", value: equity.approved, color: "#16a34a",
+      sub: panelDept ? `For ${panelDept}` : "All departments" },
+    { label: "Rejected", value: equity.rejected, color: "#e11d48",
+      sub: panelDept ? `For ${panelDept}` : "All departments" },
     { label: "Balance", value: equity.balance, color: "#b45309",
-      sub: department ? "All business units" : null },
+      sub: panelDept ? `For ${panelDept}` : "All departments" },
+  ];
+
+  // Panel 3 — All-time (no filters)
+  const allTimeBoxes = [
+    { label: "Capital Equity", value: allTimeEquity.capital_equity, color: "#4338ca" },
+    { label: "Approved", value: allTimeEquity.approved, color: "#16a34a" },
+    { label: "Rejected", value: allTimeEquity.rejected, color: "#e11d48" },
+    { label: "Balance", value: allTimeEquity.balance, color: "#b45309" },
   ];
 
   const scopeLabel = department || "All Business Units";
   const footerTitle = statusFilter === "all"
     ? `SUMMARY — ${scopeLabel.toUpperCase()}`
     : `TOTAL AMOUNT — ${chipTitle.toUpperCase()}${department ? ` · ${department.toUpperCase()}` : ""}`;
+
+  const periodText = fromDate || toDate
+    ? `${fromDate ? fmtDateOnly(fromDate) : "Beginning"} → ${toDate ? fmtDateOnly(toDate) : "Today"}`
+    : "All time";
+
+  // ───────── 3-PANEL FOOTER ─────────
+  const summaryPanels = (
+    <div
+      style={{
+        marginTop: 12, padding: "16px 20px", borderRadius: 10,
+        background: "linear-gradient(90deg, #ecfdf5 0%, #f0fdf4 100%)",
+        border: "1px solid #a7f3d0",
+        opacity: loading ? 0.6 : 1,
+        transition: "opacity 0.15s ease",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#047857", letterSpacing: 0.4, display: "flex", alignItems: "center", gap: 6 }}>
+            {footerTitle}
+            {loading && <Loader2 size={12} className="spin" />}
+          </div>
+          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+            Period: {periodText} · {totalRows} rows matching your filters
+          </div>
+        </div>
+
+        {statusFilter !== "all" && (
+          <div style={{ fontSize: 24, fontWeight: 800, color: "#065f46", whiteSpace: "nowrap" }}>
+            {fmtMoney(viewTotal)}
+          </div>
+        )}
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+          gap: 14,
+        }}
+      >
+        {/* Panel 1 — Filtered View */}
+        <div style={{ background: "#ffffff", borderRadius: 8, padding: 14, border: "1px solid #d1fae5" }}>
+          
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#047857", letterSpacing: 0.5, textTransform: "uppercase" }}>
+              ① Filtered View
+            </div>
+            {/* Panel-Specific Dropdown */}
+            <select
+              value={panelDept}
+              onChange={(e) => setPanelDept(e.target.value)}
+              style={{ fontSize: 11, padding: "2px 6px", borderRadius: 4, border: "1px solid #cbd5e1", background: "#f8fafc", maxWidth: 130 }}
+            >
+              <option value="">All Departments</option>
+              {departments.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10 }}>
+            All values for the selected department
+          </div>
+
+          {equityBoxes.map((b) => (
+            <div key={b.label} style={{ marginBottom: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                <span style={{ color: b.color, fontWeight: 600, fontSize: 12 }}>{b.label}</span>
+                <span style={{ fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", fontSize: 13 }}>{fmtMoney(b.value)}</span>
+              </div>
+              {b.sub && <div style={{ fontSize: 10.5, color: "#94a3b8", textAlign: "right" }}>{b.sub}</div>}
+            </div>
+          ))}
+        </div>
+
+        {/* Panel 2 — Monthly Rollback */}
+        <div style={{ background: "#ffffff", borderRadius: 8, padding: 14, border: "1px solid #d1fae5", gridColumn: "span 2", minWidth: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#047857", letterSpacing: 0.5, marginBottom: 4, textTransform: "uppercase" }}>
+            ② Monthly Rollback
+          </div>
+          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10 }}>
+            Balance at end of each month
+          </div>
+
+          {/* Panel filters */}
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 10, fontSize: 12 }}>
+            <select
+              className="form-control"
+              value={rollYear}
+              onChange={(e) => setRollYear(e.target.value)}
+              style={{ width: 110, padding: "4px 8px", fontSize: 12, height: "auto" }}
+            >
+              <option value="all">All years</option>
+              {rollYears.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+              <input type="checkbox" checked={rollHideEmpty} onChange={(e) => setRollHideEmpty(e.target.checked)} />
+              Hide months with no activity
+            </label>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+              <input type="checkbox" checked={rollNewestFirst} onChange={(e) => setRollNewestFirst(e.target.checked)} />
+              Newest first
+            </label>
+            <span style={{ marginLeft: "auto", color: "#94a3b8" }}>
+              {rollRows.length} of {monthlyRollback.length} months
+            </span>
+          </div>
+
+          {rollRows.length === 0 ? (
+            <div style={{ fontSize: 12, color: "#9ca3af", padding: "8px 0" }}>
+              {monthlyRollback.length === 0
+                ? "No monthly data available."
+                : "No activity in the selected months. Untick “Hide months with no activity” to see all."}
+            </div>
+          ) : (
+            <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid #eef2f7", borderRadius: 6 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ position: "sticky", top: 0, background: "#f8fafc", zIndex: 1 }}>
+                    <th style={{ textAlign: "left", padding: "6px 10px", color: "#64748b", fontWeight: 600 }}>Month</th>
+                    <th style={{ textAlign: "right", padding: "6px 10px", color: "#4338ca", fontWeight: 600 }}>Equity added</th>
+                    <th style={{ textAlign: "right", padding: "6px 10px", color: "#16a34a", fontWeight: 600 }}>Approved</th>
+                    <th style={{ textAlign: "right", padding: "6px 10px", color: "#b45309", fontWeight: 600 }}>Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rollRows.map((row) => (
+                    <tr key={row.month} style={{ borderTop: "1px solid #eef2f7" }}>
+                      <td style={{ padding: "6px 10px", color: "#334155", fontWeight: 500, whiteSpace: "nowrap" }}>{fmtMonthLabel(row.month)}</td>
+                      <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", color: Number(row.capital_equity) ? "#0f172a" : "#cbd5e1" }}>
+                        {fmtMoney(row.capital_equity)}
+                      </td>
+                      <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", color: Number(row.approved) ? "#0f172a" : "#cbd5e1" }}>
+                        {fmtMoney(row.approved)}
+                      </td>
+                      <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", fontWeight: 700, color: Number(row.balance) < 0 ? "#e11d48" : "#065f46" }}>
+                        {fmtMoney(row.balance)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Panel 3 — All-Time (No Filters) */}
+        <div style={{ background: "#ffffff", borderRadius: 8, padding: 14, border: "1px solid #d1fae5" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#047857", letterSpacing: 0.5, marginBottom: 4, textTransform: "uppercase" }}>
+            ③ All‑Time (No Filters)
+          </div>
+          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10 }}>
+            Cumulative across every request
+          </div>
+          {allTimeBoxes.map((b) => (
+            <div key={b.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6, gap: 8 }}>
+              <span style={{ color: b.color, fontWeight: 600, fontSize: 12 }}>{b.label}</span>
+              <span style={{ fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", fontSize: 13 }}>{fmtMoney(b.value)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const firstLoad = loading && rows.length === 0;
 
   return (
     <div className="page">
@@ -431,12 +653,12 @@ export default function CopperBookPage({ onBack }) {
           </div>
         </div>
 
-        {loading ? (
+        {firstLoad ? (
           <div className="card empty-state">Loading CopperBook requests…</div>
         ) : rows.length === 0 ? (
           <div className="card empty-state">No CopperBook requests match this filter.</div>
         ) : (
-          <div className="card table-wrap">
+          <div className="card table-wrap" style={{ opacity: loading ? 0.6 : 1, transition: "opacity 0.15s ease" }}>
             <table className="data-table" style={{ minWidth: 1100, width: "100%" }}>
               <thead>
                 <tr>
@@ -489,49 +711,20 @@ export default function CopperBookPage({ onBack }) {
               </tbody>
               <tfoot>
                 <tr style={{ background: "#f8fafc", borderTop: "2px solid #e2e8f0" }}>
-                  <td colSpan={2} style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>Total ({chipTitle})</td>
-                  <td style={{ textAlign: "right", fontWeight: 800, fontSize: 15, color: "#065f46", whiteSpace: "nowrap" }}>{fmtMoney(viewTotal)}</td>
-                  <td colSpan={7} style={{ fontSize: 12.5, color: "#6b7280" }}>{totalRows} rows across all pages</td>
+                  <td colSpan={2} style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>
+                    {statusFilter === "all" ? "Total Expenses" : `Total (${chipTitle})`}
+                  </td>
+                  <td style={{ textAlign: "right", fontWeight: 800, fontSize: 15, color: "#065f46", whiteSpace: "nowrap" }}>
+                    {fmtMoney(statusFilter === "all" ? totalExpenses : viewTotal)}
+                  </td>
+                  <td colSpan={7} style={{ fontSize: 12.5, color: "#6b7280" }}>
+                    {statusFilter === "all"
+                      ? `Approved amounts excluding Capital Equity · ${totalRows} rows across all pages`
+                      : `${totalRows} rows across all pages`}
+                  </td>
                 </tr>
               </tfoot>
             </table>
-
-            {/* ───────── FOOTER ───────── */}
-            <div
-              style={{
-                marginTop: 12, padding: "16px 20px", borderRadius: 10,
-                background: "linear-gradient(90deg, #ecfdf5 0%, #f0fdf4 100%)",
-                border: "1px solid #a7f3d0",
-                display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap",
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#047857", letterSpacing: 0.4 }}>
-                  {footerTitle}
-                </div>
-                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-                  Calculated across all {totalRows} rows matching your filters
-                </div>
-              </div>
-
-              {/* "All" button only: Capital Equity → Approved → Rejected → Balance */}
-              {statusFilter === "all" && (
-                <div style={{ display: "flex", gap: 22, flexWrap: "wrap", fontSize: 13 }}>
-                  {equityBoxes.map((b) => (
-                    <div key={b.label}>
-                      <div style={{ color: b.color, fontWeight: 600, fontSize: 12 }}>{b.label}</div>
-                      <div style={{ fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap" }}>{fmtMoney(b.value)}</div>
-                      {b.sub && <div style={{ fontSize: 10.5, color: "#64748b" }}>{b.sub}</div>}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Big total only for the status buttons (removed on the "All" view) */}
-              {statusFilter !== "all" && (
-                <div style={{ fontSize: 24, fontWeight: 800, color: "#065f46", whiteSpace: "nowrap" }}>{fmtMoney(viewTotal)}</div>
-              )}
-            </div>
 
             {page < pages && (
               <div style={{ textAlign: "center", marginTop: 12 }}>
@@ -542,6 +735,9 @@ export default function CopperBookPage({ onBack }) {
             )}
           </div>
         )}
+
+        {/* Always visible — updates on every filter / date change, even when no rows match */}
+        {summaryPanels}
 
         {openId && (
           <div className="modal-overlay" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setOpenId(null)}>
@@ -563,7 +759,6 @@ export default function CopperBookPage({ onBack }) {
                       </p>
                     </div>
 
-                    {/* Top-right: Edit · Delete · Close */}
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       {canManage && !editing && (
                         <button className="btn btn-secondary" onClick={startEdit} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
