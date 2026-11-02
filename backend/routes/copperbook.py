@@ -667,7 +667,7 @@ def intake():
         db.session.rollback()
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
-
+# backend/routes/copperbook.py
 
 @cb_bp.route("/list", methods=["GET", "OPTIONS"])
 @jwt_required()
@@ -681,6 +681,12 @@ def list_all():
     category = (request.args.get("category") or "").strip()
     start_date_str = (request.args.get("start_date") or "").strip()
     end_date_str = (request.args.get("end_date") or "").strip()
+    
+    # --- NEW: Panel specific date filters ---
+    eq_start_str = (request.args.get("equity_start_date") or "").strip()
+    eq_end_str = (request.args.get("equity_end_date") or "").strip()
+    # ----------------------------------------
+
     search = (request.args.get("search") or "").strip()
     department = (request.args.get("department") or "").strip()
     equity_department = (request.args.get("equity_department") or "").strip()
@@ -722,6 +728,21 @@ def list_all():
             q = q.filter(eff_date_col <= end_d)
         except ValueError:
             end_d = None
+
+    # --- NEW: Calculate Panel specific dates ---
+    eq_start_d = start_d
+    eq_end_d = end_d
+    if eq_start_str:
+        try:
+            eq_start_d = datetime.strptime(eq_start_str, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    if eq_end_str:
+        try:
+            eq_end_d = datetime.strptime(eq_end_str, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    # -------------------------------------------
 
     if search:
         like = f"%{search}%"
@@ -781,7 +802,8 @@ def list_all():
     return jsonify({
         "requests": [_serialize_row(r, g, sp) for r, g, sp in page_rows],
         "summary": summary,
-        "equity": _capital_equity_summary(start_d, end_d, equity_department),
+        # --- NEW: Pass the specific eq_start_d and eq_end_d ---
+        "equity": _capital_equity_summary(eq_start_d, eq_end_d, equity_department or department),
         "departments": departments,
         "view_total": round(sum((x[1][1] or 0) for x in sel), 2),
 
@@ -793,8 +815,6 @@ def list_all():
             "pages": (total + per_page - 1) // per_page,
         },
     }), 200
-
-
 @cb_bp.route("/<int:rid>", methods=["GET", "OPTIONS"])
 @jwt_required()
 def detail(rid):

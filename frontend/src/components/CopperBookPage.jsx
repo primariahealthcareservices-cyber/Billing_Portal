@@ -156,15 +156,21 @@ export default function CopperBookPage({ onBack }) {
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
 
+  // Main Filters
   const [statusFilter, setStatusFilter] = useState("all");
   const [department, setDepartment] = useState("");
-  const [panelDept, setPanelDept] = useState(""); // Specific for Panel 1
   const [departments, setDepartments] = useState([]);
   const [period, setPeriod] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+
+  // --- Panel 1 Specific Filters ---
+  const [panelDept, setPanelDept] = useState("");
+  const [panelPeriod, setPanelPeriod] = useState("all");
+  const [panelFromDate, setPanelFromDate] = useState("");
+  const [panelToDate, setPanelToDate] = useState("");
 
   const [openId, setOpenId] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -212,6 +218,14 @@ export default function CopperBookPage({ onBack }) {
       if (s) params.start_date = s;
       if (e) params.end_date = e;
 
+      // --- NEW: Pass panel specific dates to API ---
+      let ps = ISO_DATE.test(panelFromDate) ? panelFromDate : "";
+      let pe = ISO_DATE.test(panelToDate) ? panelToDate : "";
+      if (ps && pe && ps > pe) [ps, pe] = [pe, ps];
+      if (ps) params.equity_start_date = ps;
+      if (pe) params.equity_end_date = pe;
+      // ---------------------------------------------
+
       if (search) params.search = search;
       if (department) params.department = department;
 
@@ -237,7 +251,7 @@ export default function CopperBookPage({ onBack }) {
         setLoadingMore(false);
       }
     }
-  }, [statusFilter, department, fromDate, toDate, search, panelDept]);
+  }, [statusFilter, department, fromDate, toDate, search, panelDept, panelFromDate, panelToDate]);
 
   useEffect(() => { load(1, false); }, [load]);
 
@@ -257,15 +271,29 @@ export default function CopperBookPage({ onBack }) {
     setToDate(end);
   };
 
+  const handlePanelPeriodChange = (newPeriod) => {
+    setPanelPeriod(newPeriod);
+    if (newPeriod === "custom") return;
+    const { start, end } = getPeriodRange(newPeriod);
+    setPanelFromDate(start);
+    setPanelToDate(end);
+  };
+
   const resetFilters = () => {
+    // Main filters
     setStatusFilter("all");
     setDepartment("");
-    setPanelDept("");
     setPeriod("all");
     setFromDate("");
     setToDate("");
     setSearchInput("");
     setSearch("");
+
+    // Panel filters
+    setPanelDept("");
+    setPanelPeriod("all");
+    setPanelFromDate("");
+    setPanelToDate("");
   };
 
   const openRow = (r) => {
@@ -373,25 +401,27 @@ export default function CopperBookPage({ onBack }) {
   .sort()
   .reverse();
 
-const rollRows = monthlyRollback
-  .filter((r) => rollYear === "all" || String(r.month).startsWith(rollYear))
-  .filter((r) =>
-    !rollHideEmpty ||
-    Number(r.capital_equity || 0) !== 0 ||
-    Number(r.approved || 0) !== 0
-  );
-if (rollNewestFirst) rollRows.reverse();
+  const rollRows = monthlyRollback
+    .filter((r) => rollYear === "all" || String(r.month).startsWith(rollYear))
+    .filter((r) =>
+      !rollHideEmpty ||
+      Number(r.capital_equity || 0) !== 0 ||
+      Number(r.approved || 0) !== 0
+    );
+  if (rollNewestFirst) rollRows.reverse();
   
+  // ───────── PANEL 1 DYNAMIC FILTERS ─────────
+  const activeDept = panelDept || department || "All Departments";
+  const activePeriodText = panelFromDate || panelToDate
+    ? `${panelFromDate ? fmtDateOnly(panelFromDate) : "Beginning"} → ${panelToDate ? fmtDateOnly(panelToDate) : "Today"}`
+    : "All Time";
+
   // Panel 1 — Filtered
   const equityBoxes = [
-    { label: "Capital Equity", value: equity.capital_equity, color: "#4338ca",
-      sub: panelDept ? `For ${panelDept}` : "All departments" },
-    { label: "Approved", value: equity.approved, color: "#16a34a",
-      sub: panelDept ? `For ${panelDept}` : "All departments" },
-    { label: "Rejected", value: equity.rejected, color: "#e11d48",
-      sub: panelDept ? `For ${panelDept}` : "All departments" },
-    { label: "Balance", value: equity.balance, color: "#b45309",
-      sub: panelDept ? `For ${panelDept}` : "All departments" },
+    { label: "Capital Equity", value: equity.capital_equity, color: "#4338ca", sub: activeDept },
+    { label: "Approved", value: equity.approved, color: "#16a34a", sub: activeDept },
+    { label: "Rejected", value: equity.rejected, color: "#e11d48", sub: activeDept },
+    { label: "Balance", value: equity.balance, color: "#b45309", sub: activeDept },
   ];
 
   // Panel 3 — All-time (no filters)
@@ -450,24 +480,60 @@ if (rollNewestFirst) rollRows.reverse();
         {/* Panel 1 — Filtered View */}
         <div style={{ background: "#ffffff", borderRadius: 8, padding: 14, border: "1px solid #d1fae5" }}>
           
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "#047857", letterSpacing: 0.5, textTransform: "uppercase" }}>
               ① Filtered View
             </div>
-            {/* Panel-Specific Dropdown */}
-            <select
-              value={panelDept}
-              onChange={(e) => setPanelDept(e.target.value)}
-              style={{ fontSize: 11, padding: "2px 6px", borderRadius: 4, border: "1px solid #cbd5e1", background: "#f8fafc", maxWidth: 130 }}
-            >
-              <option value="">All Departments</option>
-              {departments.map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
+            
+            {/* --- PANEL 1 FILTER DROPDOWNS --- */}
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              <select
+                value={panelDept}
+                onChange={(e) => setPanelDept(e.target.value)}
+                style={{ fontSize: 11, padding: "2px 6px", borderRadius: 4, border: "1px solid #cbd5e1", background: "#f8fafc", maxWidth: 110 }}
+              >
+                <option value="">{department ? `Use “${department}”` : "All Depts"}</option>
+                {departments.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+
+              <select
+                value={panelPeriod}
+                onChange={(e) => handlePanelPeriodChange(e.target.value)}
+                style={{ fontSize: 11, padding: "2px 6px", borderRadius: 4, border: "1px solid #cbd5e1", background: "#f8fafc" }}
+              >
+                <option value="all">All Time</option>
+                <option value="month">This Month</option>
+                <option value="quarter">This Quarter</option>
+                <option value="year">This Year</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+            {/* ------------------------------- */}
           </div>
-          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10 }}>
-            All values for the selected department
+          
+          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+            <div>{activeDept} · {activePeriodText}</div>
+            {/* --- PANEL 1 CUSTOM DATES --- */}
+            {panelPeriod === "custom" && (
+              <div style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 2 }}>
+                <input
+                  type="date"
+                  value={panelFromDate}
+                  onChange={(e) => setPanelFromDate(e.target.value)}
+                  style={{ fontSize: 10, padding: "1px 4px", borderRadius: 3, border: "1px solid #cbd5e1", width: 105 }}
+                />
+                <span>→</span>
+                <input
+                  type="date"
+                  value={panelToDate}
+                  onChange={(e) => setPanelToDate(e.target.value)}
+                  style={{ fontSize: 10, padding: "1px 4px", borderRadius: 3, border: "1px solid #cbd5e1", width: 105 }}
+                />
+              </div>
+            )}
+            {/* ---------------------------- */}
           </div>
 
           {equityBoxes.map((b) => (
@@ -476,7 +542,7 @@ if (rollNewestFirst) rollRows.reverse();
                 <span style={{ color: b.color, fontWeight: 600, fontSize: 12 }}>{b.label}</span>
                 <span style={{ fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", fontSize: 13 }}>{fmtMoney(b.value)}</span>
               </div>
-              {b.sub && <div style={{ fontSize: 10.5, color: "#94a3b8", textAlign: "right" }}>{b.sub}</div>}
+              {b.sub && <div style={{ fontSize: 10.5, color: "#94a3b8", textAlign: "right" }}>For {b.sub}</div>}
             </div>
           ))}
         </div>
