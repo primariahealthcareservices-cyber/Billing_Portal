@@ -416,12 +416,10 @@ export default function CopperBookPage({ onBack }) {
     ? `${panelFromDate ? fmtDateOnly(panelFromDate) : "Beginning"} → ${panelToDate ? fmtDateOnly(panelToDate) : "Today"}`
     : "All Time";
 
-  // Panel 1 — Filtered
+  // Panel 1 — Filtered (Capital Equity & Balance removed)
   const equityBoxes = [
-    { label: "Capital Equity", value: equity.capital_equity, color: "#4338ca", sub: activeDept },
     { label: "Approved", value: equity.approved, color: "#16a34a", sub: activeDept },
     { label: "Rejected", value: equity.rejected, color: "#e11d48", sub: activeDept },
-    { label: "Balance", value: equity.balance, color: "#b45309", sub: activeDept },
   ];
 
   // Panel 3 — All-time (no filters)

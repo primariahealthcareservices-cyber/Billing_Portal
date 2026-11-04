@@ -16,14 +16,11 @@ const formatCurrency = (value) => {
   }).format(number);
 };
 
-// api.defaults.baseURL is like "http://localhost:5001/api" or "https://.../api".
-// We want the origin WITHOUT the trailing "/api" so we can prefix relative URLs.
 const getApiOrigin = () => {
   const base = api.defaults.baseURL || "";
   return base.replace(/\/api\/?$/, "").replace(/\/$/, "");
 };
 
-// ✅ Open invoice in a new tab using the backend URL directly (no blob, no CORS).
 const handleViewInvoice = (entry) => {
   if (!entry?.invoice_url) {
     toast.error("Invoice file not found.");
@@ -36,7 +33,6 @@ const handleViewInvoice = (entry) => {
     url = `${origin}${url}`;
   }
 
-  // Attach JWT as a query param — a new tab can't send headers.
   const token = localStorage.getItem("token") || "";
   const sep = url.includes("?") ? "&" : "?";
   const finalUrl = token ? `${url}${sep}token=${encodeURIComponent(token)}` : url;
@@ -47,7 +43,6 @@ const handleViewInvoice = (entry) => {
   }
 };
 
-// Helper for Payment Type badge colors
 const getPaymentBadgeStyle = (type) => {
   switch (type) {
     case "UPI":  return { bg: "#e0e7ff", color: "#3730a3" };
@@ -59,12 +54,21 @@ const getPaymentBadgeStyle = (type) => {
 
 const hasValue = (v) => v !== null && v !== undefined && v !== "";
 
+const getEmployeeName = (entry) =>
+  entry?.employee_name ||
+  entry?.employee ||
+  entry?.emp_name ||
+  entry?.employeeName ||
+  "";
+
 export default function FinanceTable({
   entries = [],
   onEdit,
   onDelete,
   onView,
   currentDepartment,
+  showEmployeeName: showEmployeeNameProp = false,
+  showClientName: showClientNameProp, // ✅ New Prop from Dashboard
 }) {
   if (!entries || entries.length === 0) {
     return (
@@ -75,8 +79,12 @@ export default function FinanceTable({
     );
   }
 
-  // ---- Column visibility (a column shows only if at least one row has data) ----
-  const showClientName       = entries.some((e) => e?.client_name);
+  // ---- Column visibility ----
+  // ✅ Respect the prop passed from Dashboard. If not passed, fallback to checking data.
+  const showClientName = showClientNameProp !== undefined 
+    ? showClientNameProp 
+    : entries.some((e) => e?.client_name);
+
   const showItems            = entries.some((e) => Array.isArray(e?.items) && e.items.length > 0);
   const showRevenueType      = entries.some((e) => e?.revenue_type);
   const showGeneratedBy      = entries.some((e) => e?.generated_by);
@@ -85,7 +93,7 @@ export default function FinanceTable({
   const showGstType          = entries.some((e) => hasValue(e?.gst_tax_percent));
   const showTaxInvoiceNumber = entries.some((e) => e?.tax_invoice_number);
 
-  // Extra columns used by other departments (shown only when data exists)
+  // Extra columns
   const showSubCategory      = entries.some((e) => e?.sub_category);
   const showPatientName      = entries.some((e) => e?.patient_name);
   const showPatientPlace     = entries.some((e) => e?.patient_place);
@@ -95,7 +103,9 @@ export default function FinanceTable({
   const showLedgerDetails    = entries.some((e) => e._type === "ledger");
   const showInvoice          = entries.some((e) => e?.invoice_url);
 
-  // ✅ Always show Payment Type
+  // ✅ Employee Name — show if Prop is true, even if page has empty names.
+  const showEmployeeName = showEmployeeNameProp;
+
   const showPaymentType = true;
 
   return (
@@ -103,10 +113,10 @@ export default function FinanceTable({
       <table className="finance-table">
         <thead>
           <tr>
-            {/* ===== NEW ORDER ===== */}
             <th>Date</th>
             <th>Type</th>
             <th>Category</th>
+            {showEmployeeName && <th>Employee Name</th>}
             {showClientName && <th>Client Name</th>}
             {showItems && <th>Items</th>}
             <th className="text-right">Amount</th>
@@ -118,7 +128,6 @@ export default function FinanceTable({
             {showGstType && <th className="text-right">GST Type</th>}
             {showTaxInvoiceNumber && <th>Invoice Number</th>}
 
-            {/* ===== Other-department columns (only if data exists) ===== */}
             {showSubCategory && <th>Sub-Category</th>}
             {showPatientName && <th>Patient Name</th>}
             {showPatientPlace && <th>Patient Place</th>}
@@ -141,7 +150,6 @@ export default function FinanceTable({
 
             return (
               <tr key={entry.id}>
-                {/* ===== NEW ORDER ===== */}
                 <td style={{ whiteSpace: "nowrap" }}>{entry.entry_date || "—"}</td>
 
                 <td>
@@ -155,6 +163,12 @@ export default function FinanceTable({
                 </td>
 
                 <td>{entry.category || "—"}</td>
+
+                {showEmployeeName && (
+                  <td style={{ fontWeight: 600 }}>
+                    {getEmployeeName(entry) || "—"}
+                  </td>
+                )}
 
                 {showClientName && <td>{entry.client_name || "—"}</td>}
 
@@ -205,7 +219,6 @@ export default function FinanceTable({
 
                 {showTaxInvoiceNumber && <td>{entry.tax_invoice_number || "—"}</td>}
 
-                {/* ===== Other-department columns ===== */}
                 {showSubCategory && <td>{entry.sub_category || "—"}</td>}
                 {showPatientName && <td>{entry.patient_name || "—"}</td>}
                 {showPatientPlace && <td>{entry.patient_place || "—"}</td>}

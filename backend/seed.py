@@ -9,7 +9,7 @@ DEMO_USERS = [
     {"name": "Swarupa",                "email": "pcm@primaria.com",                            "password": "Primaria@123", "role": "PCM",                         "department": "PCM"},
     {"name": "Injuma",                 "email": "medtech@primaria.com",                        "password": "Primaria@123", "role": "MedTech",                     "department": "MedTech"},
     {"name": "Afroz Shaik",            "email": "financehub@primaria.com",                     "password": "Primaria@123", "role": "Corporate",                   "department": "Corporate"},
-    {"name": "Kishore M",              "email": "adminstrationfunctionalunit@primaria.com",    "password": "Primaria@123", "role": "Adminstrationfunctionalunit", "department": "Adminstrationfunctionalunit"},
+    {"name": "Kishore M",              "email": "adminstrationfunctionalunit@primaria.coma",    "password": "Primaria@123", "role": "Adminstrationfunctionalunit", "department": "Adminstrationfunctionalunit"},
     {"name": "Afreed",                 "email": "rd@primaria.com",                             "password": "Primaria@123", "role": "ResearchDevelopment",         "department": "ResearchDevelopment"},
     {"name": "Kumar M",                "email": "caredx@primaria.com",                         "password": "Primaria@123", "role": "Caredx",                      "department": "Caredx"},
     {"name": "Dental User",            "email": "dental@primaria.com",                         "password": "Primaria@123", "role": "Dental",                      "department": "Dental"},
