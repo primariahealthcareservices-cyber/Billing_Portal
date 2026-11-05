@@ -54,12 +54,19 @@ const getPaymentBadgeStyle = (type) => {
 
 const hasValue = (v) => v !== null && v !== undefined && v !== "";
 
-const getEmployeeName = (entry) =>
-  entry?.employee_name ||
-  entry?.employee ||
-  entry?.emp_name ||
-  entry?.employeeName ||
-  "";
+// ✅ For Corpus Fund rows, fall back to generated_by so the Employee Name
+//    column still displays even for old rows that only have generated_by.
+const getEmployeeName = (entry) => {
+  if (!entry) return "";
+  return (
+    entry.employee_name ||
+    entry.employee ||
+    entry.emp_name ||
+    entry.employeeName ||
+    (entry.category === "Corpus Fund" ? entry.generated_by : "") ||
+    ""
+  );
+};
 
 export default function FinanceTable({
   entries = [],
@@ -68,7 +75,7 @@ export default function FinanceTable({
   onView,
   currentDepartment,
   showEmployeeName: showEmployeeNameProp = false,
-  showClientName: showClientNameProp, // ✅ New Prop from Dashboard
+  showClientName: showClientNameProp,
 }) {
   if (!entries || entries.length === 0) {
     return (
@@ -79,10 +86,8 @@ export default function FinanceTable({
     );
   }
 
-  // ---- Column visibility ----
-  // ✅ Respect the prop passed from Dashboard. If not passed, fallback to checking data.
-  const showClientName = showClientNameProp !== undefined 
-    ? showClientNameProp 
+  const showClientName = showClientNameProp !== undefined
+    ? showClientNameProp
     : entries.some((e) => e?.client_name);
 
   const showItems            = entries.some((e) => Array.isArray(e?.items) && e.items.length > 0);
@@ -93,7 +98,6 @@ export default function FinanceTable({
   const showGstType          = entries.some((e) => hasValue(e?.gst_tax_percent));
   const showTaxInvoiceNumber = entries.some((e) => e?.tax_invoice_number);
 
-  // Extra columns
   const showSubCategory      = entries.some((e) => e?.sub_category);
   const showPatientName      = entries.some((e) => e?.patient_name);
   const showPatientPlace     = entries.some((e) => e?.patient_place);
@@ -103,8 +107,19 @@ export default function FinanceTable({
   const showLedgerDetails    = entries.some((e) => e._type === "ledger");
   const showInvoice          = entries.some((e) => e?.invoice_url);
 
-  // ✅ Employee Name — show if Prop is true, even if page has empty names.
-  const showEmployeeName = showEmployeeNameProp;
+  const isCorporateDept = currentDepartment === "Corporate";
+  const hasCampsEventsEmployee =
+    isCorporateDept &&
+    entries.some(
+      (e) => e?.category === "Camps & Events" && hasValue(getEmployeeName(e))
+    );
+  const hasCorpusFundEmployee =
+    isCorporateDept &&
+    entries.some(
+      (e) => e?.category === "Corpus Fund" && hasValue(getEmployeeName(e))
+    );
+  const showEmployeeName =
+    showEmployeeNameProp || hasCampsEventsEmployee || hasCorpusFundEmployee;
 
   const showPaymentType = true;
 

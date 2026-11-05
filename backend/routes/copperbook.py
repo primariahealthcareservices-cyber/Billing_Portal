@@ -1,5 +1,6 @@
 # billing-portal/backend/routes/copperbook.py
 import os
+import re as _re
 import json
 import math
 import traceback
@@ -34,7 +35,7 @@ BUSINESS_UNITS = [
     "PCM",
     "Everglades",
     "Corporate Management",
-    "Dental",                       # ← only change
+    "Dental",
 ]
 
 MAX_AMOUNT = 9_999_999_999.99
@@ -44,6 +45,14 @@ VIEW_STATUSES = ("pending", "forwarded_to_ceo", "approved", "rejected")
 ENTRY_VIEWS = ("pending", "approved", "rejected")
 
 ROLLBACK_MONTHS = 24
+
+# ─── Search helpers ────────────────────────────────────────────────────────
+_SEARCH_NORM = _re.compile(r'[^a-z0-9]+')
+
+
+def _normalize_search(s: str) -> str:
+    """'CB-1050' / 'cb 1050' / 'cb1050' → 'cb1050'."""
+    return _SEARCH_NORM.sub('', (s or '').lower())
 
 
 def _service_token_ok():
@@ -301,6 +310,7 @@ def _monthly_rollback():
             y, m = y + 1, 1
     return result
 
+
 def _dept_key(name):
     return (name or "").split("(")[0].strip().lower()
 
@@ -525,6 +535,47 @@ def _sync_edit_to_staffportal(req: CopperBookRequest):
         return False, str(e)
 
 
+def _sync_delete_to_staffportal(req: CopperBookRequest, deleted_by: str, remarks: str | None):
+    """✅ NEW — notify Staff Portal that this row was deleted in Billing Portal.
+    Staff Portal soft-deletes it and shows a notification to the raiser."""
+    base = (os.getenv("STAFFPORTAL_BASE_URL") or "").rstrip("/")
+    token = os.getenv("COPPERBOOK_CALLBACK_TOKEN") or ""
+    if not base or not token:
+        return False, "STAFFPORTAL_BASE_URL / COPPERBOOK_CALLBACK_TOKEN not set."
+
+    payload = {
+        "event": "delete",
+        "remote_id": req.remote_id,
+        "request_number": req.request_number,
+        "deleted_by": deleted_by,
+        "remarks": remarks or "",
+        "amount": _request_amount(req),
+        "department": req.department,
+        "category": req.category,
+        "purpose": req.purpose,
+        "description": req.description,
+        "reference_date": (
+            req.reference_date.isoformat()
+            if getattr(req, "reference_date", None) else None
+        ),
+    }
+    try:
+        resp = requests.post(
+            f"{base}/api/copperbook/sync",
+            json=payload,
+            headers={"X-Service-Token": token},
+            timeout=8,
+        )
+        if resp.ok:
+            return True, "ok"
+        print(f"[copperbook] delete sync failed {req.request_number}: "
+              f"{resp.status_code} {resp.text[:300]}")
+        return False, f"Staff Portal responded {resp.status_code}"
+    except Exception as e:
+        print(f"[copperbook] delete sync error {req.request_number}:", e)
+        return False, str(e)
+
+
 @cb_bp.route("/intake-ping", methods=["GET", "OPTIONS"])
 def intake_ping():
     if request.method == "OPTIONS":
@@ -741,16 +792,32 @@ def list_all():
         except ValueError:
             pass
 
+    # ✅ NEW — fuzzy search across request_number + other fields.
+    # 'cb 1050', 'cb-1050', 'cb1050', 'cd 1050' all match CB-1050.
     if search:
         like = f"%{search}%"
-        q = q.filter(or_(
+        norm = _normalize_search(search)
+
+        filters = [
             CopperBookRequest.request_number.ilike(like),
             CopperBookRequest.department.ilike(like),
             CopperBookRequest.category.ilike(like),
             CopperBookRequest.purpose.ilike(like),
             CopperBookRequest.description.ilike(like),
             CopperBookRequest.raised_by_name.ilike(like),
-        ))
+        ]
+
+        if norm:
+            normalized_col = func.replace(
+                func.replace(
+                    func.replace(func.lower(CopperBookRequest.request_number), '-', ''),
+                    ' ', ''
+                ),
+                '/', ''
+            )
+            filters.append(normalized_col.like(f"%{norm}%"))
+
+        q = q.filter(or_(*filters))
 
     all_rows = (
         q.order_by(
@@ -913,7 +980,13 @@ def delete_request(rid):
     if not _can_manage(user):
         return jsonify({"error": "You do not have permission to delete requests."}), 403
 
+    data = request.get_json(silent=True) or {}
+    delete_remarks = (data.get("remarks") or "").strip() or None
+
     request_number = req.request_number
+
+    # ✅ Sync delete to Staff Portal BEFORE removing from our DB.
+    synced, sync_msg = _sync_delete_to_staffportal(req, user.name, delete_remarks)
 
     try:
         CopperBookEmployeeEntry.query.filter_by(request_id=req.id).delete(synchronize_session=False)
@@ -927,7 +1000,11 @@ def delete_request(rid):
         traceback.print_exc()
         return jsonify({"error": f"Delete failed: {e}"}), 500
 
-    return jsonify({"message": f"Deleted {request_number}."}), 200
+    return jsonify({
+        "message": f"Deleted {request_number}.",
+        "staffportal_synced": synced,
+        "staffportal_message": None if synced else sync_msg,
+    }), 200
 
 
 @cb_bp.route("/<int:rid>/finance-action", methods=["POST", "OPTIONS"])
