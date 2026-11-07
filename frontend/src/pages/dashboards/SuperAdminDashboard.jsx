@@ -144,8 +144,17 @@ const entryMatchesCategory = (e, selected) => {
   if (selected === CORPUS_FUND_LABEL) return isCorpusEntry(e);
 
   const resolved = getEntryCategory(e);
-  if (resolved) return resolved === selected; // Salary & Payrolls now excludes Corpus Fund
-  return selected === "Miscellaneous";
+  if (resolved) return resolved === selected;
+
+  // Un-categorised rows fall under Miscellaneous — but ONLY if they are not
+  // Capital / Corpus Fund rows. Those are separate buckets and must never be
+  // mixed into a category (e.g. choosing "Miscellaneous" used to also pull in
+  // "Capital Equity" rows).
+  if (selected === "Miscellaneous") {
+    const kind = getEntryKind(e);
+    return kind !== "capital" && kind !== "corpusfund";
+  }
+  return false;
 };
 
 const SALARY_KEYS = [
