@@ -118,8 +118,16 @@ export default function FinanceTable({
     entries.some(
       (e) => e?.category === "Corpus Fund" && hasValue(getEmployeeName(e))
     );
+  
+  // ✅ ADDED: Show Employee Name for Salary & Payrolls in Corporate
+  const hasSalaryEmployee =
+    isCorporateDept &&
+    entries.some(
+      (e) => e?.category === "Salary & Payrolls" && hasValue(getEmployeeName(e))
+    );
+
   const showEmployeeName =
-    showEmployeeNameProp || hasCampsEventsEmployee || hasCorpusFundEmployee;
+    showEmployeeNameProp || hasCampsEventsEmployee || hasCorpusFundEmployee || hasSalaryEmployee;
 
   const showPaymentType = true;
 

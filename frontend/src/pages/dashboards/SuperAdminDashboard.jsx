@@ -1824,6 +1824,7 @@ export default function SuperAdminDashboard() {
                 ) : (
                   <FinanceTable
                     entries={filteredDeptEntries}
+                    currentDepartment={activeDept} // ✅ ADDED THIS LINE
                     onView={(entry) => setViewEntry({ type: "finance", data: entry })}
                   />
                 )}

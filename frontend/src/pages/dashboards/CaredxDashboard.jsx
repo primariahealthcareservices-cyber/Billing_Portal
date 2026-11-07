@@ -54,7 +54,6 @@ const STANDARD_CATEGORIES = [
 ];
 
 // ✅ Must match the values CaredxLabEntryForm saves.
-// The form options are: Cash, UPI, Cash + UPI, Card, Cheque, NEFT
 const PAYMENT_TYPES = ["Cash", "UPI", "Cash + UPI", "Card", "Cheque", "NEFT"];
 
 const categoryBtnStyle = {
@@ -81,9 +80,13 @@ const formatCurrency = (value) => {
 };
 
 export default function CaredxDashboard() {
+  const currentYear = new Date().getFullYear().toString();
+
   // -------------------------------------------------------------------------
   // Shared filters
   // -------------------------------------------------------------------------
+  const [quarter, setQuarter] = useState("All");
+  const [year, setYear] = useState(currentYear);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [labSearch, setLabSearch] = useState("");
@@ -92,7 +95,7 @@ export default function CaredxDashboard() {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [typeFilter, setTypeFilter] = useState("");
 
-  // ✅ Payment Type filter (Cash / UPI / Cash + UPI / Card / Cheque / NEFT)
+  // ✅ Payment Type filter
   const [paymentTypeFilter, setPaymentTypeFilter] = useState("");
 
   // -------------------------------------------------------------------------
@@ -129,10 +132,15 @@ export default function CaredxDashboard() {
   // -------------------------------------------------------------------------
   // Shared API params
   // -------------------------------------------------------------------------
-  const dateParams = {
-    start_date: startDate,
-    end_date: endDate,
-  };
+  const dateParams = {};
+  if (startDate) dateParams.start_date = startDate;
+  if (endDate) dateParams.end_date = endDate;
+
+  // Only send quarter and year if a specific quarter is selected
+  if (quarter !== "All") {
+    dateParams.quarter = quarter;
+    dateParams.year = year;
+  }
 
   // -------------------------------------------------------------------------
   // Fetchers
@@ -152,14 +160,13 @@ export default function CaredxDashboard() {
     } finally {
       setSummaryLoading(false);
     }
-  }, [startDate, endDate]);
+  }, [startDate, endDate, quarter, year]);
 
   const fetchLabEntries = useCallback(async () => {
     setLabLoading(true);
     try {
       const params = { ...dateParams };
       if (labSearch.trim()) params.search = labSearch.trim();
-      // ✅ Send payment_type filter to backend
       if (paymentTypeFilter) params.payment_type = paymentTypeFilter;
 
       const response = await api.get("/caredx/lab-entries", { params });
@@ -177,7 +184,7 @@ export default function CaredxDashboard() {
     } finally {
       setLabLoading(false);
     }
-  }, [startDate, endDate, labSearch, paymentTypeFilter]);
+  }, [startDate, endDate, quarter, year, labSearch, paymentTypeFilter]);
 
   const fetchExpenses = useCallback(async () => {
     setExpensesLoading(true);
@@ -199,7 +206,7 @@ export default function CaredxDashboard() {
     } finally {
       setExpensesLoading(false);
     }
-  }, [startDate, endDate]);
+  }, [startDate, endDate, quarter, year]);
 
   const refetchAll = useCallback(async () => {
     await Promise.all([fetchSummary(), fetchLabEntries(), fetchExpenses()]);
@@ -256,11 +263,59 @@ export default function CaredxDashboard() {
   );
 
   // -------------------------------------------------------------------------
+  // Filter Handlers
+  // -------------------------------------------------------------------------
+  const updateDatesFromQuarterYear = (q, y) => {
+    let start, end;
+    if (q === "Q1") { start = `${y}-01-01`; end = `${y}-03-31`; }
+    else if (q === "Q2") { start = `${y}-04-01`; end = `${y}-06-30`; }
+    else if (q === "Q3") { start = `${y}-07-01`; end = `${y}-09-30`; }
+    else if (q === "Q4") { start = `${y}-10-01`; end = `${y}-12-31`; }
+    setStartDate(start);
+    setEndDate(end);
+  };
+
+  const handleQuarterChange = (e) => {
+    const q = e.target.value;
+    setQuarter(q);
+    if (q === "All") {
+      setStartDate(`${year}-01-01`);
+      setEndDate(`${year}-12-31`);
+    } else {
+      updateDatesFromQuarterYear(q, year);
+    }
+  };
+
+  const handleYearChange = (e) => {
+    const y = e.target.value;
+    setYear(y);
+    if (quarter !== "All") {
+      updateDatesFromQuarterYear(quarter, y);
+    } else {
+      setStartDate(`${y}-01-01`);
+      setEndDate(`${y}-12-31`);
+    }
+  };
+
+  // If user manually changes date, reset quarter to "All" to avoid conflict
+  const handleStartDateChange = (e) => {
+    setStartDate(e.target.value);
+    setQuarter("All");
+  };
+
+  const handleEndDateChange = (e) => {
+    setEndDate(e.target.value);
+    setQuarter("All");
+  };
+
+  // -------------------------------------------------------------------------
   // Reset
   // -------------------------------------------------------------------------
   const handleReset = () => {
     setStartDate("");
     setEndDate("");
+    setQuarter("All");
+    setYear(currentYear);
     setLabSearch("");
     setLastImportResult(null);
     setSelectedCategory(null);
@@ -500,41 +555,70 @@ export default function CaredxDashboard() {
 
       <main className="page-main">
         {/* ============ FILTER BAR ============ */}
-        <div className="card filter-bar">
+        <div className="card filter-bar" style={{ flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
+          
+          <div className="form-group" style={{ minWidth: 120 }}>
+            <label className="form-label">QUARTER</label>
+            <select
+              value={quarter}
+              onChange={handleQuarterChange}
+              className="form-control"
+            >
+              <option value="All">All</option>
+              <option value="Q1">Q1 (Jan-Mar)</option>
+              <option value="Q2">Q2 (Apr-Jun)</option>
+              <option value="Q3">Q3 (Jul-Sep)</option>
+              <option value="Q4">Q4 (Oct-Dec)</option>
+            </select>
+          </div>
+
+          <div className="form-group" style={{ minWidth: 100 }}>
+            <label className="form-label">YEAR</label>
+            <select
+              value={year}
+              onChange={handleYearChange}
+              className="form-control"
+            >
+              {Array.from({ length: 10 }, (_, i) => parseInt(currentYear) - 5 + i).map((y) => (
+                <option key={y} value={y.toString()}>{y}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="form-group">
-            <label className="form-label">Start Date</label>
+            <label className="form-label">START DATE</label>
             <input
               type="date"
               value={startDate}
-              onChange={(event) => setStartDate(event.target.value)}
+              onChange={handleStartDateChange}
               className="form-control"
             />
           </div>
 
           <div className="form-group">
-            <label className="form-label">End Date</label>
+            <label className="form-label">END DATE</label>
             <input
               type="date"
               value={endDate}
-              onChange={(event) => setEndDate(event.target.value)}
+              onChange={handleEndDateChange}
               className="form-control"
             />
           </div>
 
           <div className="form-group form-group--grow">
-            <label className="form-label">Search Lab Entries</label>
+            <label className="form-label">SEARCH</label>
             <input
               type="text"
               value={labSearch}
               onChange={(event) => setLabSearch(event.target.value)}
-              placeholder="Search by patient, test, employee, or payment type"
+              placeholder="Search by employee or remarks"
               className="form-control"
             />
           </div>
 
-          {/* ✅ Payment Type filter */}
-          <div className="form-group">
-            <label className="form-label">Payment Type</label>
+          {/* Optional: Payment Type filter kept for functionality */}
+          <div className="form-group" style={{ minWidth: 120 }}>
+            <label className="form-label">PAYMENT TYPE</label>
             <select
               value={paymentTypeFilter}
               onChange={(event) => setPaymentTypeFilter(event.target.value)}
@@ -542,27 +626,23 @@ export default function CaredxDashboard() {
             >
               <option value="">All</option>
               {PAYMENT_TYPES.map((pt) => (
-                <option key={pt} value={pt}>
-                  {pt}
-                </option>
+                <option key={pt} value={pt}>{pt}</option>
               ))}
             </select>
           </div>
 
-          <div className="filter-actions">
-            <button
-              type="button"
-              onClick={refetchAll}
-              className="btn btn-primary"
-            >
+          <div className="filter-actions" style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button type="button" onClick={refetchAll} className="btn btn-primary">
               <Filter size={16} /> Apply Filter
             </button>
-            <button
-              type="button"
-              onClick={handleReset}
-              className="btn btn-secondary"
-            >
+            <button type="button" onClick={handleReset} className="btn btn-secondary">
               <RefreshCw size={16} /> Reset
+            </button>
+            <button type="button" onClick={handleLabExport} className="btn btn-secondary">
+              <Download size={16} /> Export CSV
+            </button>
+            <button type="button" onClick={openNewLabEntry} className="btn btn-primary">
+              <Plus size={16} /> Add Entry
             </button>
           </div>
         </div>
@@ -692,20 +772,7 @@ export default function CaredxDashboard() {
                   <Upload size={16} />{" "}
                   {importing ? "Importing..." : "Import Excel"}
                 </button>
-                <button
-                  type="button"
-                  onClick={handleLabExport}
-                  className="btn btn-secondary"
-                >
-                  <Download size={16} /> Export Excel
-                </button>
-                <button
-                  type="button"
-                  onClick={openNewLabEntry}
-                  className="btn btn-primary"
-                >
-                  <Plus size={16} /> Add Entry
-                </button>
+                {/* Note: Export CSV and Add Entry are now in the top filter bar */}
               </div>
             </div>
 

@@ -1,3 +1,4 @@
+# backend/routes/caredx.py
 from datetime import datetime, date
 from io import BytesIO
 
@@ -67,6 +68,29 @@ def _get_valid_user_id():
 def _apply_date_filters(query, date_column):
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
+    
+    quarter = request.args.get("quarter")
+    year = request.args.get("year")
+
+    # ✅ Handle Quarter and Year filters if exact dates aren't provided
+    if quarter and quarter != "All" and year:
+        try:
+            year = int(year)
+            if quarter == "Q1":
+                start_date = start_date or date(year, 1, 1)
+                end_date = end_date or date(year, 3, 31)
+            elif quarter == "Q2":
+                start_date = start_date or date(year, 4, 1)
+                end_date = end_date or date(year, 6, 30)
+            elif quarter == "Q3":
+                start_date = start_date or date(year, 7, 1)
+                end_date = end_date or date(year, 9, 30)
+            elif quarter == "Q4":
+                start_date = start_date or date(year, 10, 1)
+                end_date = end_date or date(year, 12, 31)
+        except (ValueError, TypeError):
+            pass
+
     if start_date:
         query = query.filter(date_column >= start_date)
     if end_date:
