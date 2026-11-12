@@ -264,20 +264,27 @@ def _all_time_equity():
         "balance": round(ce_total - approved_total, 2),
     }
 
+
 def _monthly_rollback():
     """
-    Returns per-month rollback rows with these columns:
+    Per-month rollback rows with SELF-CONSISTENT columns:
+
       month                -> "YYYY-MM"
       equity_added         -> equity added in that month
-      roll_over_balance    -> previous month's actual (cumulative) balance
-      actual_balance       -> cumulative capital equity up to & including this month
+      roll_over_balance    -> PREVIOUS month's current_balance (carried forward)
+      actual_balance       -> roll_over_balance + equity_added
       approved             -> approved amount in that month
-      cumulative_approved  -> cumulative approved amount up to & including this month
-      current_balance      -> actual_balance - cumulative_approved
+      cumulative_approved  -> cumulative approved up to & including this month
+      current_balance      -> actual_balance - approved (this month)
       available_cash       -> same as current_balance
       discrepancy          -> current_balance - available_cash (0 by default)
       capital_equity       -> backward-compat alias for equity_added
       balance              -> backward-compat alias = current_balance
+
+    Rule enforced:
+      • Jan current balance  ==  Feb roll-over balance
+      • current_balance      ==  actual_balance − approval
+      • actual_balance       ==  roll_over_balance + equity_added
     """
     rows = CopperBookRequest.query.options(
         selectinload(CopperBookRequest.employee_entries)
@@ -306,46 +313,46 @@ def _monthly_rollback():
     last = max(max(per_month), (today.year, today.month))
 
     result = []
-    running_equity = 0.0        # cumulative capital equity
-    running_approved = 0.0      # cumulative approved outflow
-    prev_actual_balance = 0.0   # previous month's actual balance
+    prev_current_balance = 0.0   # previous month's current_balance  (carry-forward)
+    running_approved = 0.0       # cumulative approved (kept for API compat)
 
     y, m = first
     while (y, m) <= last:
         ce, ap = per_month.get((y, m), (0.0, 0.0))
 
-        roll_over_balance = round(prev_actual_balance, 2)
-        running_equity += ce
+        # ── FIXED FORMULAS ──
+        roll_over_balance = round(prev_current_balance, 2)
+        actual_balance    = round(roll_over_balance + ce, 2)
+        current_balance   = round(actual_balance - ap, 2)
+        available_cash    = current_balance
+        discrepancy       = round(current_balance - available_cash, 2)
+
         running_approved += ap
 
-        actual_balance = round(running_equity, 2)
-        current_balance = round(actual_balance - running_approved, 2)
-        available_cash = current_balance
-        discrepancy = round(current_balance - available_cash, 2)
-
         result.append({
-            "month": f"{y:04d}-{m:02d}",
-            # backward-compat
-            "capital_equity": round(ce, 2),
-            "approved": round(ap, 2),
-            "balance": current_balance,
+            "month":               f"{y:04d}-{m:02d}",
+            # backward-compat aliases
+            "capital_equity":      round(ce, 2),
+            "approved":            round(ap, 2),
+            "balance":             current_balance,
             # new columns
-            "equity_added": round(ce, 2),
-            "roll_over_balance": roll_over_balance,
-            "actual_balance": actual_balance,
+            "equity_added":        round(ce, 2),
+            "roll_over_balance":   roll_over_balance,
+            "actual_balance":      actual_balance,
             "cumulative_approved": round(running_approved, 2),
-            "current_balance": current_balance,
-            "available_cash": available_cash,
-            "discrepancy": discrepancy,
+            "current_balance":     current_balance,
+            "available_cash":      available_cash,
+            "discrepancy":         discrepancy,
         })
 
-        prev_actual_balance = actual_balance
+        prev_current_balance = current_balance
 
         m += 1
         if m == 13:
             y, m = y + 1, 1
 
     return result
+
 
 def _dept_key(name):
     return (name or "").split("(")[0].strip().lower()
