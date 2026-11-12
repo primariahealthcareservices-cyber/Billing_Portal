@@ -19,7 +19,10 @@ DEMO_USERS = [
     {"name": "admin",                  "email": "jnanesht@primariacare.com",                   "password": "Primaria@123", "role": "SuperAdmin",                  "department": "Administration"},
 
     # ✅ NEW — SalesEnterprise (Gayathri M)
-    {"name": "Gayathri M",             "email": "gayathrim@primariahealthcareservices.in",     "password": "Gayathrim@2026", "role": "SalesEnterprise",           "department": "SalesEnterprise"},
+    {"name": "Gayathri M",             "email": "gayathrim@primariahealthcareservices.in",     "password": "Gayathrim@2026", "role": "SalesEnterprise",
+                "department": "SalesEnterprise"},
+                 {"name": "jnanesh", "email": "jnaneshtamarana@gmail.com",
+     "password": "Primaria@123", "role": "Corporate", "department": "Corporate"},
 ]
 
 app = create_app()

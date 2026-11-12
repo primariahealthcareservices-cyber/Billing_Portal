@@ -218,13 +218,11 @@ export default function CopperBookPage({ onBack }) {
       if (s) params.start_date = s;
       if (e) params.end_date = e;
 
-      // --- NEW: Pass panel specific dates to API ---
       let ps = ISO_DATE.test(panelFromDate) ? panelFromDate : "";
       let pe = ISO_DATE.test(panelToDate) ? panelToDate : "";
       if (ps && pe && ps > pe) [ps, pe] = [pe, ps];
       if (ps) params.equity_start_date = ps;
       if (pe) params.equity_end_date = pe;
-      // ---------------------------------------------
 
       if (search) params.search = search;
       if (department) params.department = department;
@@ -280,7 +278,6 @@ export default function CopperBookPage({ onBack }) {
   };
 
   const resetFilters = () => {
-    // Main filters
     setStatusFilter("all");
     setDepartment("");
     setPeriod("all");
@@ -289,7 +286,6 @@ export default function CopperBookPage({ onBack }) {
     setSearchInput("");
     setSearch("");
 
-    // Panel filters
     setPanelDept("");
     setPanelPeriod("all");
     setPanelFromDate("");
@@ -405,8 +401,9 @@ export default function CopperBookPage({ onBack }) {
     .filter((r) => rollYear === "all" || String(r.month).startsWith(rollYear))
     .filter((r) =>
       !rollHideEmpty ||
-      Number(r.capital_equity || 0) !== 0 ||
-      Number(r.approved || 0) !== 0
+      Number(r.equity_added ?? r.capital_equity ?? 0) !== 0 ||
+      Number(r.approved ?? 0) !== 0 ||
+      Number(r.discrepancy ?? 0) !== 0
     );
   if (rollNewestFirst) rollRows.reverse();
   
@@ -439,7 +436,7 @@ export default function CopperBookPage({ onBack }) {
     ? `${fromDate ? fmtDateOnly(fromDate) : "Beginning"} → ${toDate ? fmtDateOnly(toDate) : "Today"}`
     : "All time";
 
-  // ───────── 3-PANEL FOOTER ─────────
+  // ───────── 3-PANEL FOOTER (Row 1: Monthly Rollback, Row 2: Filtered + All-Time) ─────────
   const summaryPanels = (
     <div
       style={{
@@ -468,85 +465,9 @@ export default function CopperBookPage({ onBack }) {
         )}
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
-          gap: 14,
-        }}
-      >
-        {/* Panel 1 — Filtered View */}
+      {/* ── Row 1: Monthly Rollback (full width) ── */}
+      <div style={{ marginBottom: 14 }}>
         <div style={{ background: "#ffffff", borderRadius: 8, padding: 14, border: "1px solid #d1fae5" }}>
-          
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#047857", letterSpacing: 0.5, textTransform: "uppercase" }}>
-              ① Filtered View
-            </div>
-            
-            {/* --- PANEL 1 FILTER DROPDOWNS --- */}
-            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-              <select
-                value={panelDept}
-                onChange={(e) => setPanelDept(e.target.value)}
-                style={{ fontSize: 11, padding: "2px 6px", borderRadius: 4, border: "1px solid #cbd5e1", background: "#f8fafc", maxWidth: 110 }}
-              >
-                <option value="">{department ? `Use “${department}”` : "All Depts"}</option>
-                {departments.map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-
-              <select
-                value={panelPeriod}
-                onChange={(e) => handlePanelPeriodChange(e.target.value)}
-                style={{ fontSize: 11, padding: "2px 6px", borderRadius: 4, border: "1px solid #cbd5e1", background: "#f8fafc" }}
-              >
-                <option value="all">All Time</option>
-                <option value="month">This Month</option>
-                <option value="quarter">This Quarter</option>
-                <option value="year">This Year</option>
-                <option value="custom">Custom Range</option>
-              </select>
-            </div>
-            {/* ------------------------------- */}
-          </div>
-          
-          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8, display: "flex", flexDirection: "column", gap: 4 }}>
-            <div>{activeDept} · {activePeriodText}</div>
-            {/* --- PANEL 1 CUSTOM DATES --- */}
-            {panelPeriod === "custom" && (
-              <div style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 2 }}>
-                <input
-                  type="date"
-                  value={panelFromDate}
-                  onChange={(e) => setPanelFromDate(e.target.value)}
-                  style={{ fontSize: 10, padding: "1px 4px", borderRadius: 3, border: "1px solid #cbd5e1", width: 105 }}
-                />
-                <span>→</span>
-                <input
-                  type="date"
-                  value={panelToDate}
-                  onChange={(e) => setPanelToDate(e.target.value)}
-                  style={{ fontSize: 10, padding: "1px 4px", borderRadius: 3, border: "1px solid #cbd5e1", width: 105 }}
-                />
-              </div>
-            )}
-            {/* ---------------------------- */}
-          </div>
-
-          {equityBoxes.map((b) => (
-            <div key={b.label} style={{ marginBottom: 6 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                <span style={{ color: b.color, fontWeight: 600, fontSize: 12 }}>{b.label}</span>
-                <span style={{ fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", fontSize: 13 }}>{fmtMoney(b.value)}</span>
-              </div>
-              {b.sub && <div style={{ fontSize: 10.5, color: "#94a3b8", textAlign: "right" }}>For {b.sub}</div>}
-            </div>
-          ))}
-        </div>
-
-        {/* Panel 2 — Monthly Rollback */}
-        <div style={{ background: "#ffffff", borderRadius: 8, padding: 14, border: "1px solid #d1fae5", gridColumn: "span 2", minWidth: 0 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: "#047857", letterSpacing: 0.5, marginBottom: 4, textTransform: "uppercase" }}>
             ② Monthly Rollback
           </div>
@@ -585,35 +506,138 @@ export default function CopperBookPage({ onBack }) {
                 : "No activity in the selected months. Untick “Hide months with no activity” to see all."}
             </div>
           ) : (
-            <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid #eef2f7", borderRadius: 6 }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <div style={{ maxHeight: 320, overflowY: "auto", overflowX: "auto", border: "1px solid #eef2f7", borderRadius: 6 }}>
+              <table style={{ width: "100%", minWidth: 980, borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
                   <tr style={{ position: "sticky", top: 0, background: "#f8fafc", zIndex: 1 }}>
-                    <th style={{ textAlign: "left", padding: "6px 10px", color: "#64748b", fontWeight: 600 }}>Month</th>
-                    <th style={{ textAlign: "right", padding: "6px 10px", color: "#4338ca", fontWeight: 600 }}>Equity added</th>
-                    <th style={{ textAlign: "right", padding: "6px 10px", color: "#16a34a", fontWeight: 600 }}>Approved</th>
-                    <th style={{ textAlign: "right", padding: "6px 10px", color: "#b45309", fontWeight: 600 }}>Balance</th>
+                    <th style={{ textAlign: "left", padding: "6px 10px", color: "#64748b", fontWeight: 600, whiteSpace: "nowrap" }}>Month</th>
+                    <th style={{ textAlign: "right", padding: "6px 10px", color: "#4338ca", fontWeight: 600, whiteSpace: "nowrap" }}>Equity added</th>
+                    <th style={{ textAlign: "right", padding: "6px 10px", color: "#0ea5e9", fontWeight: 600, whiteSpace: "nowrap" }} title="Previous month's actual balance">Roll Over Balance</th>
+                    <th style={{ textAlign: "right", padding: "6px 10px", color: "#0284c7", fontWeight: 600, whiteSpace: "nowrap" }} title="Capital (cumulative) + Roll Over">Actual Balance</th>
+                    <th style={{ textAlign: "right", padding: "6px 10px", color: "#16a34a", fontWeight: 600, whiteSpace: "nowrap" }}>Approval</th>
+                    <th style={{ textAlign: "right", padding: "6px 10px", color: "#b45309", fontWeight: 600, whiteSpace: "nowrap" }} title="Actual Balance − Approval">Current Balance</th>
+                    <th style={{ textAlign: "right", padding: "6px 10px", color: "#7c3aed", fontWeight: 600, whiteSpace: "nowrap" }}>Available Cash</th>
+                    <th style={{ textAlign: "right", padding: "6px 10px", color: "#e11d48", fontWeight: 600, whiteSpace: "nowrap" }} title="Current Balance − Available Cash (approved but not paid)">Discrepancy</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rollRows.map((row) => (
-                    <tr key={row.month} style={{ borderTop: "1px solid #eef2f7" }}>
-                      <td style={{ padding: "6px 10px", color: "#334155", fontWeight: 500, whiteSpace: "nowrap" }}>{fmtMonthLabel(row.month)}</td>
-                      <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", color: Number(row.capital_equity) ? "#0f172a" : "#cbd5e1" }}>
-                        {fmtMoney(row.capital_equity)}
-                      </td>
-                      <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", color: Number(row.approved) ? "#0f172a" : "#cbd5e1" }}>
-                        {fmtMoney(row.approved)}
-                      </td>
-                      <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", fontWeight: 700, color: Number(row.balance) < 0 ? "#e11d48" : "#065f46" }}>
-                        {fmtMoney(row.balance)}
-                      </td>
-                    </tr>
-                  ))}
+                  {rollRows.map((row) => {
+                    const equityAdded    = Number(row.equity_added ?? row.capital_equity ?? 0);
+                    const rollOver       = Number(row.roll_over_balance ?? 0);
+                    const actualBalance  = Number(row.actual_balance ?? 0);
+                    const approval       = Number(row.approved ?? 0);
+                    const currentBalance = Number(row.current_balance ?? row.balance ?? 0);
+                    const availableCash  = Number(row.available_cash ?? currentBalance);
+                    const discrepancy    = Number(row.discrepancy ?? (currentBalance - availableCash));
+
+                    return (
+                      <tr key={row.month} style={{ borderTop: "1px solid #eef2f7" }}>
+                        <td style={{ padding: "6px 10px", color: "#334155", fontWeight: 500, whiteSpace: "nowrap" }}>
+                          {fmtMonthLabel(row.month)}
+                        </td>
+                        <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", color: equityAdded ? "#0f172a" : "#cbd5e1" }}>
+                          {fmtMoney(equityAdded)}
+                        </td>
+                        <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", color: "#475569" }}>
+                          {fmtMoney(rollOver)}
+                        </td>
+                        <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", fontWeight: 600, color: actualBalance < 0 ? "#e11d48" : "#0f172a" }}>
+                          {fmtMoney(actualBalance)}
+                        </td>
+                        <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", color: approval ? "#0f172a" : "#cbd5e1" }}>
+                          {fmtMoney(approval)}
+                        </td>
+                        <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", fontWeight: 700, color: currentBalance < 0 ? "#e11d48" : "#065f46" }}>
+                          {fmtMoney(currentBalance)}
+                        </td>
+                        <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", color: availableCash < 0 ? "#e11d48" : "#065f46" }}>
+                          {fmtMoney(availableCash)}
+                        </td>
+                        <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", fontWeight: 600, color: discrepancy !== 0 ? "#e11d48" : "#94a3b8" }}>
+                          {fmtMoney(discrepancy)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ── Row 2: Filtered View + All-Time (side by side) ── */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          gap: 14,
+        }}
+      >
+        {/* Panel 1 — Filtered View */}
+        <div style={{ background: "#ffffff", borderRadius: 8, padding: 14, border: "1px solid #d1fae5" }}>
+          
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#047857", letterSpacing: 0.5, textTransform: "uppercase" }}>
+              ① Filtered View
+            </div>
+            
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              <select
+                value={panelDept}
+                onChange={(e) => setPanelDept(e.target.value)}
+                style={{ fontSize: 11, padding: "2px 6px", borderRadius: 4, border: "1px solid #cbd5e1", background: "#f8fafc", maxWidth: 110 }}
+              >
+                <option value="">{department ? `Use “${department}”` : "All Depts"}</option>
+                {departments.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+
+              <select
+                value={panelPeriod}
+                onChange={(e) => handlePanelPeriodChange(e.target.value)}
+                style={{ fontSize: 11, padding: "2px 6px", borderRadius: 4, border: "1px solid #cbd5e1", background: "#f8fafc" }}
+              >
+                <option value="all">All Time</option>
+                <option value="month">This Month</option>
+                <option value="quarter">This Quarter</option>
+                <option value="year">This Year</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+          </div>
+          
+          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+            <div>{activeDept} · {activePeriodText}</div>
+            {panelPeriod === "custom" && (
+              <div style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 2 }}>
+                <input
+                  type="date"
+                  value={panelFromDate}
+                  onChange={(e) => setPanelFromDate(e.target.value)}
+                  style={{ fontSize: 10, padding: "1px 4px", borderRadius: 3, border: "1px solid #cbd5e1", width: 105 }}
+                />
+                <span>→</span>
+                <input
+                  type="date"
+                  value={panelToDate}
+                  onChange={(e) => setPanelToDate(e.target.value)}
+                  style={{ fontSize: 10, padding: "1px 4px", borderRadius: 3, border: "1px solid #cbd5e1", width: 105 }}
+                />
+              </div>
+            )}
+          </div>
+
+          {equityBoxes.map((b) => (
+            <div key={b.label} style={{ marginBottom: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                <span style={{ color: b.color, fontWeight: 600, fontSize: 12 }}>{b.label}</span>
+                <span style={{ fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", fontSize: 13 }}>{fmtMoney(b.value)}</span>
+              </div>
+              {b.sub && <div style={{ fontSize: 10.5, color: "#94a3b8", textAlign: "right" }}>For {b.sub}</div>}
+            </div>
+          ))}
         </div>
 
         {/* Panel 3 — All-Time (No Filters) */}
@@ -800,7 +824,6 @@ export default function CopperBookPage({ onBack }) {
           </div>
         )}
 
-        {/* Always visible — updates on every filter / date change, even when no rows match */}
         {summaryPanels}
 
         {openId && (
@@ -1048,7 +1071,6 @@ export default function CopperBookPage({ onBack }) {
                       )}
                     </>
                   ) : (
-                    /* ── Edit Form View ── */
                     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                       <div className="form-group" style={{ margin: 0 }}>
                         <label className="form-label">Business Unit / Department</label>
