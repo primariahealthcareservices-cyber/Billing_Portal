@@ -18,13 +18,9 @@ from excel_utils import (
 
 superadmin_bp = Blueprint("superadmin", __name__, url_prefix="/api/admin")
 
-# Local alias used throughout this module.
-SALARY_CAT = SALARY_CATEGORY   # "Salary & Payrolls"
+SALARY_CAT = SALARY_CATEGORY
 
 
-# ----------------------------------------------------------------------
-# Robust date parser
-# ----------------------------------------------------------------------
 def _parse_date(value, default=None):
     if not value:
         return default
@@ -151,7 +147,7 @@ def team_stats():
 
 
 # ----------------------------------------------------------------------
-# Overview – EXCLUDES SalesEnterprise
+# Overview
 # ----------------------------------------------------------------------
 @superadmin_bp.route("/overview", methods=["GET"])
 @role_required("SuperAdmin")
@@ -267,7 +263,7 @@ def overview():
 
 
 # ----------------------------------------------------------------------
-# MedTech helper
+# MedTech helpers
 # ----------------------------------------------------------------------
 def _get_medtech_entries_with_ledger():
     start_date = _parse_date(request.args.get("start_date"))
@@ -289,10 +285,7 @@ def _get_medtech_entries_with_ledger():
 
     if wants_salary:
         base_query = base_query.filter(
-            or_(
-                FinanceEntry.category != SALARY_CAT,
-                FinanceEntry.category.is_(None),
-            )
+            or_(FinanceEntry.category != SALARY_CAT, FinanceEntry.category.is_(None))
         )
 
     if start_date: base_query = base_query.filter(FinanceEntry.entry_date >= start_date)
@@ -359,7 +352,11 @@ def _get_medtech_entries_with_ledger():
 
     combined = []
     for fe in merged_finance:
-        d = fe.to_dict(); d["_type"] = "finance"; combined.append(d)
+        d = fe.to_dict()
+        d["_type"] = "finance"
+        if fe.category == SALARY_CAT:
+            d["_isSalary"] = True
+        combined.append(d)
     for le in ledger_entries:
         combined.append({
             "id": le.id, "department": "MedTech", "entry_type": "Expenses",
@@ -367,7 +364,7 @@ def _get_medtech_entries_with_ledger():
             "entry_date": le.entry_date.isoformat(), "remarks": le.remarks,
             "customer_name": le.customer_name, "paid": float(le.paid or 0),
             "balance": float(le.balance or 0), "_type": "ledger",
-            "payment_type": le.payment_type,             # <--- ADDED HERE
+            "payment_type": le.payment_type,
             "created_at": le.created_at.isoformat() if le.created_at else None,
         })
 
@@ -397,10 +394,7 @@ def _get_medtech_summary_with_ledger():
     )
     if wants_salary:
         base_query = base_query.filter(
-            or_(
-                FinanceEntry.category != SALARY_CAT,
-                FinanceEntry.category.is_(None),
-            )
+            or_(FinanceEntry.category != SALARY_CAT, FinanceEntry.category.is_(None))
         )
     if start_date: base_query = base_query.filter(FinanceEntry.entry_date >= start_date)
     if end_date: base_query = base_query.filter(FinanceEntry.entry_date <= end_date)
@@ -482,7 +476,7 @@ def _get_medtech_summary_with_ledger():
 
 
 # ----------------------------------------------------------------------
-# Everglades helper
+# Everglades helpers
 # ----------------------------------------------------------------------
 def _get_everglades_entries_with_ledger():
     start_date = _parse_date(request.args.get("start_date"))
@@ -503,10 +497,7 @@ def _get_everglades_entries_with_ledger():
     )
     if wants_salary:
         base_query = base_query.filter(
-            or_(
-                FinanceEntry.category != SALARY_CAT,
-                FinanceEntry.category.is_(None),
-            )
+            or_(FinanceEntry.category != SALARY_CAT, FinanceEntry.category.is_(None))
         )
     if start_date: base_query = base_query.filter(FinanceEntry.entry_date >= start_date)
     if end_date: base_query = base_query.filter(FinanceEntry.entry_date <= end_date)
@@ -571,7 +562,11 @@ def _get_everglades_entries_with_ledger():
 
     combined = []
     for fe in merged_finance:
-        d = fe.to_dict(); d["_type"] = "finance"; combined.append(d)
+        d = fe.to_dict()
+        d["_type"] = "finance"
+        if fe.category == SALARY_CAT:
+            d["_isSalary"] = True
+        combined.append(d)
     for le in ledger_entries:
         combined.append({
             "id": le.id, "department": "Everglades", "entry_type": "Expenses",
@@ -579,7 +574,7 @@ def _get_everglades_entries_with_ledger():
             "entry_date": le.entry_date.isoformat(), "remarks": le.remarks,
             "customer_name": le.customer_name, "paid": float(le.paid or 0),
             "balance": float(le.balance or 0), "_type": "ledger",
-            "payment_type": le.payment_type,            # <--- ADDED HERE
+            "payment_type": le.payment_type,
             "created_at": le.created_at.isoformat() if le.created_at else None,
         })
 
@@ -609,10 +604,7 @@ def _get_everglades_summary_with_ledger():
     )
     if wants_salary:
         base_query = base_query.filter(
-            or_(
-                FinanceEntry.category != SALARY_CAT,
-                FinanceEntry.category.is_(None),
-            )
+            or_(FinanceEntry.category != SALARY_CAT, FinanceEntry.category.is_(None))
         )
     if start_date: base_query = base_query.filter(FinanceEntry.entry_date >= start_date)
     if end_date: base_query = base_query.filter(FinanceEntry.entry_date <= end_date)
@@ -640,20 +632,11 @@ def _get_everglades_summary_with_ledger():
 
     all_items = []
     for fe in finance_entries:
-        all_items.append({
-            "entry_date": fe.entry_date, "entry_type": fe.entry_type,
-            "category": fe.category, "amount": float(fe.amount),
-        })
+        all_items.append({"entry_date": fe.entry_date, "entry_type": fe.entry_type, "category": fe.category, "amount": float(fe.amount)})
     for se in salary_entries:
-        all_items.append({
-            "entry_date": se.entry_date, "entry_type": se.entry_type,
-            "category": se.category, "amount": float(se.amount),
-        })
+        all_items.append({"entry_date": se.entry_date, "entry_type": se.entry_type, "category": se.category, "amount": float(se.amount)})
     for le in ledger_entries:
-        all_items.append({
-            "entry_date": le.entry_date, "entry_type": "Expenses",
-            "category": "Ledger", "amount": float(le.total_amount or 0),
-        })
+        all_items.append({"entry_date": le.entry_date, "entry_type": "Expenses", "category": "Ledger", "amount": float(le.total_amount or 0)})
 
     total_income = sum(i["amount"] for i in all_items if i["entry_type"] == "Income")
     total_expenses = sum(i["amount"] for i in all_items if i["entry_type"] == "Expenses")
@@ -664,14 +647,10 @@ def _get_everglades_summary_with_ledger():
     for item in all_items:
         key = item["entry_date"].isoformat()
         by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "capital": 0, "funds": 0})
-        if item["entry_type"] == "Income":
-            by_date[key]["income"] += item["amount"]
-        elif item["entry_type"] == "Expenses":
-            by_date[key]["expenses"] += item["amount"]
-        elif item["entry_type"] == "Capital":
-            by_date[key]["capital"] += item["amount"]
-        elif item["entry_type"] == "Funds":
-            by_date[key]["funds"] += item["amount"]
+        if item["entry_type"] == "Income": by_date[key]["income"] += item["amount"]
+        elif item["entry_type"] == "Expenses": by_date[key]["expenses"] += item["amount"]
+        elif item["entry_type"] == "Capital": by_date[key]["capital"] += item["amount"]
+        elif item["entry_type"] == "Funds": by_date[key]["funds"] += item["amount"]
     trend = sorted(by_date.values(), key=lambda x: x["date"])
 
     by_category = {}
@@ -721,7 +700,7 @@ def department_options(department):
 
 
 # ----------------------------------------------------------------------
-# Caredx helper
+# Caredx helpers
 # ----------------------------------------------------------------------
 def _get_caredx_entries_and_summary(for_summary=False):
     start_date = _parse_date(request.args.get("start_date"))
@@ -766,11 +745,7 @@ def _get_caredx_entries_and_summary(for_summary=False):
         ).all()
 
         salary_items = []
-        # Salary rows AND Corpus Fund rows both live in FinanceEntry for Caredx.
         if category == "" or category == SALARY_CAT or category == "Corpus Fund":
-            # Employee monthly salaries are posted from Corporate with
-            # exec_department == "Caredx" (same rule the overview uses), or
-            # directly under Caredx. Corpus Fund rows live under Caredx.
             salary_query = FinanceEntry.query.filter(
                 or_(
                     (FinanceEntry.department == "Caredx")
@@ -805,15 +780,20 @@ def _get_caredx_entries_and_summary(for_summary=False):
                 salary_items.append({
                     "id": -s.id,
                     "expense_date": s.entry_date.isoformat(),
-                    "category": s.category,          # "Salary & Payrolls" OR "Corpus Fund"
+                    "entry_date": s.entry_date.isoformat(),
+                    "category": s.category,
                     "entry_type": s.entry_type,
                     "amount": float(s.amount),
+                    "salary_amount": float(s.salary_amount or 0),
+                    "allowance_amount": float(s.allowance_amount or 0),
+                    "exec_department": s.exec_department,
+                    "generated_by": s.generated_by,
                     "remarks": row_remarks,
                     "employee_name": s.employee_name,
                     "purpose": s.remarks,
                     "vehicle_type": s.vehicle_type,
-                    "payment_type": s.payment_type,  # <--- ADDED HERE
-                    "_isSalary": not is_corpus,      # Corpus Fund is NOT a salary
+                    "payment_type": s.payment_type,
+                    "_isSalary": not is_corpus,
                     "_isCorpus": is_corpus,
                 })
         all_expenses = [e.to_dict() for e in caredx_expenses] + salary_items
@@ -975,6 +955,7 @@ def dept_entries(dept):
                 FinanceEntry.patient_place.ilike(like),
                 FinanceEntry.gst_number.ilike(like),
                 FinanceEntry.category.ilike(like),
+                FinanceEntry.employee_name.ilike(like),
             )
         )
 
@@ -1046,14 +1027,10 @@ def dept_summary(dept):
     for e in entries:
         key = e.entry_date.isoformat()
         by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "capital": 0, "funds": 0})
-        if e.entry_type == "Income":
-            by_date[key]["income"] += float(e.amount)
-        elif e.entry_type == "Expenses":
-            by_date[key]["expenses"] += float(e.amount)
-        elif e.entry_type == "Capital":
-            by_date[key]["capital"] += float(e.amount)
-        elif e.entry_type == "Funds":
-            by_date[key]["funds"] += float(e.amount)
+        if e.entry_type == "Income": by_date[key]["income"] += float(e.amount)
+        elif e.entry_type == "Expenses": by_date[key]["expenses"] += float(e.amount)
+        elif e.entry_type == "Capital": by_date[key]["capital"] += float(e.amount)
+        elif e.entry_type == "Funds": by_date[key]["funds"] += float(e.amount)
     trend = sorted(by_date.values(), key=lambda x: x["date"])
 
     by_category = {}
@@ -1180,7 +1157,7 @@ def department_import(department):
             gst_number=row.get("gst_number"),
             amount=row["amount"],
             remarks=row.get("remarks"),
-            payment_type=row.get("payment_type"), # <--- ADDED HERE
+            payment_type=row.get("payment_type"),
             entry_date=row["entry_date"],
             created_by_id=created_by_id,
         ))
@@ -1193,7 +1170,7 @@ def department_import(department):
 
 
 # ----------------------------------------------------------------------
-# SalesEnterprise KPI endpoint
+# SalesEnterprise KPI
 # ----------------------------------------------------------------------
 @superadmin_bp.route("/salesenterprise/kpis", methods=["GET"])
 @role_required("SuperAdmin")

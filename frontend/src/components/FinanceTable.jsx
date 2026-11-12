@@ -1,334 +1,249 @@
 // frontend/src/components/FinanceTable.jsx
 import React from "react";
-import toast from "react-hot-toast";
-import { Pencil, Trash2, FileText, Eye } from "lucide-react";
+import { Eye, Pencil, Trash2 } from "lucide-react";
 
-import api from "../api/axios.js";
-import ItemCell, { itemCellStyle } from "./ItemCell.jsx";
-import { remarkCellStyle } from "./RemarkCell.jsx";
+const SALARY_CAT = "Salary & Payrolls";
 
 const formatCurrency = (value) => {
-  const number = Number(value || 0);
+  const n = Number(value || 0);
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
     maximumFractionDigits: 0,
-  }).format(number);
+  }).format(n);
 };
 
-const getApiOrigin = () => {
-  const base = api.defaults.baseURL || "";
-  return base.replace(/\/api\/?$/, "").replace(/\/$/, "");
+export const isSalaryEntry = (entry) => {
+  if (!entry) return false;
+  if (entry._isSalary || entry.is_salary || entry.isSalary) return true;
+  const cat = (entry.category || "").toString().toLowerCase();
+  return cat === "salary & payrolls" || cat.includes("salary") || cat.includes("payroll");
 };
 
-const handleViewInvoice = (entry) => {
-  if (!entry?.invoice_url) {
-    toast.error("Invoice file not found.");
-    return;
-  }
-
-  let url = entry.invoice_url;
-  if (!url.startsWith("http://") && !url.startsWith("https://")) {
-    const origin = getApiOrigin() || window.location.origin;
-    url = `${origin}${url}`;
-  }
-
-  const token = localStorage.getItem("token") || "";
-  const sep = url.includes("?") ? "&" : "?";
-  const finalUrl = token ? `${url}${sep}token=${encodeURIComponent(token)}` : url;
-
-  const newWindow = window.open(finalUrl, "_blank", "noopener,noreferrer");
-  if (!newWindow) {
-    toast.error("Please allow pop-ups to view the invoice.");
-  }
+export const isCorpusEntry = (entry) => {
+  if (!entry) return false;
+  if (entry._isCorpus) return true;
+  const cat = (entry.category || "").toString().toLowerCase();
+  return cat.includes("corpus");
 };
 
-const getPaymentBadgeStyle = (type) => {
-  switch (type) {
-    case "UPI":  return { bg: "#e0e7ff", color: "#3730a3" };
-    case "Cash": return { bg: "#dcfce7", color: "#166534" };
-    case "Card": return { bg: "#fee2e2", color: "#991b1b" };
-    default:     return { bg: "#f3f4f6", color: "#374151" };
-  }
+const paymentBadgeStyle = {
+  padding: "2px 8px",
+  borderRadius: "12px",
+  fontSize: "12px",
+  fontWeight: 600,
+  display: "inline-block",
 };
 
-const hasValue = (v) => v !== null && v !== undefined && v !== "";
-
-// ✅ For Corpus Fund rows, fall back to generated_by so the Employee Name
-//    column still displays even for old rows that only have generated_by.
-const getEmployeeName = (entry) => {
-  if (!entry) return "";
+const renderPaymentBadge = (pt) => {
+  if (!pt) return "—";
+  const palettes = {
+    UPI: { backgroundColor: "#e0e7ff", color: "#3730a3" },
+    Cash: { backgroundColor: "#dcfce7", color: "#166534" },
+    Card: { backgroundColor: "#fee2e2", color: "#991b1b" },
+    Cheque: { backgroundColor: "#fef3c7", color: "#92400e" },
+    NEFT: { backgroundColor: "#dbeafe", color: "#1e40af" },
+    Bank: { backgroundColor: "#ede9fe", color: "#5b21b6" },
+  };
   return (
-    entry.employee_name ||
-    entry.employee ||
-    entry.emp_name ||
-    entry.employeeName ||
-    (entry.category === "Corpus Fund" ? entry.generated_by : "") ||
-    ""
+    <span
+      style={{
+        ...paymentBadgeStyle,
+        ...(palettes[pt] || { backgroundColor: "#f3f4f6", color: "#374151" }),
+      }}
+    >
+      {pt}
+    </span>
   );
 };
 
 export default function FinanceTable({
   entries = [],
+  onView,
   onEdit,
   onDelete,
-  onView,
+  showEmployeeName = true,
+  showClientName = true,
   currentDepartment,
-  showEmployeeName: showEmployeeNameProp = false,
-  showClientName: showClientNameProp,
 }) {
-  if (!entries || entries.length === 0) {
-    return (
-      <div className="empty-state">
-        No finance entries found for this filter. Click "Add Entry" to
-        create one.
-      </div>
-    );
+  if (!entries.length) {
+    return <div className="card empty-state">No entries found.</div>;
   }
 
-  const showClientName = showClientNameProp !== undefined
-    ? showClientNameProp
-    : entries.some((e) => e?.client_name);
+  const hasSalary = entries.some(isSalaryEntry);
 
-  const showItems            = entries.some((e) => Array.isArray(e?.items) && e.items.length > 0);
-  const showRevenueType      = entries.some((e) => e?.revenue_type);
-  const showGeneratedBy      = entries.some((e) => e?.generated_by);
-  const showExecDepartment   = entries.some((e) => e?.exec_department);
-  const showVehicleType      = entries.some((e) => e?.vehicle_type);
-  const showGstType          = entries.some((e) => hasValue(e?.gst_tax_percent));
-  const showTaxInvoiceNumber = entries.some((e) => e?.tax_invoice_number);
+  // -----------------------------------------------------------------------
+  // Header
+  // -----------------------------------------------------------------------
+  const renderHeader = () => {
+    if (hasSalary) {
+      // Salary-aware superset header (works for mixed or salary-only views)
+      return (
+        <tr>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Category</th>
+          <th>Employee Name</th>
+          <th className="text-right">Amount</th>
+          <th>Payment Type</th>
+          <th>Exec Dept</th>
+          <th className="text-right">Salary</th>
+          <th className="text-right">Allowance</th>
+          {showClientName && <th>Client Name</th>}
+          <th>Remarks</th>
+          <th className="text-right">Actions</th>
+        </tr>
+      );
+    }
 
-  const showSubCategory      = entries.some((e) => e?.sub_category);
-  const showPatientName      = entries.some((e) => e?.patient_name);
-  const showPatientPlace     = entries.some((e) => e?.patient_place);
-  const showSalaryAmount     = entries.some((e) => hasValue(e?.salary_amount));
-  const showAllowanceAmount  = entries.some((e) => hasValue(e?.allowance_amount));
-  const showTeam             = entries.some((e) => e?.team);
-  const showLedgerDetails    = entries.some((e) => e._type === "ledger");
-  const showInvoice          = entries.some((e) => e?.invoice_url);
-
-  const isCorporateDept = currentDepartment === "Corporate";
-  const hasCampsEventsEmployee =
-    isCorporateDept &&
-    entries.some(
-      (e) => e?.category === "Camps & Events" && hasValue(getEmployeeName(e))
+    // Standard (non-salary) header
+    return (
+      <tr>
+        <th>Date</th>
+        <th>Type</th>
+        <th>Category</th>
+        {showEmployeeName && <th>Employee Name</th>}
+        {showClientName && <th>Client Name</th>}
+        {showClientName && <th>Client Place</th>}
+        <th className="text-right">Amount</th>
+        <th>Payment Type</th>
+        <th>Purpose</th>
+        <th>Remarks</th>
+        <th className="text-right">Actions</th>
+      </tr>
     );
-  const hasCorpusFundEmployee =
-    isCorporateDept &&
-    entries.some(
-      (e) => e?.category === "Corpus Fund" && hasValue(getEmployeeName(e))
-    );
-  
-  // ✅ ADDED: Show Employee Name for Salary & Payrolls in Corporate
-  const hasSalaryEmployee =
-    isCorporateDept &&
-    entries.some(
-      (e) => e?.category === "Salary & Payrolls" && hasValue(getEmployeeName(e))
+  };
+
+  // -----------------------------------------------------------------------
+  // Row
+  // -----------------------------------------------------------------------
+  const renderRow = (entry, idx) => {
+    const salary = isSalaryEntry(entry);
+    const isFinanceRow = salary || isCorpusEntry(entry);
+
+    const dateVal = entry.entry_date || entry.expense_date || "";
+    const typeVal = entry.entry_type || (salary ? "Expenses" : "");
+    const categoryVal = salary ? SALARY_CAT : entry.category || "—";
+    const empName = entry.employee_name || entry.generated_by || "—";
+    const execDept = entry.exec_department || currentDepartment || "—";
+    const salaryAmt = salary ? entry.salary_amount : null;
+    const allowanceAmt = salary ? entry.allowance_amount : null;
+
+    const actionsCell = (
+      <td className="text-right" style={{ whiteSpace: "nowrap" }}>
+        {onView && (
+          <button
+            type="button"
+            className="btn-icon"
+            onClick={() => onView(entry)}
+            title="View"
+          >
+            <Eye size={15} />
+          </button>
+        )}
+        {onEdit && (
+          <button
+            type="button"
+            className="btn-icon"
+            onClick={() => onEdit(entry)}
+            title="Edit"
+          >
+            <Pencil size={15} />
+          </button>
+        )}
+        {onDelete && (
+          <button
+            type="button"
+            className="btn-icon btn-icon--danger"
+            onClick={() => onDelete(entry)}
+            title="Delete"
+          >
+            <Trash2 size={15} />
+          </button>
+        )}
+        {!onView && !onEdit && !onDelete && <span style={{ opacity: 0.4 }}>—</span>}
+      </td>
     );
 
-  const showEmployeeName =
-    showEmployeeNameProp || hasCampsEventsEmployee || hasCorpusFundEmployee || hasSalaryEmployee;
+    if (hasSalary) {
+      return (
+        <tr key={entry.id ?? `row-${idx}`}>
+          <td style={{ whiteSpace: "nowrap" }}>{dateVal}</td>
+          <td>{typeVal}</td>
+          <td>{categoryVal}</td>
+          <td>{empName}</td>
+          <td className="text-right" style={{ fontWeight: 600 }}>
+            {formatCurrency(entry.amount)}
+          </td>
+          <td>{renderPaymentBadge(entry.payment_type)}</td>
+          <td>{execDept}</td>
+          <td className="text-right">
+            {salary && salaryAmt != null ? formatCurrency(salaryAmt) : "—"}
+          </td>
+          <td className="text-right">
+            {salary && allowanceAmt != null ? formatCurrency(allowanceAmt) : "—"}
+          </td>
+          {showClientName && <td>{entry.client_name || "—"}</td>}
+          <td
+            style={{
+              maxWidth: 260,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+            title={entry.remarks || ""}
+          >
+            {entry.remarks || "—"}
+          </td>
+          {actionsCell}
+        </tr>
+      );
+    }
 
-  const showPaymentType = true;
+    return (
+      <tr key={entry.id ?? `row-${idx}`}>
+        <td style={{ whiteSpace: "nowrap" }}>{dateVal}</td>
+        <td>{typeVal}</td>
+        <td>{categoryVal}</td>
+        {showEmployeeName && <td>{empName}</td>}
+        {showClientName && <td>{entry.client_name || "—"}</td>}
+        {showClientName && <td>{entry.patient_place || "—"}</td>}
+        <td className="text-right" style={{ fontWeight: 600 }}>
+          {formatCurrency(entry.amount)}
+        </td>
+        <td>{renderPaymentBadge(entry.payment_type)}</td>
+        <td
+          style={{
+            maxWidth: 180,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+          title={entry.purpose || ""}
+        >
+          {entry.purpose || "—"}
+        </td>
+        <td
+          style={{
+            maxWidth: 260,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+          title={entry.remarks || ""}
+        >
+          {entry.remarks || "—"}
+        </td>
+        {actionsCell}
+      </tr>
+    );
+  };
 
   return (
-    <div className="table-responsive">
-      <table className="finance-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Type</th>
-            <th>Category</th>
-            {showEmployeeName && <th>Employee Name</th>}
-            {showClientName && <th>Client Name</th>}
-            {showItems && <th>Items</th>}
-            <th className="text-right">Amount</th>
-            {showPaymentType && <th>Payment Type</th>}
-            {showRevenueType && <th>Revenue Type</th>}
-            {showGeneratedBy && <th>Generated By</th>}
-            {showExecDepartment && <th>Exec Dept</th>}
-            {showVehicleType && <th>Vehicle Type</th>}
-            {showGstType && <th className="text-right">GST Type</th>}
-            {showTaxInvoiceNumber && <th>Invoice Number</th>}
-
-            {showSubCategory && <th>Sub-Category</th>}
-            {showPatientName && <th>Patient Name</th>}
-            {showPatientPlace && <th>Patient Place</th>}
-            {showSalaryAmount && <th className="text-right">Salary</th>}
-            {showAllowanceAmount && <th className="text-right">Allowance</th>}
-            {showTeam && <th>Team</th>}
-            {showLedgerDetails && <th>Customer / Details</th>}
-
-            <th className="col-remarks" style={{ minWidth: 90 }}>Remarks</th>
-            {showInvoice && <th className="col-invoice">Invoice</th>}
-            <th>Actions</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {entries.map((entry) => {
-            const items = Array.isArray(entry.items) ? entry.items : [];
-            const isLedger = entry._type === "ledger";
-            const pBadge = getPaymentBadgeStyle(entry.payment_type);
-
-            return (
-              <tr key={entry.id}>
-                <td style={{ whiteSpace: "nowrap" }}>{entry.entry_date || "—"}</td>
-
-                <td>
-                  <span
-                    className={`badge ${
-                      entry.entry_type === "Income" ? "badge-income" : "badge-expense"
-                    }`}
-                  >
-                    {entry.entry_type || "—"}
-                  </span>
-                </td>
-
-                <td>{entry.category || "—"}</td>
-
-                {showEmployeeName && (
-                  <td style={{ fontWeight: 600 }}>
-                    {getEmployeeName(entry) || "—"}
-                  </td>
-                )}
-
-                {showClientName && <td>{entry.client_name || "—"}</td>}
-
-                {showItems && (
-                  <td style={itemCellStyle}>
-                    {items.length > 0 ? <ItemCell items={items} /> : "—"}
-                  </td>
-                )}
-
-                <td className="text-right" style={{ fontWeight: 600 }}>
-                  {formatCurrency(entry.amount)}
-                </td>
-
-                {showPaymentType && (
-                  <td>
-                    {entry.payment_type ? (
-                      <span
-                        style={{
-                          padding: "2px 8px",
-                          borderRadius: "12px",
-                          fontSize: "12px",
-                          fontWeight: "600",
-                          backgroundColor: pBadge.bg,
-                          color: pBadge.color,
-                          display: "inline-block",
-                        }}
-                      >
-                        {entry.payment_type}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                )}
-
-                {showRevenueType && <td>{entry.revenue_type || "—"}</td>}
-                {showGeneratedBy && <td>{entry.generated_by || "—"}</td>}
-                {showExecDepartment && <td>{entry.exec_department || "—"}</td>}
-                {showVehicleType && <td>{entry.vehicle_type || "—"}</td>}
-
-                {showGstType && (
-                  <td className="text-right">
-                    {hasValue(entry.gst_tax_percent)
-                      ? `${Number(entry.gst_tax_percent)}%`
-                      : "—"}
-                  </td>
-                )}
-
-                {showTaxInvoiceNumber && <td>{entry.tax_invoice_number || "—"}</td>}
-
-                {showSubCategory && <td>{entry.sub_category || "—"}</td>}
-                {showPatientName && <td>{entry.patient_name || "—"}</td>}
-                {showPatientPlace && <td>{entry.patient_place || "—"}</td>}
-                {showSalaryAmount && (
-                  <td className="text-right">{formatCurrency(entry.salary_amount)}</td>
-                )}
-                {showAllowanceAmount && (
-                  <td className="text-right">{formatCurrency(entry.allowance_amount)}</td>
-                )}
-                {showTeam && <td>{entry.team || "—"}</td>}
-
-                {showLedgerDetails && (
-                  <td>
-                    {isLedger ? (
-                      <div>
-                        <div><strong>Customer:</strong> {entry.customer_name || "—"}</div>
-                        <div><strong>Paid:</strong> {formatCurrency(entry.paid)}</div>
-                        <div><strong>Balance:</strong> {formatCurrency(entry.balance)}</div>
-                      </div>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                )}
-
-                <td
-                  className="col-remarks"
-                  style={{ ...remarkCellStyle, minWidth: 90, maxWidth: 120 }}
-                >
-                  <ItemCell text={entry.remarks} previewLabel="View" />
-                </td>
-
-                {showInvoice && (
-                  <td>
-                    {entry.invoice_url ? (
-                      <button
-                        type="button"
-                        onClick={() => handleViewInvoice(entry)}
-                        className="btn-icon"
-                        title={entry.invoice_original_name || "View invoice"}
-                      >
-                        <FileText size={15} />
-                      </button>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                )}
-
-                <td>
-                  <div className="actions-cell">
-                    {onView && (
-                      <button
-                        type="button"
-                        onClick={() => onView(entry)}
-                        className="btn-icon"
-                        title="View"
-                      >
-                        <Eye size={15} />
-                      </button>
-                    )}
-                    {onEdit && (
-                      <button
-                        type="button"
-                        onClick={() => onEdit(entry)}
-                        className="btn-icon"
-                        title="Edit"
-                      >
-                        <Pencil size={15} />
-                      </button>
-                    )}
-                    {onDelete && (
-                      <button
-                        type="button"
-                        onClick={() => onDelete(entry)}
-                        className="btn-icon btn-icon--danger"
-                        title="Delete"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
+    <div className="card table-wrap">
+      <table className="data-table">
+        <thead>{renderHeader()}</thead>
+        <tbody>{entries.map(renderRow)}</tbody>
       </table>
     </div>
   );

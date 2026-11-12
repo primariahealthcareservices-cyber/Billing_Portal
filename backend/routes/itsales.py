@@ -47,6 +47,16 @@ def _read_request_data():
     return request.form
 
 
+def _salary_query():
+    """Corporate-pushed salary rows for IT Sales."""
+    return FinanceEntry.query.filter(
+        FinanceEntry.department == "Corporate",
+        FinanceEntry.exec_department == "IT Sales",
+        FinanceEntry.entry_type == "Expenses",
+        FinanceEntry.category == SALARY_CATEGORY,
+    )
+
+
 @itsales_bp.route("/options", methods=["GET"])
 @role_required("IT Sales")
 def options():
@@ -231,36 +241,21 @@ def create_entry():
 @itsales_bp.route("/entries", methods=["GET"])
 @role_required("IT Sales")
 def list_entries():
-    query = FinanceEntry.query.filter_by(department=DEPARTMENT)
-    query = _apply_date_filters(query)
-
-    salary_query = FinanceEntry.query.filter(
-        FinanceEntry.department == "Corporate",
-        FinanceEntry.exec_department == "IT Sales",
-        FinanceEntry.entry_type == "Expenses",
-        FinanceEntry.category == SALARY_CATEGORY,
-    )
-    start_date = _parse_date(request.args.get("start_date"))
-    end_date = _parse_date(request.args.get("end_date"))
-    if start_date:
-        salary_query = salary_query.filter(FinanceEntry.entry_date >= start_date)
-    if end_date:
-        salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
-
-    combined_query = query.union(salary_query)
+    main_query = FinanceEntry.query.filter_by(department=DEPARTMENT)
+    main_query = _apply_date_filters(main_query)
 
     entry_type = request.args.get("entry_type")
     if entry_type in ENTRY_TYPES:
-        combined_query = combined_query.filter(FinanceEntry.entry_type == entry_type)
+        main_query = main_query.filter(FinanceEntry.entry_type == entry_type)
 
     category = request.args.get("category")
     if category:
-        combined_query = combined_query.filter(FinanceEntry.category == category)
+        main_query = main_query.filter(FinanceEntry.category == category)
 
     search = request.args.get("search")
     if search:
         like = f"%{search}%"
-        combined_query = combined_query.filter(
+        main_query = main_query.filter(
             or_(
                 FinanceEntry.generated_by.ilike(like),
                 FinanceEntry.client_name.ilike(like),
@@ -270,8 +265,52 @@ def list_entries():
             )
         )
 
-    combined_query = combined_query.order_by(FinanceEntry.entry_date.desc(), FinanceEntry.id.desc())
-    return jsonify({"entries": [e.to_dict() for e in combined_query.all()]}), 200
+    main_entries = main_query.order_by(
+        FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()
+    ).all()
+
+    # ---- Salary rows (Corporate-pushed) ------------------------------
+    salary_entries = []
+    include_salary = (
+        (not entry_type or entry_type == "Expenses")
+        and (not category or category == SALARY_CATEGORY)
+    )
+    if include_salary:
+        salary_q = _salary_query()
+        start_date = _parse_date(request.args.get("start_date"))
+        end_date = _parse_date(request.args.get("end_date"))
+        if start_date:
+            salary_q = salary_q.filter(FinanceEntry.entry_date >= start_date)
+        if end_date:
+            salary_q = salary_q.filter(FinanceEntry.entry_date <= end_date)
+        if search:
+            like = f"%{search}%"
+            salary_q = salary_q.filter(
+                or_(
+                    FinanceEntry.employee_name.ilike(like),
+                    FinanceEntry.remarks.ilike(like),
+                )
+            )
+        salary_entries = salary_q.order_by(
+            FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()
+        ).all()
+
+    combined = []
+    for e in main_entries:
+        d = e.to_dict()
+        if e.category == SALARY_CATEGORY:
+            d["_isSalary"] = True
+        combined.append(d)
+    for e in salary_entries:
+        d = e.to_dict()
+        d["_isSalary"] = True
+        combined.append(d)
+
+    combined.sort(
+        key=lambda x: (x.get("entry_date") or "", x.get("id") or 0),
+        reverse=True,
+    )
+    return jsonify({"entries": combined}), 200
 
 
 @itsales_bp.route("/entries/<int:entry_id>", methods=["PUT"])
@@ -438,28 +477,27 @@ def delete_entry(entry_id):
 @itsales_bp.route("/summary", methods=["GET"])
 @role_required("IT Sales")
 def finance_summary():
-    query = FinanceEntry.query.filter_by(department=DEPARTMENT)
-    query = _apply_date_filters(query)
-
-    salary_query = FinanceEntry.query.filter(
-        FinanceEntry.department == "Corporate",
-        FinanceEntry.exec_department == "IT Sales",
-        FinanceEntry.entry_type == "Expenses",
-        FinanceEntry.category == SALARY_CATEGORY,
+    main_entries = list(
+        _apply_date_filters(
+            FinanceEntry.query.filter_by(department=DEPARTMENT)
+        ).all()
     )
+
+    # Include Corporate-pushed salary rows
+    salary_q = _salary_query()
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
     if start_date:
-        salary_query = salary_query.filter(FinanceEntry.entry_date >= start_date)
+        salary_q = salary_q.filter(FinanceEntry.entry_date >= start_date)
     if end_date:
-        salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
+        salary_q = salary_q.filter(FinanceEntry.entry_date <= end_date)
+    salary_entries = list(salary_q.all())
 
-    combined_query = query.union(salary_query)
-    entries = combined_query.all()
+    entries = main_entries + salary_entries
 
-    total_income = sum(float(e.amount) for e in entries if e.entry_type == "Income")
+    total_income   = sum(float(e.amount) for e in entries if e.entry_type == "Income")
     total_expenses = sum(float(e.amount) for e in entries if e.entry_type == "Expenses")
-    total_capital = sum(float(e.amount) for e in entries if e.entry_type == "Capital")
+    total_capital  = sum(float(e.amount) for e in entries if e.entry_type == "Capital")
 
     by_date = {}
     for e in entries:
@@ -471,6 +509,7 @@ def finance_summary():
             by_date[key]["expenses"] += float(e.amount)
         elif e.entry_type == "Capital":
             by_date[key]["capital"] += float(e.amount)
+
     trend = sorted(by_date.values(), key=lambda x: x["date"])
 
     by_category = {}

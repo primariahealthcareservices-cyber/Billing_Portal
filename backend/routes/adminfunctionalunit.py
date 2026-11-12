@@ -37,11 +37,19 @@ def _parse_date(value, default=None):
 def _apply_date_filters(query):
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
-    if start_date:
-        query = query.filter(FinanceEntry.entry_date >= start_date)
-    if end_date:
-        query = query.filter(FinanceEntry.entry_date <= end_date)
+    if start_date: query = query.filter(FinanceEntry.entry_date >= start_date)
+    if end_date: query = query.filter(FinanceEntry.entry_date <= end_date)
     return query
+
+
+def _salary_query():
+    """Corporate-pushed salary entries for Office Administration."""
+    return FinanceEntry.query.filter(
+        FinanceEntry.department == "Corporate",
+        FinanceEntry.exec_department == "Adminstrationfunctionalunit",
+        FinanceEntry.entry_type == "Expenses",
+        FinanceEntry.category == SALARY_CATEGORY,
+    )
 
 
 @adminfunctionalunit_bp.route("/options", methods=["GET"])
@@ -70,7 +78,6 @@ def create_entry():
     data = request.get_json(silent=True) or {}
     entry_type = data.get("entry_type")
 
-    # ====================== CAPITAL ENTRY ======================
     if entry_type == "Capital":
         errors = []
         capital_category = (data.get("capital_category") or data.get("fund_category") or "").strip()
@@ -81,17 +88,12 @@ def create_entry():
         amount_raw = data.get("amount")
 
         if capital_category not in CAPITAL_CATEGORIES:
-            errors.append(
-                "capital_category must be one of: " + ", ".join(CAPITAL_CATEGORIES) + "."
-            )
-        if not client_name:
-            errors.append("Name is required.")
-        if not purpose:
-            errors.append("Purpose is required.")
+            errors.append("capital_category must be one of: " + ", ".join(CAPITAL_CATEGORIES) + ".")
+        if not client_name: errors.append("Name is required.")
+        if not purpose: errors.append("Purpose is required.")
         try:
             amount = float(amount_raw)
-            if amount <= 0:
-                errors.append("Amount must be greater than 0.")
+            if amount <= 0: errors.append("Amount must be greater than 0.")
         except (TypeError, ValueError):
             errors.append("Amount must be a valid number.")
 
@@ -99,30 +101,20 @@ def create_entry():
             return jsonify({"message": "Validation failed.", "errors": errors}), 400
 
         entry = FinanceEntry(
-            department=DEPARTMENT,
-            entry_type="Capital",
-            category=capital_category,
-            sub_category="Capital",
-            fund_category=capital_category,
-            client_name=client_name,
-            amount=amount,
-            purpose=purpose,
-            remarks=remarks,
-            entry_date=entry_date,
+            department=DEPARTMENT, entry_type="Capital", category=capital_category,
+            sub_category="Capital", fund_category=capital_category,
+            client_name=client_name, amount=amount, purpose=purpose,
+            remarks=remarks, entry_date=entry_date,
             created_by_id=get_jwt_identity(),
         )
-        db.session.add(entry)
-        db.session.commit()
+        db.session.add(entry); db.session.commit()
         return jsonify({"message": "Capital entry created.", "entry": entry.to_dict()}), 201
 
-    # ====================== INCOME / EXPENSES ======================
     category = data.get("category")
     amount = data.get("amount")
     remarks = data.get("remarks", "")
-
     generated_by = (data.get("generated_by") or "").strip() or None
     entry_date = _parse_date(data.get("entry_date"), default=date.today())
-
     employee_name = (data.get("employee_name") or "").strip() or None
     vehicle_type = (data.get("vehicle_type") or "").strip() or None
 
@@ -142,8 +134,7 @@ def create_entry():
 
     try:
         amount = float(amount)
-        if amount <= 0:
-            errors.append("amount must be greater than 0.")
+        if amount <= 0: errors.append("amount must be greater than 0.")
     except (TypeError, ValueError):
         errors.append("amount must be a number.")
 
@@ -151,19 +142,12 @@ def create_entry():
         return jsonify({"message": "Validation failed.", "errors": errors}), 400
 
     entry = FinanceEntry(
-        department=DEPARTMENT,
-        entry_type=entry_type,
-        category=category,
-        generated_by=generated_by,
-        amount=amount,
-        remarks=remarks,
-        entry_date=entry_date,
-        created_by_id=get_jwt_identity(),
-        employee_name=employee_name,
-        vehicle_type=vehicle_type,
+        department=DEPARTMENT, entry_type=entry_type, category=category,
+        generated_by=generated_by, amount=amount, remarks=remarks,
+        entry_date=entry_date, created_by_id=get_jwt_identity(),
+        employee_name=employee_name, vehicle_type=vehicle_type,
     )
-    db.session.add(entry)
-    db.session.commit()
+    db.session.add(entry); db.session.commit()
     return jsonify({"message": "Entry created.", "entry": entry.to_dict()}), 201
 
 
@@ -189,8 +173,37 @@ def list_entries():
                 FinanceEntry.employee_name.ilike(like),
             )
         )
-    query = query.order_by(FinanceEntry.entry_date.desc(), FinanceEntry.id.desc())
-    return jsonify({"entries": [e.to_dict() for e in query.all()]}), 200
+    entries = query.order_by(FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()).all()
+
+    # ✅ Salary rows (Corporate → Admin functional unit)
+    salary_q = _salary_query()
+    if entry_type and entry_type != "Expenses":
+        # Salary rows are always Expenses — skip if other type requested
+        salary_q = salary_q.filter(False)
+    if category and category != SALARY_CATEGORY:
+        salary_q = salary_q.filter(False)
+    start_date = _parse_date(request.args.get("start_date"))
+    end_date = _parse_date(request.args.get("end_date"))
+    if start_date: salary_q = salary_q.filter(FinanceEntry.entry_date >= start_date)
+    if end_date: salary_q = salary_q.filter(FinanceEntry.entry_date <= end_date)
+    if search:
+        like = f"%{search}%"
+        salary_q = salary_q.filter(
+            db.or_(
+                FinanceEntry.employee_name.ilike(like),
+                FinanceEntry.remarks.ilike(like),
+            )
+        )
+    salary_entries = salary_q.order_by(FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()).all()
+
+    combined = [e.to_dict() for e in entries]
+    for se in salary_entries:
+        d = se.to_dict()
+        d["_isSalary"] = True
+        combined.append(d)
+
+    combined.sort(key=lambda x: (x["entry_date"], x["id"]), reverse=True)
+    return jsonify({"entries": combined}), 200
 
 
 @adminfunctionalunit_bp.route("/entries/<int:entry_id>", methods=["PUT"])
@@ -202,32 +215,21 @@ def update_entry(entry_id):
 
     data = request.get_json(silent=True) or {}
 
-    # ====================== CAPITAL UPDATE ======================
     if entry.entry_type == "Capital":
         errors = []
-        capital_category = (
-            data.get("capital_category")
-            or data.get("fund_category")
-            or entry.fund_category
-            or ""
-        ).strip()
+        capital_category = (data.get("capital_category") or data.get("fund_category") or entry.fund_category or "").strip()
         client_name = (data.get("client_name") or "").strip()
         purpose = (data.get("purpose") or "").strip()
         remarks = (data.get("remarks") or "").strip()
         amount_raw = data.get("amount")
 
         if capital_category not in CAPITAL_CATEGORIES:
-            errors.append(
-                "capital_category must be one of: " + ", ".join(CAPITAL_CATEGORIES) + "."
-            )
-        if not client_name:
-            errors.append("Name is required.")
-        if not purpose:
-            errors.append("Purpose is required.")
+            errors.append("capital_category must be one of: " + ", ".join(CAPITAL_CATEGORIES) + ".")
+        if not client_name: errors.append("Name is required.")
+        if not purpose: errors.append("Purpose is required.")
         try:
             amount = float(amount_raw)
-            if amount <= 0:
-                errors.append("Amount must be greater than 0.")
+            if amount <= 0: errors.append("Amount must be greater than 0.")
         except (TypeError, ValueError):
             errors.append("Amount must be a valid number.")
 
@@ -244,13 +246,11 @@ def update_entry(entry_id):
 
         if "entry_date" in data:
             parsed = _parse_date(data["entry_date"])
-            if parsed:
-                entry.entry_date = parsed
+            if parsed: entry.entry_date = parsed
 
         db.session.commit()
         return jsonify({"message": "Capital entry updated.", "entry": entry.to_dict()}), 200
 
-    # ====================== INCOME / EXPENSES UPDATE ======================
     if "entry_type" in data and data["entry_type"] in ENTRY_TYPES:
         entry.entry_type = data["entry_type"]
     if "category" in data:
@@ -260,8 +260,7 @@ def update_entry(entry_id):
     if "amount" in data:
         try:
             amount = float(data["amount"])
-            if amount > 0:
-                entry.amount = amount
+            if amount > 0: entry.amount = amount
         except (TypeError, ValueError):
             pass
     if "generated_by" in data:
@@ -270,8 +269,7 @@ def update_entry(entry_id):
         entry.remarks = data["remarks"]
     if "entry_date" in data:
         parsed = _parse_date(data["entry_date"])
-        if parsed:
-            entry.entry_date = parsed
+        if parsed: entry.entry_date = parsed
     if "employee_name" in data:
         entry.employee_name = (data.get("employee_name") or "").strip() or None
     if "vehicle_type" in data:
@@ -287,15 +285,23 @@ def delete_entry(entry_id):
     entry = FinanceEntry.query.filter_by(id=entry_id, department=DEPARTMENT).first()
     if not entry:
         return jsonify({"message": "Entry not found."}), 404
-    db.session.delete(entry)
-    db.session.commit()
+    db.session.delete(entry); db.session.commit()
     return jsonify({"message": "Entry deleted."}), 200
 
 
 @adminfunctionalunit_bp.route("/summary", methods=["GET"])
 @role_required("Adminstrationfunctionalunit")
 def finance_summary():
-    entries = _apply_date_filters(FinanceEntry.query.filter_by(department=DEPARTMENT)).all()
+    entries = list(_apply_date_filters(FinanceEntry.query.filter_by(department=DEPARTMENT)).all())
+
+    # ✅ Include salary rows
+    salary_q = _salary_query()
+    start_date = _parse_date(request.args.get("start_date"))
+    end_date = _parse_date(request.args.get("end_date"))
+    if start_date: salary_q = salary_q.filter(FinanceEntry.entry_date >= start_date)
+    if end_date: salary_q = salary_q.filter(FinanceEntry.entry_date <= end_date)
+    entries += list(salary_q.all())
+
     total_income = sum(float(e.amount) for e in entries if e.entry_type == "Income")
     total_expenses = sum(float(e.amount) for e in entries if e.entry_type == "Expenses")
     total_capital = sum(float(e.amount) for e in entries if e.entry_type == "Capital")
@@ -304,12 +310,9 @@ def finance_summary():
     for e in entries:
         key = e.entry_date.isoformat()
         by_date.setdefault(key, {"date": key, "income": 0, "expenses": 0, "capital": 0})
-        if e.entry_type == "Income":
-            by_date[key]["income"] += float(e.amount)
-        elif e.entry_type == "Expenses":
-            by_date[key]["expenses"] += float(e.amount)
-        elif e.entry_type == "Capital":
-            by_date[key]["capital"] += float(e.amount)
+        if e.entry_type == "Income": by_date[key]["income"] += float(e.amount)
+        elif e.entry_type == "Expenses": by_date[key]["expenses"] += float(e.amount)
+        elif e.entry_type == "Capital": by_date[key]["capital"] += float(e.amount)
     trend = sorted(by_date.values(), key=lambda x: x["date"])
 
     by_category = {}

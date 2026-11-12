@@ -1,46 +1,23 @@
 // frontend/src/pages/dashboards/CaredxDashboard.jsx
-import React, {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
-
 import {
-  Upload,
-  Download,
-  Plus,
-  RefreshCw,
-  Filter,
-  Wallet,
-  CreditCard,
-  Landmark,
-  TrendingUp,
-  TrendingDown,
-  RotateCcw,
+  Upload, Download, Plus, RefreshCw, Filter, Wallet, CreditCard, Landmark,
+  TrendingUp, TrendingDown, RotateCcw,
 } from "lucide-react";
 
 import Navbar from "../../components/Navbar.jsx";
 import FinanceCharts from "../../components/FinanceCharts.jsx";
-
 import CaredxLabTable from "../../components/CaredxLabTable.jsx";
 import CaredxLabEntryForm from "../../components/CaredxLabEntryForm.jsx";
-
 import CaredxExpenseTable from "../../components/CaredxExpenseTable.jsx";
 import CaredxExpenseForm from "../../components/CaredxExpenseForm.jsx";
-
 import Pagination from "../../components/Pagination.jsx";
-
 import api from "../../api/axios.js";
 
 const ROLE_COLOR = "#be185d";
 const PAGE_SIZE = 25;
 
-// ---------------------------------------------------------
-// Standard categories & styles
-// ---------------------------------------------------------
 const STANDARD_CATEGORIES = [
   "Salary & Payrolls",
   "Corpus Fund",
@@ -53,7 +30,6 @@ const STANDARD_CATEGORIES = [
   "Miscellaneous",
 ];
 
-// ✅ Must match the values CaredxLabEntryForm saves.
 const PAYMENT_TYPES = ["Cash", "UPI", "Cash + UPI", "Card", "Cheque", "NEFT"];
 
 const categoryBtnStyle = {
@@ -82,31 +58,19 @@ const formatCurrency = (value) => {
 export default function CaredxDashboard() {
   const currentYear = new Date().getFullYear().toString();
 
-  // -------------------------------------------------------------------------
-  // Shared filters
-  // -------------------------------------------------------------------------
   const [quarter, setQuarter] = useState("All");
   const [year, setYear] = useState(currentYear);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [labSearch, setLabSearch] = useState("");
 
-  // Categories & Type Filter
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [typeFilter, setTypeFilter] = useState("");
-
-  // ✅ Payment Type filter
   const [paymentTypeFilter, setPaymentTypeFilter] = useState("");
 
-  // -------------------------------------------------------------------------
-  // Summary
-  // -------------------------------------------------------------------------
   const [summary, setSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
 
-  // -------------------------------------------------------------------------
-  // Lab entries (Income)
-  // -------------------------------------------------------------------------
   const [labEntries, setLabEntries] = useState([]);
   const [labLoading, setLabLoading] = useState(true);
   const [labPage, setLabPage] = useState(1);
@@ -119,9 +83,6 @@ export default function CaredxDashboard() {
 
   const fileInputRef = useRef(null);
 
-  // -------------------------------------------------------------------------
-  // Expenses
-  // -------------------------------------------------------------------------
   const [expenses, setExpenses] = useState([]);
   const [expensesLoading, setExpensesLoading] = useState(true);
   const [expensePage, setExpensePage] = useState(1);
@@ -129,34 +90,28 @@ export default function CaredxDashboard() {
   const [expenseFormOpen, setExpenseFormOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
 
+  // ✅ Salary state
+  const [salaryEntries, setSalaryEntries] = useState([]);
+
   // -------------------------------------------------------------------------
   // Shared API params
   // -------------------------------------------------------------------------
   const dateParams = {};
   if (startDate) dateParams.start_date = startDate;
   if (endDate) dateParams.end_date = endDate;
-
-  // Only send quarter and year if a specific quarter is selected
   if (quarter !== "All") {
     dateParams.quarter = quarter;
     dateParams.year = year;
   }
 
-  // -------------------------------------------------------------------------
-  // Fetchers
-  // -------------------------------------------------------------------------
   const fetchSummary = useCallback(async () => {
     setSummaryLoading(true);
     try {
-      const response = await api.get("/caredx/lab-entries/summary", {
-        params: dateParams,
-      });
+      const response = await api.get("/caredx/lab-entries/summary", { params: dateParams });
       setSummary(response.data);
     } catch (error) {
       console.error("Summary error:", error);
-      toast.error(
-        error.response?.data?.message || "Failed to load dashboard summary."
-      );
+      toast.error(error.response?.data?.message || "Failed to load dashboard summary.");
     } finally {
       setSummaryLoading(false);
     }
@@ -168,17 +123,12 @@ export default function CaredxDashboard() {
       const params = { ...dateParams };
       if (labSearch.trim()) params.search = labSearch.trim();
       if (paymentTypeFilter) params.payment_type = paymentTypeFilter;
-
       const response = await api.get("/caredx/lab-entries", { params });
-      setLabEntries(
-        Array.isArray(response.data?.entries) ? response.data.entries : []
-      );
+      setLabEntries(Array.isArray(response.data?.entries) ? response.data.entries : []);
       setLabPage(1);
     } catch (error) {
       console.error("Lab entries error:", error);
-      toast.error(
-        error.response?.data?.message || "Failed to load lab data entries."
-      );
+      toast.error(error.response?.data?.message || "Failed to load lab data entries.");
       setLabEntries([]);
       setLabPage(1);
     } finally {
@@ -189,18 +139,12 @@ export default function CaredxDashboard() {
   const fetchExpenses = useCallback(async () => {
     setExpensesLoading(true);
     try {
-      const response = await api.get("/caredx/expenses", {
-        params: dateParams,
-      });
-      setExpenses(
-        Array.isArray(response.data?.expenses) ? response.data.expenses : []
-      );
+      const response = await api.get("/caredx/expenses", { params: dateParams });
+      setExpenses(Array.isArray(response.data?.expenses) ? response.data.expenses : []);
       setExpensePage(1);
     } catch (error) {
       console.error("Expenses error:", error);
-      toast.error(
-        error.response?.data?.message || "Failed to load expenses."
-      );
+      toast.error(error.response?.data?.message || "Failed to load expenses.");
       setExpenses([]);
       setExpensePage(1);
     } finally {
@@ -208,27 +152,31 @@ export default function CaredxDashboard() {
     }
   }, [startDate, endDate, quarter, year]);
 
-  const refetchAll = useCallback(async () => {
-    await Promise.all([fetchSummary(), fetchLabEntries(), fetchExpenses()]);
-  }, [fetchSummary, fetchLabEntries, fetchExpenses]);
+  // ✅ Fetch salary entries
+  const fetchSalaries = useCallback(async () => {
+    try {
+      const response = await api.get("/caredx/salaries", { params: dateParams });
+      setSalaryEntries(Array.isArray(response.data?.salaries) ? response.data.salaries : []);
+    } catch (error) {
+      console.warn("Salary fetch failed:", error?.response?.data?.message || error.message);
+      setSalaryEntries([]);
+    }
+  }, [startDate, endDate, quarter, year]);
 
-  useEffect(() => {
-    refetchAll();
-  }, [refetchAll]);
+  const refetchAll = useCallback(async () => {
+    await Promise.all([fetchSummary(), fetchLabEntries(), fetchExpenses(), fetchSalaries()]);
+  }, [fetchSummary, fetchLabEntries, fetchExpenses, fetchSalaries]);
+
+  useEffect(() => { refetchAll(); }, [refetchAll]);
 
   // -------------------------------------------------------------------------
-  // Filtering Logic
+  // Filtering
   // -------------------------------------------------------------------------
   const filteredLabEntries = labEntries.filter((e) => {
     if (typeFilter === "Expenses") return false;
-
     if (selectedCategory) {
-      return (
-        selectedCategory === "Referrals & Deposits" ||
-        e.category === selectedCategory
-      );
+      return selectedCategory === "Referrals & Deposits" || e.category === selectedCategory;
     }
-
     return true;
   });
 
@@ -238,29 +186,17 @@ export default function CaredxDashboard() {
     return true;
   });
 
-  // -------------------------------------------------------------------------
-  // Pagination — Lab
-  // -------------------------------------------------------------------------
-  const labTotalPages = Math.max(
-    1,
-    Math.ceil(filteredLabEntries.length / PAGE_SIZE)
-  );
-  const paginatedLabEntries = filteredLabEntries.slice(
-    (labPage - 1) * PAGE_SIZE,
-    labPage * PAGE_SIZE
-  );
+  const shouldShowSalary =
+    typeFilter !== "Income" &&
+    (!selectedCategory || selectedCategory === "Salary & Payrolls");
 
-  // -------------------------------------------------------------------------
-  // Pagination — Expenses
-  // -------------------------------------------------------------------------
-  const expenseTotalPages = Math.max(
-    1,
-    Math.ceil(filteredExpenses.length / PAGE_SIZE)
-  );
-  const paginatedExpenses = filteredExpenses.slice(
-    (expensePage - 1) * PAGE_SIZE,
-    expensePage * PAGE_SIZE
-  );
+  const filteredSalaryEntries = salaryEntries.filter(() => shouldShowSalary);
+
+  const labTotalPages = Math.max(1, Math.ceil(filteredLabEntries.length / PAGE_SIZE));
+  const paginatedLabEntries = filteredLabEntries.slice((labPage - 1) * PAGE_SIZE, labPage * PAGE_SIZE);
+
+  const expenseTotalPages = Math.max(1, Math.ceil(filteredExpenses.length / PAGE_SIZE));
+  const paginatedExpenses = filteredExpenses.slice((expensePage - 1) * PAGE_SIZE, expensePage * PAGE_SIZE);
 
   // -------------------------------------------------------------------------
   // Filter Handlers
@@ -297,20 +233,9 @@ export default function CaredxDashboard() {
     }
   };
 
-  // If user manually changes date, reset quarter to "All" to avoid conflict
-  const handleStartDateChange = (e) => {
-    setStartDate(e.target.value);
-    setQuarter("All");
-  };
+  const handleStartDateChange = (e) => { setStartDate(e.target.value); setQuarter("All"); };
+  const handleEndDateChange = (e) => { setEndDate(e.target.value); setQuarter("All"); };
 
-  const handleEndDateChange = (e) => {
-    setEndDate(e.target.value);
-    setQuarter("All");
-  };
-
-  // -------------------------------------------------------------------------
-  // Reset
-  // -------------------------------------------------------------------------
   const handleReset = () => {
     setStartDate("");
     setEndDate("");
@@ -323,9 +248,6 @@ export default function CaredxDashboard() {
     setPaymentTypeFilter("");
   };
 
-  // -------------------------------------------------------------------------
-  // Categories Handlers
-  // -------------------------------------------------------------------------
   const handleAllCategories = () => {
     setSelectedCategory(null);
     setTypeFilter("");
@@ -336,59 +258,37 @@ export default function CaredxDashboard() {
     if (typeFilter === "Capital") setTypeFilter("");
   };
 
-  // -------------------------------------------------------------------------
-  // Lab actions
-  // -------------------------------------------------------------------------
-  const openNewLabEntry = () => {
-    setEditingLabEntry(null);
-    setLabFormOpen(true);
-  };
-
-  const openEditLabEntry = (entry) => {
-    setEditingLabEntry(entry);
-    setLabFormOpen(true);
-  };
+  const openNewLabEntry = () => { setEditingLabEntry(null); setLabFormOpen(true); };
+  const openEditLabEntry = (entry) => { setEditingLabEntry(entry); setLabFormOpen(true); };
 
   const handleLabDelete = async (entry) => {
-    const confirmed = window.confirm(
-      `Delete the lab entry for "${entry.patient_name}" dated ${entry.entry_date}?`
-    );
+    const confirmed = window.confirm(`Delete the lab entry for "${entry.patient_name}" dated ${entry.entry_date}?`);
     if (!confirmed) return;
-
     try {
       await api.delete(`/caredx/lab-entries/${entry.id}`);
       toast.success("Lab entry deleted.");
       await refetchAll();
     } catch (error) {
       console.error("Delete lab entry error:", error);
-      toast.error(
-        error.response?.data?.message || "Failed to delete lab entry."
-      );
+      toast.error(error.response?.data?.message || "Failed to delete lab entry.");
     }
   };
 
-  // -------------------------------------------------------------------------
-  // Excel import/export
-  // -------------------------------------------------------------------------
   const handleImportClick = () => fileInputRef.current?.click();
 
   const handleFileSelected = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-
     const fileName = file.name.toLowerCase();
     if (!fileName.endsWith(".xlsx") && !fileName.endsWith(".xlsm")) {
       toast.error("Please select a .xlsx or .xlsm file.");
       return;
     }
-
     const formData = new FormData();
     formData.append("file", file);
-
     setImporting(true);
     setLastImportResult(null);
-
     try {
       const response = await api.post("/caredx/lab-entries/import", formData);
       const result = response.data || {};
@@ -398,10 +298,8 @@ export default function CaredxDashboard() {
     } catch (error) {
       console.error("Excel import error:", error);
       const errors = error.response?.data?.errors;
-      const message = Array.isArray(errors)
-        ? errors.join(" ")
-        : error.response?.data?.message ||
-          "Import failed. Please check the Excel file.";
+      const message = Array.isArray(errors) ? errors.join(" ")
+        : error.response?.data?.message || "Import failed. Please check the Excel file.";
       toast.error(message);
     } finally {
       setImporting(false);
@@ -410,21 +308,12 @@ export default function CaredxDashboard() {
 
   const handleLabExport = async () => {
     try {
-      const response = await api.get("/caredx/lab-entries/export", {
-        params: dateParams,
-        responseType: "blob",
-      });
-
-      const blob = new Blob([response.data], {
-        type:
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
+      const response = await api.get("/caredx/lab-entries/export", { params: dateParams, responseType: "blob" });
+      const blob = new Blob([response.data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `Caredx_Lab_Entries_${startDate || "all"}_to_${
-        endDate || "time"
-      }.xlsx`;
+      anchor.download = `Caredx_Lab_Entries_${startDate || "all"}_to_${endDate || "time"}.xlsx`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -435,104 +324,64 @@ export default function CaredxDashboard() {
     }
   };
 
-  // -------------------------------------------------------------------------
-  // Expense actions
-  // -------------------------------------------------------------------------
-  const openNewExpense = () => {
-    setEditingExpense(null);
-    setExpenseFormOpen(true);
-  };
-
-  const openEditExpense = (expense) => {
-    setEditingExpense(expense);
-    setExpenseFormOpen(true);
-  };
+  const openNewExpense = () => { setEditingExpense(null); setExpenseFormOpen(true); };
+  const openEditExpense = (expense) => { setEditingExpense(expense); setExpenseFormOpen(true); };
 
   const handleExpenseDelete = async (expense) => {
-    const confirmed = window.confirm(
-      `Delete the "${expense.category}" expense dated ${expense.expense_date}?`
-    );
+    const confirmed = window.confirm(`Delete the "${expense.category}" expense dated ${expense.expense_date}?`);
     if (!confirmed) return;
-
     try {
       await api.delete(`/caredx/expenses/${expense.id}`);
       toast.success("Expense deleted.");
       await refetchAll();
     } catch (error) {
       console.error("Delete expense error:", error);
-      toast.error(
-        error.response?.data?.message || "Failed to delete expense."
-      );
+      toast.error(error.response?.data?.message || "Failed to delete expense.");
     }
   };
 
   // -------------------------------------------------------------------------
-  // Render Categories Panel
+  // Categories Panel
   // -------------------------------------------------------------------------
   const renderCategoryPanel = () => (
     <div className="card" style={{ marginBottom: 16 }}>
-      <p className="section-title" style={{ marginBottom: 12 }}>
-        Categories
-      </p>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
-          gap: 10,
-        }}
-      >
+      <p className="section-title" style={{ marginBottom: 12 }}>Categories</p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 10 }}>
         <button
           type="button"
-          className={`btn ${
-            !selectedCategory && !typeFilter ? "btn-primary" : "btn-secondary"
-          }`}
+          className={`btn ${!selectedCategory && !typeFilter ? "btn-primary" : "btn-secondary"}`}
           onClick={handleAllCategories}
           style={categoryBtnStyle}
         >
           All Categories
         </button>
-
         <button
           type="button"
-          className={`btn ${
-            typeFilter === "Income" ? "btn-primary" : "btn-secondary"
-          }`}
-          onClick={() => {
-            setTypeFilter("Income");
-            setSelectedCategory(null);
-          }}
+          className={`btn ${typeFilter === "Income" ? "btn-primary" : "btn-secondary"}`}
+          onClick={() => { setTypeFilter("Income"); setSelectedCategory(null); }}
           style={categoryBtnStyle}
         >
           Income
         </button>
         <button
           type="button"
-          className={`btn ${
-            typeFilter === "Expenses" ? "btn-primary" : "btn-secondary"
-          }`}
-          onClick={() => {
-            setTypeFilter("Expenses");
-            setSelectedCategory(null);
-          }}
+          className={`btn ${typeFilter === "Expenses" ? "btn-primary" : "btn-secondary"}`}
+          onClick={() => { setTypeFilter("Expenses"); setSelectedCategory(null); }}
           style={categoryBtnStyle}
         >
           Expenses
         </button>
-
         {STANDARD_CATEGORIES.map((cat) => (
           <button
             key={cat}
             type="button"
-            className={`btn ${
-              selectedCategory === cat ? "btn-primary" : "btn-secondary"
-            }`}
+            className={`btn ${selectedCategory === cat ? "btn-primary" : "btn-secondary"}`}
             onClick={() => handleCategorySelect(cat)}
             style={categoryBtnStyle}
           >
             {cat}
           </button>
         ))}
-
         <button
           type="button"
           className="btn btn-secondary"
@@ -556,14 +405,9 @@ export default function CaredxDashboard() {
       <main className="page-main">
         {/* ============ FILTER BAR ============ */}
         <div className="card filter-bar" style={{ flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
-          
           <div className="form-group" style={{ minWidth: 120 }}>
             <label className="form-label">QUARTER</label>
-            <select
-              value={quarter}
-              onChange={handleQuarterChange}
-              className="form-control"
-            >
+            <select value={quarter} onChange={handleQuarterChange} className="form-control">
               <option value="All">All</option>
               <option value="Q1">Q1 (Jan-Mar)</option>
               <option value="Q2">Q2 (Apr-Jun)</option>
@@ -571,40 +415,22 @@ export default function CaredxDashboard() {
               <option value="Q4">Q4 (Oct-Dec)</option>
             </select>
           </div>
-
           <div className="form-group" style={{ minWidth: 100 }}>
             <label className="form-label">YEAR</label>
-            <select
-              value={year}
-              onChange={handleYearChange}
-              className="form-control"
-            >
+            <select value={year} onChange={handleYearChange} className="form-control">
               {Array.from({ length: 10 }, (_, i) => parseInt(currentYear) - 5 + i).map((y) => (
                 <option key={y} value={y.toString()}>{y}</option>
               ))}
             </select>
           </div>
-
           <div className="form-group">
             <label className="form-label">START DATE</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={handleStartDateChange}
-              className="form-control"
-            />
+            <input type="date" value={startDate} onChange={handleStartDateChange} className="form-control" />
           </div>
-
           <div className="form-group">
             <label className="form-label">END DATE</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={handleEndDateChange}
-              className="form-control"
-            />
+            <input type="date" value={endDate} onChange={handleEndDateChange} className="form-control" />
           </div>
-
           <div className="form-group form-group--grow">
             <label className="form-label">SEARCH</label>
             <input
@@ -615,22 +441,13 @@ export default function CaredxDashboard() {
               className="form-control"
             />
           </div>
-
-          {/* Optional: Payment Type filter kept for functionality */}
           <div className="form-group" style={{ minWidth: 120 }}>
             <label className="form-label">PAYMENT TYPE</label>
-            <select
-              value={paymentTypeFilter}
-              onChange={(event) => setPaymentTypeFilter(event.target.value)}
-              className="form-control"
-            >
+            <select value={paymentTypeFilter} onChange={(event) => setPaymentTypeFilter(event.target.value)} className="form-control">
               <option value="">All</option>
-              {PAYMENT_TYPES.map((pt) => (
-                <option key={pt} value={pt}>{pt}</option>
-              ))}
+              {PAYMENT_TYPES.map((pt) => (<option key={pt} value={pt}>{pt}</option>))}
             </select>
           </div>
-
           <div className="filter-actions" style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button type="button" onClick={refetchAll} className="btn btn-primary">
               <Filter size={16} /> Apply Filter
@@ -649,104 +466,118 @@ export default function CaredxDashboard() {
 
         <p className="text-muted" style={{ fontSize: 12.5, marginTop: -8 }}>
           {startDate || endDate
-            ? `Showing entries from ${startDate || "the beginning"} to ${
-                endDate || "today"
-              }.`
+            ? `Showing entries from ${startDate || "the beginning"} to ${endDate || "today"}.`
             : "Showing all entries (no date filter applied)."}
         </p>
 
-        {/* ============ CATEGORIES PANEL ============ */}
         {renderCategoryPanel()}
 
-        {/* ============ SUMMARY CARDS ============ */}
         {summaryLoading ? (
-          <div className="card empty-state">
-            Loading dashboard summary...
-          </div>
+          <div className="card empty-state">Loading dashboard summary...</div>
         ) : (
           summary && (
             <div className="stat-grid">
               <div className="card stat-card">
-                <div className="stat-icon stat-icon--income">
-                  <TrendingUp size={22} />
-                </div>
+                <div className="stat-icon stat-icon--income"><TrendingUp size={22} /></div>
                 <div>
                   <p className="stat-label">Total Amount</p>
-                  <p className="stat-value">
-                    {formatCurrency(summary.total_amount_paid)}
-                  </p>
+                  <p className="stat-value">{formatCurrency(summary.total_amount_paid)}</p>
                 </div>
               </div>
-
               <div className="card stat-card">
-                <div className="stat-icon stat-icon--entries">
-                  <Wallet size={22} />
-                </div>
+                <div className="stat-icon stat-icon--entries"><Wallet size={22} /></div>
                 <div>
                   <p className="stat-label">Total Cash</p>
-                  <p className="stat-value">
-                    {formatCurrency(summary.total_cash)}
-                  </p>
+                  <p className="stat-value">{formatCurrency(summary.total_cash)}</p>
                 </div>
               </div>
-
               <div className="card stat-card">
-                <div className="stat-icon stat-icon--team">
-                  <CreditCard size={22} />
-                </div>
+                <div className="stat-icon stat-icon--team"><CreditCard size={22} /></div>
                 <div>
                   <p className="stat-label">Total Online Amount</p>
-                  <p className="stat-value">
-                    {formatCurrency(summary.total_online)}
-                  </p>
+                  <p className="stat-value">{formatCurrency(summary.total_online)}</p>
                 </div>
               </div>
-
               <div className="card stat-card">
-                <div className="stat-icon stat-icon--active">
-                  <Landmark size={22} />
-                </div>
+                <div className="stat-icon stat-icon--active"><Landmark size={22} /></div>
                 <div>
                   <p className="stat-label">Paid to Other Labs</p>
-                  <p className="stat-value">
-                    {formatCurrency(summary.total_paid_to_other_labs)}
-                  </p>
+                  <p className="stat-value">{formatCurrency(summary.total_paid_to_other_labs)}</p>
                 </div>
               </div>
-
               <div className="card stat-card">
-                <div className="stat-icon stat-icon--expense">
-                  <TrendingDown size={22} />
-                </div>
+                <div className="stat-icon stat-icon--expense"><TrendingDown size={22} /></div>
                 <div>
                   <p className="stat-label">Expenses</p>
-                  <p className="stat-value">
-                    {formatCurrency(summary.total_expenses)}
-                  </p>
+                  <p className="stat-value">{formatCurrency(summary.total_expenses)}</p>
                 </div>
               </div>
-
               <div className="card stat-card">
-                <div className="stat-icon stat-icon--profit">
-                  <TrendingUp size={22} />
-                </div>
+                <div className="stat-icon stat-icon--profit"><TrendingUp size={22} /></div>
                 <div>
                   <p className="stat-label">Profit</p>
-                  <p className="stat-value">
-                    {formatCurrency(summary.profit)}
-                  </p>
+                  <p className="stat-value">{formatCurrency(summary.profit)}</p>
                 </div>
               </div>
             </div>
           )
         )}
 
-        {/* ============ CHARTS ============ */}
         {!summaryLoading && summary && (
-          <FinanceCharts
-            trend={summary.trend || []}
-            categoryBreakdown={summary.category_breakdown || []}
-          />
+          <FinanceCharts trend={summary.trend || []} categoryBreakdown={summary.category_breakdown || []} />
+        )}
+
+        {/* ============ SALARY & PAYROLLS ============ */}
+        {shouldShowSalary && (
+          <div style={{ marginBottom: 20 }}>
+            <div className="section-header">
+              <p className="section-title">Salary &amp; Payrolls</p>
+            </div>
+            {filteredSalaryEntries.length === 0 ? (
+              <div className="card empty-state">
+                {selectedCategory === "Salary & Payrolls"
+                  ? "No salary entries for the selected period."
+                  : "No salary entries recorded."}
+              </div>
+            ) : (
+              <div className="card table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Type</th>
+                      <th>Category</th>
+                      <th>Employee Name</th>
+                      <th className="text-right">Amount</th>
+                      <th>Payment Type</th>
+                      <th>Exec Dept</th>
+                      <th className="text-right">Salary</th>
+                      <th className="text-right">Allowance</th>
+                      <th>Remarks</th>
+                      <th className="text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSalaryEntries.map((e, i) => (
+                      <tr key={e.id ?? `sal-${i}`}>
+                        <td style={{ whiteSpace: "nowrap" }}>{e.entry_date || e.expense_date}</td>
+                        <td>{e.entry_type || "Expenses"}</td>
+                        <td>Salary &amp; Payrolls</td>
+                        <td>{e.employee_name || "—"}</td>
+                        <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(e.amount)}</td>
+                        <td>{e.payment_type || "—"}</td>
+                        <td>{e.exec_department || "Caredx"}</td>
+                        <td className="text-right">{e.salary_amount != null ? formatCurrency(e.salary_amount) : "—"}</td>
+                        <td className="text-right">{e.allowance_amount != null ? formatCurrency(e.allowance_amount) : "—"}</td>
+                        <td>{e.remarks || "—"}</td>
+                        <td className="text-right"><span style={{ opacity: 0.4 }}>—</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
 
         {/* ============ LAB DATA ENTRY ============ */}
@@ -755,54 +586,28 @@ export default function CaredxDashboard() {
             <div className="section-header">
               <p className="section-title">Lab Data Entry</p>
               <div className="filter-actions">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx,.xlsm"
-                  onChange={handleFileSelected}
-                  className="file-input-hidden"
-                  id="lab-import-input"
-                />
-                <button
-                  type="button"
-                  onClick={handleImportClick}
-                  disabled={importing}
-                  className="btn btn-secondary"
-                >
+                <input ref={fileInputRef} type="file" accept=".xlsx,.xlsm" onChange={handleFileSelected} className="file-input-hidden" id="lab-import-input" />
+                <button type="button" onClick={handleImportClick} disabled={importing} className="btn btn-secondary">
                   <Upload size={16} />{" "}
                   {importing ? "Importing..." : "Import Excel"}
                 </button>
-                {/* Note: Export CSV and Add Entry are now in the top filter bar */}
               </div>
             </div>
-
             {lastImportResult && (
               <div className="import-summary">
                 <strong>Last import:</strong>{" "}
                 {lastImportResult.imported || 0} row(s) imported.
-                {Number(lastImportResult.skipped || 0) > 0 && (
-                  <> {lastImportResult.skipped} row(s) skipped.</>
+                {Number(lastImportResult.skipped || 0) > 0 && (<> {lastImportResult.skipped} row(s) skipped.</>)}
+                {Array.isArray(lastImportResult.errors) && lastImportResult.errors.length > 0 && (
+                  <> First skipped row(s): {lastImportResult.errors.slice(0, 3).join(" ")}</>
                 )}
-                {Array.isArray(lastImportResult.errors) &&
-                  lastImportResult.errors.length > 0 && (
-                    <>
-                      {" "}
-                      First skipped row(s):{" "}
-                      {lastImportResult.errors.slice(0, 3).join(" ")}
-                    </>
-                  )}
               </div>
             )}
-
             {labLoading ? (
               <div className="card empty-state">Loading lab entries...</div>
             ) : (
               <>
-                <CaredxLabTable
-                  entries={paginatedLabEntries}
-                  onEdit={openEditLabEntry}
-                  onDelete={handleLabDelete}
-                />
+                <CaredxLabTable entries={paginatedLabEntries} onEdit={openEditLabEntry} onDelete={handleLabDelete} />
                 <Pagination
                   currentPage={labPage}
                   totalPages={labTotalPages}
@@ -820,15 +625,10 @@ export default function CaredxDashboard() {
           <>
             <div className="section-header">
               <p className="section-title">Expenses</p>
-              <button
-                type="button"
-                onClick={openNewExpense}
-                className="btn btn-primary"
-              >
+              <button type="button" onClick={openNewExpense} className="btn btn-primary">
                 <Plus size={16} /> Add Expense
               </button>
             </div>
-
             {expensesLoading ? (
               <div className="card empty-state">Loading expenses...</div>
             ) : (
@@ -851,20 +651,8 @@ export default function CaredxDashboard() {
         )}
       </main>
 
-      {/* ============ MODALS ============ */}
-      <CaredxLabEntryForm
-        open={labFormOpen}
-        onClose={() => setLabFormOpen(false)}
-        onSaved={refetchAll}
-        editingEntry={editingLabEntry}
-      />
-
-      <CaredxExpenseForm
-        open={expenseFormOpen}
-        onClose={() => setExpenseFormOpen(false)}
-        onSaved={refetchAll}
-        editingExpense={editingExpense}
-      />
+      <CaredxLabEntryForm open={labFormOpen} onClose={() => setLabFormOpen(false)} onSaved={refetchAll} editingEntry={editingLabEntry} />
+      <CaredxExpenseForm open={expenseFormOpen} onClose={() => setExpenseFormOpen(false)} onSaved={refetchAll} editingExpense={editingExpense} />
     </div>
   );
 }

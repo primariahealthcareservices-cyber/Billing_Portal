@@ -265,31 +265,54 @@ def _all_time_equity():
     }
 
 
-def _monthly_rollback():
-    """
-    Per-month rollback rows with SELF-CONSISTENT columns:
-
-      month                -> "YYYY-MM"
-      equity_added         -> equity added in that month
-      roll_over_balance    -> PREVIOUS month's current_balance (carried forward)
-      actual_balance       -> roll_over_balance + equity_added
-      approved             -> approved amount in that month
-      cumulative_approved  -> cumulative approved up to & including this month
-      current_balance      -> actual_balance - approved (this month)
-      available_cash       -> same as current_balance
-      discrepancy          -> current_balance - available_cash (0 by default)
-      capital_equity       -> backward-compat alias for equity_added
-      balance              -> backward-compat alias = current_balance
-
-    Rule enforced:
-      • Jan current balance  ==  Feb roll-over balance
-      • current_balance      ==  actual_balance − approval
-      • actual_balance       ==  roll_over_balance + equity_added
-    """
-    rows = CopperBookRequest.query.options(
+def _load_rollback_rows():
+    return CopperBookRequest.query.options(
         selectinload(CopperBookRequest.employee_entries)
     ).all()
 
+
+def _rollback_years_from_rows(rows):
+    """Years that have at least one rollback-relevant row, plus the current year."""
+    years = set()
+    for r in rows:
+        d = _effective_date(r)
+        if d:
+            years.add(d.year)
+    years.add(datetime.utcnow().date().year)
+    return sorted(years, reverse=True)
+
+
+def _monthly_rollback(year=None, rows=None):
+    """
+    Year-wise Monthly Rollback with previous-month equity carry-forward.
+
+    For each month M in the requested range:
+      • equity_added      = equity(M) + equity(M-1)
+      • roll_over_balance = equity(M-1)
+      • actual_balance    = equity_added + roll_over_balance
+      • approved          = approved amount for M only
+      • current_balance   = actual_balance − approved
+      • available_cash    = current_balance
+      • discrepancy       = current_balance − available_cash
+                            (0 — no payment ledger in current schema)
+
+    Range selection:
+      • year Y < current year  → Jan..Dec of Y
+      • year Y = current year  → Jan..current_month of Y
+      • year Y > current year  → empty list
+      • year is None / 'all'   → every month from earliest record
+                                 through current month (legacy behaviour)
+
+    January correctly pulls December of the PREVIOUS year for its
+    roll-over / equity-added calculation. Months from other years
+    are NOT included in the response.
+    """
+    if rows is None:
+        rows = _load_rollback_rows()
+
+    today = datetime.utcnow().date()
+
+    # Aggregate per (year, month): [equity, approved]
     per_month = {}
     for r in rows:
         d = _effective_date(r)
@@ -305,47 +328,58 @@ def _monthly_rollback():
         b[0] += ce
         b[1] += ap
 
-    if not per_month:
-        return []
+    # Resolve requested year
+    year_int = None
+    if year not in (None, "", "all", "All"):
+        try:
+            year_int = int(year)
+        except (TypeError, ValueError):
+            year_int = None
 
-    today = datetime.utcnow().date()
-    first = min(per_month)
-    last = max(max(per_month), (today.year, today.month))
+    if year_int is not None:
+        if year_int > today.year:
+            return []
+        start_y, start_m = year_int, 1
+        if year_int == today.year:
+            end_y, end_m = year_int, today.month
+        else:
+            end_y, end_m = year_int, 12
+    else:
+        if not per_month:
+            return []
+        start_y, start_m = min(per_month)
+        end_y, end_m = today.year, today.month
 
     result = []
-    prev_current_balance = 0.0   # previous month's current_balance  (carry-forward)
-    running_approved = 0.0       # cumulative approved (kept for API compat)
-
-    y, m = first
-    while (y, m) <= last:
+    y, m = start_y, start_m
+    while (y, m) <= (end_y, end_m):
         ce, ap = per_month.get((y, m), (0.0, 0.0))
 
-        # ── FIXED FORMULAS ──
-        roll_over_balance = round(prev_current_balance, 2)
-        actual_balance    = round(roll_over_balance + ce, 2)
-        current_balance   = round(actual_balance - ap, 2)
-        available_cash    = current_balance
-        discrepancy       = round(current_balance - available_cash, 2)
+        # Immediately preceding month (Dec of prev year when m == 1)
+        prev_y, prev_m = (y, m - 1) if m > 1 else (y - 1, 12)
+        prev_ce = per_month.get((prev_y, prev_m), (0.0, 0.0))[0]
 
-        running_approved += ap
+        equity_added    = round(ce + prev_ce, 2)
+        roll_over       = round(prev_ce, 2)
+        actual_balance  = round(equity_added + roll_over, 2)
+        current_balance = round(actual_balance - ap, 2)
+        available_cash  = current_balance
+        discrepancy     = 0.0  # no payment records → assume fully paid
 
         result.append({
-            "month":               f"{y:04d}-{m:02d}",
+            "month":              f"{y:04d}-{m:02d}",
             # backward-compat aliases
-            "capital_equity":      round(ce, 2),
-            "approved":            round(ap, 2),
-            "balance":             current_balance,
-            # new columns
-            "equity_added":        round(ce, 2),
-            "roll_over_balance":   roll_over_balance,
-            "actual_balance":      actual_balance,
-            "cumulative_approved": round(running_approved, 2),
-            "current_balance":     current_balance,
-            "available_cash":      available_cash,
-            "discrepancy":         discrepancy,
+            "capital_equity":     round(ce, 2),
+            "approved":           round(ap, 2),
+            "balance":            current_balance,
+            # new / updated fields
+            "equity_added":       equity_added,
+            "roll_over_balance":  roll_over,
+            "actual_balance":     actual_balance,
+            "current_balance":    current_balance,
+            "available_cash":     available_cash,
+            "discrepancy":        discrepancy,
         })
-
-        prev_current_balance = current_balance
 
         m += 1
         if m == 13:
@@ -783,6 +817,7 @@ def list_all():
     search = (request.args.get("search") or "").strip()
     department = (request.args.get("department") or "").strip()
     equity_department = (request.args.get("equity_department") or "").strip()
+    rollback_year = (request.args.get("rollback_year") or "").strip() or None
     page = max(1, request.args.get("page", 1, type=int))
     per_page = min(100, max(1, request.args.get("per_page", 25, type=int)))
 
@@ -906,6 +941,8 @@ def list_all():
     start = (page - 1) * per_page
     page_rows = sel[start:start + per_page]
 
+    rollback_rows = _load_rollback_rows()
+
     return jsonify({
         "requests": [_serialize_row(r, g, sp) for r, g, sp in page_rows],
         "summary": summary,
@@ -913,8 +950,9 @@ def list_all():
         "departments": departments,
         "view_total": round(sum((x[1][1] or 0) for x in sel), 2),
 
-        "monthly_rollback": _monthly_rollback(),
-        "all_time_equity": _all_time_equity(),
+        "monthly_rollback": _monthly_rollback(rollback_year, rows=rollback_rows),
+        "rollback_years":   _rollback_years_from_rows(rollback_rows),
+        "all_time_equity":  _all_time_equity(),
 
         "pagination": {
             "page": page, "per_page": per_page, "total": total,

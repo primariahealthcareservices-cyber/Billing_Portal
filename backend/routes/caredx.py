@@ -14,7 +14,7 @@ from models import (
     FinanceEntry,
     DEPARTMENT_CONFIG,
     SALARY_CATEGORY,
-    PAYMENT_TYPES,          # shared Cash / UPI / Card list
+    PAYMENT_TYPES,
 )
 
 from utils import role_required
@@ -38,6 +38,8 @@ CAPITAL_CATEGORIES = (
     "Reserve Fund Transfer",
     "Other Capital",
 )
+
+CORPUS_FUND_LABEL = "Corpus Fund"
 
 
 def _parse_date(value, default=None):
@@ -68,11 +70,10 @@ def _get_valid_user_id():
 def _apply_date_filters(query, date_column):
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
-    
+
     quarter = request.args.get("quarter")
     year = request.args.get("year")
 
-    # ✅ Handle Quarter and Year filters if exact dates aren't provided
     if quarter and quarter != "All" and year:
         try:
             year = int(year)
@@ -136,7 +137,6 @@ def _lab_entry_from_payload(data, existing=None):
             errors.append(f"{field} must be a number.")
             parsed_numbers[field] = 0.0
 
-    # ── payment_type normalisation (main + referral) ──────────────────
     def _normalize_ptype(raw_value, field_name):
         raw = (raw_value or "").strip()
         if not raw:
@@ -149,7 +149,6 @@ def _lab_entry_from_payload(data, existing=None):
         )
         return None
 
-    # Preserve existing value on partial update when the field is missing
     raw_main_pt = data.get("payment_type")
     if raw_main_pt is None and existing is not None:
         raw_main_pt = getattr(existing, "payment_type", None)
@@ -201,7 +200,6 @@ def lab_entries():
 
     query = _apply_date_filters(CaredxLabEntry.query, CaredxLabEntry.entry_date)
 
-    # ✅ NEW: payment_type filter (Cash / UPI / Card)
     payment_type_filter = (request.args.get("payment_type") or "").strip()
     if payment_type_filter and payment_type_filter in PAYMENT_TYPES:
         query = query.filter(CaredxLabEntry.payment_type == payment_type_filter)
@@ -213,8 +211,8 @@ def lab_entries():
             (CaredxLabEntry.patient_name.ilike(like))
             | (CaredxLabEntry.test_name.ilike(like))
             | (CaredxLabEntry.employee_name.ilike(like))
-            | (CaredxLabEntry.payment_type.ilike(like))          # ✅ NEW
-            | (CaredxLabEntry.referral_payment_type.ilike(like)) # ✅ NEW
+            | (CaredxLabEntry.payment_type.ilike(like))
+            | (CaredxLabEntry.referral_payment_type.ilike(like))
         )
 
     query = query.order_by(
@@ -346,6 +344,9 @@ def export_lab_entries():
     )
 
 
+# ----------------------------------------------------------------------
+# Expenses — NOTE: salary/corpus rows are now served by /salaries
+# ----------------------------------------------------------------------
 @caredx_bp.route("/expenses", methods=["GET", "POST"])
 @role_required("Caredx")
 def expenses():
@@ -410,6 +411,9 @@ def expenses():
 
         return jsonify({"message": "Expense added.", "expense": expense.to_dict()}), 201
 
+    # GET — return only real CaredxExpense rows. Salary & Corpus entries
+    # now live under /caredx/salaries so the frontend can render them in
+    # the dedicated "Salary & Payrolls" table with the correct columns.
     query = _apply_date_filters(CaredxExpense.query, CaredxExpense.expense_date)
 
     search = (request.args.get("search") or "").strip()
@@ -421,54 +425,13 @@ def expenses():
             | (CaredxExpense.employee_name.ilike(like))
             | (CaredxExpense.purpose.ilike(like))
         )
+
     caredx_expenses = query.order_by(
         CaredxExpense.expense_date.desc(),
         CaredxExpense.id.desc(),
     ).all()
 
-    salary_query = FinanceEntry.query.filter(
-        FinanceEntry.category.in_([SALARY_CATEGORY, "Corpus Fund"]),
-        FinanceEntry.department == "Caredx"
-    )
-
-    start_date = _parse_date(request.args.get("start_date"))
-    end_date = _parse_date(request.args.get("end_date"))
-    if start_date:
-        salary_query = salary_query.filter(FinanceEntry.entry_date >= start_date)
-    if end_date:
-        salary_query = salary_query.filter(FinanceEntry.entry_date <= end_date)
-
-    if search:
-        like = f"%{search}%"
-        salary_query = salary_query.filter(
-            (FinanceEntry.employee_name.ilike(like))
-            | (FinanceEntry.remarks.ilike(like))
-        )
-
-    salary_entries = salary_query.order_by(
-        FinanceEntry.entry_date.desc(),
-        FinanceEntry.id.desc(),
-    ).all()
-
-    salary_items = []
-    for s in salary_entries:
-        salary_items.append({
-            "id": -s.id,
-            "expense_date": s.entry_date.isoformat(),
-            "category": s.category,
-            "amount": float(s.amount),
-            "referral_amount": 0,
-            "remarks": f"{s.category} for {s.exec_department} - {s.remarks or ''}",
-            "employee_name": s.employee_name,
-            "purpose": s.remarks,
-            "vehicle_type": s.vehicle_type,
-            "_isSalary": True,
-        })
-
-    all_items = [e.to_dict() for e in caredx_expenses] + salary_items
-    all_items.sort(key=lambda x: x["expense_date"], reverse=True)
-
-    return jsonify({"expenses": all_items}), 200
+    return jsonify({"expenses": [e.to_dict() for e in caredx_expenses]}), 200
 
 
 @caredx_bp.route("/expenses/<int:expense_id>", methods=["PUT"])
@@ -547,6 +510,79 @@ def delete_expense(expense_id):
     return jsonify({"message": "Expense deleted."}), 200
 
 
+# ----------------------------------------------------------------------
+# NEW: /salaries — dedicated endpoint for Salary & Payrolls (+ Corpus Fund)
+# ----------------------------------------------------------------------
+@caredx_bp.route("/salaries", methods=["GET"])
+@role_required("Caredx")
+def list_salaries():
+    """
+    Returns all Salary & Payrolls and Corpus Fund rows that belong to Caredx.
+    These can come from:
+      • Direct Caredx FinanceEntry rows (category in [Salary & Payrolls, Corpus Fund])
+      • Corporate-pushed rows (department="Corporate", exec_department="Caredx",
+        category="Salary & Payrolls")
+    """
+    query = FinanceEntry.query.filter(
+        or_(
+            (FinanceEntry.department == "Caredx") &
+            FinanceEntry.category.in_([SALARY_CATEGORY, CORPUS_FUND_LABEL]),
+            (FinanceEntry.department == "Corporate") &
+            (FinanceEntry.exec_department == "Caredx") &
+            (FinanceEntry.category == SALARY_CATEGORY),
+        )
+    )
+
+    query = _apply_date_filters(query, FinanceEntry.entry_date)
+
+    search = (request.args.get("search") or "").strip()
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            or_(
+                FinanceEntry.employee_name.ilike(like),
+                FinanceEntry.generated_by.ilike(like),
+                FinanceEntry.remarks.ilike(like),
+            )
+        )
+
+    rows = query.order_by(
+        FinanceEntry.entry_date.desc(),
+        FinanceEntry.id.desc(),
+    ).all()
+
+    salaries = []
+    for s in rows:
+        is_corpus = (s.category == CORPUS_FUND_LABEL)
+        d = s.to_dict()
+
+        # Expose the extra columns the frontend needs
+        d["entry_date"] = s.entry_date.isoformat() if s.entry_date else None
+        d["entry_type"] = s.entry_type
+        d["category"] = s.category
+        d["employee_name"] = s.employee_name
+        d["generated_by"] = s.generated_by
+        d["amount"] = float(s.amount or 0)
+        d["salary_amount"] = float(s.salary_amount or 0)
+        d["allowance_amount"] = float(s.allowance_amount or 0)
+        d["exec_department"] = s.exec_department or "Caredx"
+        d["payment_type"] = s.payment_type
+        d["remarks"] = s.remarks
+        d["purpose"] = s.remarks
+        d["vehicle_type"] = s.vehicle_type
+        d["department"] = s.department
+
+        d["_isSalary"] = not is_corpus
+        d["_isCorpus"] = is_corpus
+
+        salaries.append(d)
+
+    return jsonify({"salaries": salaries}), 200
+
+
+# ----------------------------------------------------------------------
+# Capital
+# ----------------------------------------------------------------------
 @caredx_bp.route("/capital/options", methods=["GET"])
 @role_required("Caredx")
 def capital_options():
@@ -777,6 +813,9 @@ def capital_summary():
     }), 200
 
 
+# ----------------------------------------------------------------------
+# Summary
+# ----------------------------------------------------------------------
 @caredx_bp.route("/lab-entries/summary", methods=["GET"])
 @role_required("Caredx")
 def lab_entries_summary():
@@ -788,9 +827,15 @@ def lab_entries_summary():
     exp_query = _apply_date_filters(CaredxExpense.query, CaredxExpense.expense_date)
     caredx_expenses = exp_query.all()
 
+    # Include BOTH direct Caredx salaries and Corporate-pushed Caredx salaries.
     salary_query = FinanceEntry.query.filter(
-        FinanceEntry.category.in_([SALARY_CATEGORY, "Corpus Fund"]),
-        FinanceEntry.department == "Caredx"
+        or_(
+            (FinanceEntry.department == "Caredx") &
+            FinanceEntry.category.in_([SALARY_CATEGORY, CORPUS_FUND_LABEL]),
+            (FinanceEntry.department == "Corporate") &
+            (FinanceEntry.exec_department == "Caredx") &
+            (FinanceEntry.category == SALARY_CATEGORY),
+        )
     )
     start_date = _parse_date(request.args.get("start_date"))
     end_date = _parse_date(request.args.get("end_date"))
@@ -886,7 +931,6 @@ def lab_entries_summary():
     capital_entries = capital_query.all()
     total_capital = sum(float(e.amount or 0) for e in capital_entries)
 
-    # ✅ NEW: payment-type breakdown of lab-entry income
     payment_type_totals = {}
     for entry in lab_entries:
         pt = getattr(entry, "payment_type", None) or "Unspecified"
@@ -914,5 +958,5 @@ def lab_entries_summary():
         "expense_count": len(caredx_expenses) + len(salary_entries),
         "trend": trend,
         "category_breakdown": list(by_category.values()),
-        "payment_type_breakdown": payment_type_breakdown,   # ✅ NEW
+        "payment_type_breakdown": payment_type_breakdown,
     }), 200
