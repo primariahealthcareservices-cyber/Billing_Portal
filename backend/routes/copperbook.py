@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 from models import db, User, Notification
 from models_copperbook import (
     CopperBookRequest, CopperBookAssignee, CopperBookAttachment, CopperBookEmployeeEntry,
+    CopperBookMonthlyCash,
 )
 from utils import send_email
 
@@ -46,27 +47,24 @@ ENTRY_VIEWS = ("pending", "approved", "rejected")
 
 ROLLBACK_MONTHS = 24
 
-# ─── Search helpers ────────────────────────────────────────────────────────
+FIXED_OPENING_MONTH   = (2026, 1)
+FIXED_OPENING_BALANCE = 1_000_000.0
+
 _SEARCH_NORM = _re.compile(r'[^a-z0-9]+')
 
-
 def _normalize_search(s: str) -> str:
-    """'CB-1050' / 'cb 1050' / 'cb1050' → 'cb1050'."""
     return _SEARCH_NORM.sub('', (s or '').lower())
-
 
 def _service_token_ok():
     expected = os.getenv("FINANCEHUB_SERVICE_TOKEN") or ""
     got = request.headers.get("X-Service-Token") or ""
     return bool(expected) and expected == got
 
-
 def _fmt_money(v):
     try:
         return f"₹ {float(v):,.2f}"
     except Exception:
         return "—"
-
 
 def _parse_date(raw):
     if raw is None:
@@ -186,27 +184,6 @@ def _amounts_by_status(r):
     return out
 
 
-def _paid_for_request(r):
-    """
-    Total amount actually paid for this request.
-
-    No dedicated payment-tracking column exists in the schema yet, so this
-    defaults to 0 — meaning every approved amount is treated as "approved
-    but not yet paid", and Discrepancy == Approval.
-
-    If a `paid_amount` field is later added to `CopperBookRequest` or
-    `CopperBookEmployeeEntry`, it will be picked up automatically here and
-    Discrepancy will correctly resolve to `Approval − Paid`.
-    """
-    if r.is_payroll and r.employee_entries:
-        return float(sum(
-            float(getattr(e, "paid_amount", 0) or 0)
-            for e in r.employee_entries
-            if e.status == "approved"
-        ))
-    return float(getattr(r, "paid_amount", 0) or 0)
-
-
 def _capital_equity_summary(start, end, department=None):
     dept_key = _dept_key(department)
     rows = CopperBookRequest.query.options(
@@ -287,35 +264,6 @@ def _all_time_equity():
 
 
 def _monthly_rollback():
-    """
-    Per-month rollback rows with SELF-CONSISTENT columns.
-
-    Iteration starts at **January of the earliest data year**, so that
-    selecting any year in the UI always shows full-year coverage
-    (Jan → Dec for past years, Jan → current month for the current year).
-
-    Column formulas (per requirement):
-
-      equity_added        -> capital equity added in that month
-      roll_over_balance   -> previous month's closing balance
-                             (for January, this is December of the previous year)
-      actual_balance      -> roll_over_balance + equity_added
-      approved            -> approved amount for that month only
-      current_balance     -> actual_balance − approved
-      available_cash      -> current_balance
-      discrepancy         -> approved − actual_paid
-                             (currently paid = 0, so discrepancy = approved)
-
-      cumulative_approved -> running total of approved up to & including this month
-
-    Rule enforcement:
-      • Jan Y rollover    ==  Dec (Y−1) current_balance
-      • Feb Y rollover    ==  Jan Y current_balance
-      • actual_balance    ==  roll_over_balance + equity_added
-      • current_balance   ==  actual_balance − approved
-      • available_cash    ==  current_balance
-      • discrepancy       ==  approved − paid
-    """
     rows = CopperBookRequest.query.options(
         selectinload(CopperBookRequest.employee_entries)
     ).all()
@@ -328,60 +276,54 @@ def _monthly_rollback():
         if _is_capital_equity(r):
             if r.status == "rejected":
                 continue
-            ce = float(_request_amount(r) or 0)
-            ap = 0.0
-            paid = 0.0
+            ce, ap = float(_request_amount(r) or 0), 0.0
         else:
-            ce = 0.0
-            ap = _amounts_by_status(r)["approved"]
-            paid = _paid_for_request(r)
-
-        bucket = per_month.setdefault((d.year, d.month), {
-            "equity": 0.0, "approval": 0.0, "paid": 0.0,
-        })
-        bucket["equity"] += ce
-        bucket["approval"] += ap
-        bucket["paid"] += paid
+            ce, ap = 0.0, _amounts_by_status(r)["approved"]
+        b = per_month.setdefault((d.year, d.month), [0.0, 0.0])
+        b[0] += ce
+        b[1] += ap
 
     if not per_month:
         return []
 
     today = datetime.utcnow().date()
 
-    # Start from January of the earliest data year, so that the frontend
-    # always has full-month coverage for every selectable year.
     earliest_year = min(per_month)[0]
     first = (earliest_year, 1)
-    last = max(max(per_month), (today.year, today.month))
+    last  = max(max(per_month), (today.year, today.month))
+
+    cash_overrides = {c.month: float(c.available_cash) for c in CopperBookMonthlyCash.query.all()}
 
     result = []
-    prev_current_balance = 0.0   # previous month's closing balance (carry-forward)
-    running_approved = 0.0       # cumulative approved (kept for API compat)
+    prev_current_balance = 0.0   
+    running_approved     = 0.0
 
     y, m = first
     while (y, m) <= last:
-        bucket = per_month.get((y, m), {"equity": 0.0, "approval": 0.0, "paid": 0.0})
-        ce = bucket["equity"]
-        ap = bucket["approval"]
-        paid = bucket["paid"]
+        if (y, m) == FIXED_OPENING_MONTH:
+            prev_current_balance = FIXED_OPENING_BALANCE
 
-        # ── FIXED FORMULAS ──
+        ce, ap = per_month.get((y, m), (0.0, 0.0))
+
         roll_over_balance = round(prev_current_balance, 2)
         actual_balance    = round(roll_over_balance + ce, 2)
         current_balance   = round(actual_balance - ap, 2)
-        available_cash    = current_balance
-        # Discrepancy = Approval − Paid  (i.e. "approved but not yet paid")
-        discrepancy       = round(ap - paid, 2)
+
+        month_str = f"{y:04d}-{m:02d}"
+        if month_str in cash_overrides:
+            available_cash = cash_overrides[month_str]
+            discrepancy    = round(current_balance - available_cash, 2)
+        else:
+            available_cash = current_balance
+            discrepancy    = 0.0
 
         running_approved += ap
 
         result.append({
-            "month":               f"{y:04d}-{m:02d}",
-            # backward-compat aliases
+            "month":               month_str,
             "capital_equity":      round(ce, 2),
             "approved":            round(ap, 2),
             "balance":             current_balance,
-            # new columns
             "equity_added":        round(ce, 2),
             "roll_over_balance":   roll_over_balance,
             "actual_balance":      actual_balance,
@@ -663,6 +605,32 @@ def _sync_delete_to_staffportal(req: CopperBookRequest, deleted_by: str, remarks
         return False, str(e)
 
 
+# ✅ NEW ENDPOINT: Receive manual available_cash sync from Staff Portal
+@cb_bp.route("/intake-cash", methods=["POST", "OPTIONS"])
+def intake_cash():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    if not _service_token_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    month = data.get("month")
+    amount = data.get("available_cash")
+
+    if not month or amount is None:
+        return jsonify({"error": "month and available_cash are required"}), 400
+
+    cash = CopperBookMonthlyCash.query.filter_by(month=month).first()
+    if not cash:
+        cash = CopperBookMonthlyCash(month=month, available_cash=amount)
+        db.session.add(cash)
+    else:
+        cash.available_cash = amount
+
+    db.session.commit()
+    return jsonify({"message": "Cash updated successfully."}), 200
+
+
 @cb_bp.route("/intake-ping", methods=["GET", "OPTIONS"])
 def intake_ping():
     if request.method == "OPTIONS":
@@ -841,7 +809,7 @@ def list_all():
     if scope == "ceo":
         q = q.filter(CopperBookRequest.assigned_to_role == "ceo")
     if payroll_only:
-        q = q.filter(CopperBookRequest.is_payroll == True)  # noqa: E712
+        q = q.filter(CopperBookRequest.is_payroll == True) 
     if department:
         _dk = _dept_key(department)
         _col = func.lower(func.trim(CopperBookRequest.department))
@@ -879,7 +847,6 @@ def list_all():
         except ValueError:
             pass
 
-    # Fuzzy search across request_number + other fields.
     if search:
         like = f"%{search}%"
         norm = _normalize_search(search)

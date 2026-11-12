@@ -393,19 +393,10 @@ export default function CopperBookPage({ onBack }) {
   if (showAllEmployees) {
     return <AllEmployeesPage onBack={() => setShowAllEmployees(false)} />;
   }
-
-  // ───────── Year list for Monthly Rollback ─────────
-  // Always include the current calendar year so it's selectable even on a
-  // fresh dataset (the backend fills Jan→current-month with zeros).
-  const currentYearStr = String(new Date().getFullYear());
-  const rollYears = [...new Set([
-    currentYearStr,
-    ...monthlyRollback.map((r) => String(r.month).slice(0, 4)),
-  ])]
+  const rollYears = [...new Set(monthlyRollback.map((r) => String(r.month).slice(0, 4)))]
     .sort()
     .reverse();
 
-  // Filter rows by selected year, then by activity, then optionally reverse.
   const rollRows = monthlyRollback
     .filter((r) => rollYear === "all" || String(r.month).startsWith(rollYear))
     .filter((r) =>
@@ -416,19 +407,16 @@ export default function CopperBookPage({ onBack }) {
     );
   if (rollNewestFirst) rollRows.reverse();
 
-  // ───────── PANEL 1 DYNAMIC FILTERS ─────────
   const activeDept = panelDept || department || "All Departments";
   const activePeriodText = panelFromDate || panelToDate
     ? `${panelFromDate ? fmtDateOnly(panelFromDate) : "Beginning"} → ${panelToDate ? fmtDateOnly(panelToDate) : "Today"}`
     : "All Time";
 
-  // Panel 1 — Filtered (Capital Equity & Balance removed)
   const equityBoxes = [
     { label: "Approved", value: equity.approved, color: "#16a34a", sub: activeDept },
     { label: "Rejected", value: equity.rejected, color: "#e11d48", sub: activeDept },
   ];
 
-  // Panel 3 — All-time (no filters)
   const allTimeBoxes = [
     { label: "Capital Equity", value: allTimeEquity.capital_equity, color: "#4338ca" },
     { label: "Approved", value: allTimeEquity.approved, color: "#16a34a" },
@@ -445,7 +433,6 @@ export default function CopperBookPage({ onBack }) {
     ? `${fromDate ? fmtDateOnly(fromDate) : "Beginning"} → ${toDate ? fmtDateOnly(toDate) : "Today"}`
     : "All time";
 
-  // ───────── 3-PANEL FOOTER (Row 1: Monthly Rollback, Row 2: Filtered + All-Time) ─────────
   const summaryPanels = (
     <div
       style={{
@@ -474,17 +461,15 @@ export default function CopperBookPage({ onBack }) {
         )}
       </div>
 
-      {/* ── Row 1: Monthly Rollback (full width) ── */}
       <div style={{ marginBottom: 14 }}>
         <div style={{ background: "#ffffff", borderRadius: 8, padding: 14, border: "1px solid #d1fae5" }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: "#047857", letterSpacing: 0.5, marginBottom: 4, textTransform: "uppercase" }}>
             ② Monthly Rollback
           </div>
           <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10 }}>
-            Balance at end of each month · January uses December of the previous year as opening rollover
+            Balance at end of each month
           </div>
 
-          {/* Panel filters */}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 10, fontSize: 12 }}>
             <select
               className="form-control"
@@ -521,32 +506,12 @@ export default function CopperBookPage({ onBack }) {
                   <tr style={{ position: "sticky", top: 0, background: "#f8fafc", zIndex: 1 }}>
                     <th style={{ textAlign: "left", padding: "6px 10px", color: "#64748b", fontWeight: 600, whiteSpace: "nowrap" }}>Month</th>
                     <th style={{ textAlign: "right", padding: "6px 10px", color: "#4338ca", fontWeight: 600, whiteSpace: "nowrap" }}>Equity added</th>
-                    <th
-                      style={{ textAlign: "right", padding: "6px 10px", color: "#0ea5e9", fontWeight: 600, whiteSpace: "nowrap" }}
-                      title="Previous month's closing balance (for January, December of the previous year)"
-                    >
-                      Roll Over Balance
-                    </th>
-                    <th
-                      style={{ textAlign: "right", padding: "6px 10px", color: "#0284c7", fontWeight: 600, whiteSpace: "nowrap" }}
-                      title="Equity Added + Roll Over Balance"
-                    >
-                      Actual Balance
-                    </th>
+                    <th style={{ textAlign: "right", padding: "6px 10px", color: "#0ea5e9", fontWeight: 600, whiteSpace: "nowrap" }} title="Previous month's actual balance">Roll Over Balance</th>
+                    <th style={{ textAlign: "right", padding: "6px 10px", color: "#0284c7", fontWeight: 600, whiteSpace: "nowrap" }} title="Capital (cumulative) + Roll Over">Actual Balance</th>
                     <th style={{ textAlign: "right", padding: "6px 10px", color: "#16a34a", fontWeight: 600, whiteSpace: "nowrap" }}>Approval</th>
-                    <th
-                      style={{ textAlign: "right", padding: "6px 10px", color: "#b45309", fontWeight: 600, whiteSpace: "nowrap" }}
-                      title="Actual Balance − Approval"
-                    >
-                      Current Balance
-                    </th>
+                    <th style={{ textAlign: "right", padding: "6px 10px", color: "#b45309", fontWeight: 600, whiteSpace: "nowrap" }} title="Actual Balance − Approval">Current Balance</th>
                     <th style={{ textAlign: "right", padding: "6px 10px", color: "#7c3aed", fontWeight: 600, whiteSpace: "nowrap" }}>Available Cash</th>
-                    <th
-                      style={{ textAlign: "right", padding: "6px 10px", color: "#e11d48", fontWeight: 600, whiteSpace: "nowrap" }}
-                      title="Approval − Actual Paid (approved but not yet paid)"
-                    >
-                      Discrepancy
-                    </th>
+                    <th style={{ textAlign: "right", padding: "6px 10px", color: "#e11d48", fontWeight: 600, whiteSpace: "nowrap" }} title="Current Balance − Available Cash (approved but not paid)">Discrepancy</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -557,7 +522,8 @@ export default function CopperBookPage({ onBack }) {
                     const approval       = Number(row.approved ?? 0);
                     const currentBalance = Number(row.current_balance ?? row.balance ?? 0);
                     const availableCash  = Number(row.available_cash ?? currentBalance);
-                    const discrepancy    = Number(row.discrepancy ?? 0);
+                    const discrepancy    = Number(row.discrepancy ?? (currentBalance - availableCash));
+                    const isFixedOpening = row.month === "2026-01";
 
                     return (
                       <tr key={row.month} style={{ borderTop: "1px solid #eef2f7" }}>
@@ -567,7 +533,10 @@ export default function CopperBookPage({ onBack }) {
                         <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", color: equityAdded ? "#0f172a" : "#cbd5e1" }}>
                           {fmtMoney(equityAdded)}
                         </td>
-                        <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", color: "#475569" }}>
+                        <td
+                          style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", color: "#475569" }}
+                          title={isFixedOpening ? "Fixed opening balance carried from Dec 2025 (₹10,00,000.00)" : undefined}
+                        >
                           {fmtMoney(rollOver)}
                         </td>
                         <td style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", fontWeight: 600, color: actualBalance < 0 ? "#e11d48" : "#0f172a" }}>
@@ -595,7 +564,6 @@ export default function CopperBookPage({ onBack }) {
         </div>
       </div>
 
-      {/* ── Row 2: Filtered View + All-Time (side by side) ── */}
       <div
         style={{
           display: "grid",
@@ -603,8 +571,8 @@ export default function CopperBookPage({ onBack }) {
           gap: 14,
         }}
       >
-        {/* Panel 1 — Filtered View */}
         <div style={{ background: "#ffffff", borderRadius: 8, padding: 14, border: "1px solid #d1fae5" }}>
+
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "#047857", letterSpacing: 0.5, textTransform: "uppercase" }}>
               ① Filtered View
@@ -668,7 +636,6 @@ export default function CopperBookPage({ onBack }) {
           ))}
         </div>
 
-        {/* Panel 3 — All-Time (No Filters) */}
         <div style={{ background: "#ffffff", borderRadius: 8, padding: 14, border: "1px solid #d1fae5" }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: "#047857", letterSpacing: 0.5, marginBottom: 4, textTransform: "uppercase" }}>
             ③ All‑Time (No Filters)

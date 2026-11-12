@@ -17,14 +17,11 @@ class CopperBookRequest(db.Model):
     purpose = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=False)
     remarks = db.Column(db.Text, nullable=True)
-    # pending | forwarded_to_ceo | approved | rejected | partially_approved
-    # partially_approved = payroll request whose entries are a mix of approved + rejected
     status = db.Column(db.String(30), default="pending")
     assigned_to_role = db.Column(db.String(20), default="finance")
     is_payroll = db.Column(db.Boolean, default=False)
     amount = db.Column(db.Numeric(14, 2), nullable=True)
 
-    # ✅ NEW — reference date sent from the Staff Portal (YYYY-MM-DD)
     reference_date = db.Column(db.Date, nullable=True)
 
     finance_action_by = db.Column(db.String(150), nullable=True)
@@ -87,14 +84,22 @@ class CopperBookEmployeeEntry(db.Model):
     monthly_salary = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     td_da = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     total_amount = db.Column(db.Numeric(14, 2), nullable=False, default=0)
-    # Each entry is decided on its own: pending | approved | rejected
     status = db.Column(db.String(20), nullable=False, default="pending", index=True)
     remarks = db.Column(db.Text, nullable=True)
     action_by = db.Column(db.String(150), nullable=True)
     action_at = db.Column(db.DateTime, nullable=True)
 
-    # Per-employee attachment (file content + metadata)
-    attachment_data = db.Column(db.LargeBinary(length=(2**32) - 1), nullable=True)  # ✅ NEW — the backend reads/writes this
+    attachment_data = db.Column(db.LargeBinary(length=(2**32) - 1), nullable=True)
     attachment_filename = db.Column(db.String(255), nullable=True)
     attachment_original_name = db.Column(db.String(255), nullable=True)
     attachment_mimetype = db.Column(db.String(100), nullable=True)
+
+
+# ✅ NEW MODEL for Monthly Available Cash
+class CopperBookMonthlyCash(db.Model):
+    __tablename__ = "copper_book_monthly_cash"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    month = db.Column(db.String(7), unique=True, nullable=False, index=True) # Format: 'YYYY-MM'
+    available_cash = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
