@@ -1,7 +1,7 @@
 // frontend/src/components/CopperBookPage.jsx
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import toast from "react-hot-toast";
-import { ArrowLeft, Paperclip, Loader2, Search, RotateCcw, Trash2, Edit } from "lucide-react";
+import { ArrowLeft, Paperclip, Loader2, Search, RotateCcw, Trash2, Edit, ArrowUp, ArrowDown, X } from "lucide-react";
 import api from "../api/axios.js";
 import AllEmployeesPage from "./AllEmployeesPage.jsx";
 
@@ -43,6 +43,7 @@ const EMPTY_EQUITY = {
   rejected: 0,
   balance: 0,
 };
+const EMPTY_PERSONAL_TOTALS = { total_given: 0, total_paid: 0, balance: 0, employees: 0 };
 
 const PAGE_SIZE = 25;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -143,6 +144,464 @@ function StatusBadge({ status }) {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/*  Personal Amount page                                               */
+/*  Employee | Department | Total Given (₹) | Total Paid (₹) |        */
+/*  Balance (₹) | Last Date                                            */
+/* ------------------------------------------------------------------ */
+
+// Merge any number of department lists into one sorted, de-duplicated list.
+// The list only ever grows, so picking a department never hides the others.
+const mergeDepartments = (...lists) => {
+  const set = new Set();
+  lists.forEach((list) =>
+    (list || []).forEach((d) => {
+      const name = typeof d === "string" ? d : d?.name;
+      if (name && String(name).trim()) set.add(String(name).trim());
+    })
+  );
+  return [...set].sort((a, b) => a.localeCompare(b));
+};
+
+const initialsOf = (name) =>
+  String(name || "?")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() || "")
+    .join("") || "?";
+
+const AVATAR_COLORS = ["#2f5dd4", "#7c3aed", "#0d9488", "#b45309", "#be185d", "#4338ca", "#0369a1"];
+const avatarColor = (name) => {
+  let h = 0;
+  for (const ch of String(name || "")) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+};
+
+// positive balance = employee still owes (amber), negative = overpaid (red), zero = settled (green)
+const balColor = (v) => (Number(v) > 0 ? "#b45309" : Number(v) < 0 ? "#e11d48" : "#16a34a");
+const balText = (v) => (Number(v) > 0 ? "Due" : Number(v) < 0 ? "Overpaid" : "Settled");
+
+const PERSONAL_COLUMNS = [
+  { key: "employee_name", label: "Employee", align: "left" },
+  { key: "department", label: "Department", align: "left" },
+  { key: "total_given", label: "Total Given (₹)", align: "right" },
+  { key: "total_paid", label: "Total Paid (₹)", align: "right" },
+  { key: "balance", label: "Balance (₹)", align: "right" },
+  { key: "last_date", label: "Last Date", align: "left" },
+];
+
+function StatCard({ label, value, color, hint }) {
+  return (
+    <div
+      style={{
+        flex: "1 1 200px", background: "#fff", border: "1px solid #e5e7eb",
+        borderLeft: `4px solid ${color}`, borderRadius: 10, padding: "14px 16px",
+      }}
+    >
+      <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color, marginTop: 4, whiteSpace: "nowrap" }}>{value}</div>
+      {hint && <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 2 }}>{hint}</div>}
+    </div>
+  );
+}
+
+function PersonalAmountPage({ onBack, allDepartments = [] }) {
+  const [employees, setEmployees] = useState([]);
+  const [totals, setTotals] = useState(EMPTY_PERSONAL_TOTALS);
+  const [departments, setDepartments] = useState(() => mergeDepartments(allDepartments));
+  const [loading, setLoading] = useState(true);
+
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [dept, setDept] = useState("");
+  const [period, setPeriod] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [sort, setSort] = useState({ key: "employee_name", dir: "asc" });
+
+  const [openEmp, setOpenEmp] = useState(null);
+  const [txns, setTxns] = useState([]);
+  const [txnLoading, setTxnLoading] = useState(false);
+
+  const reqSeq = useRef(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // Departments passed from the parent page (Business Units) → always available in the dropdown.
+  useEffect(() => {
+    setDepartments((prev) => mergeDepartments(prev, allDepartments));
+  }, [allDepartments]);
+
+  // One unfiltered request so the dropdown lists EVERY department,
+  // not only the one that is currently selected / has data in the filtered view.
+  useEffect(() => {
+    let cancelled = false;
+    api.get("/copperbook/personal-summary")
+      .then((res) => {
+        if (cancelled) return;
+        const d = res.data || {};
+        setDepartments((prev) =>
+          mergeDepartments(prev, d.departments, (d.employees || []).map((e) => e.department))
+        );
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const load = useCallback(async () => {
+    const mySeq = ++reqSeq.current;
+    setLoading(true);
+    try {
+      const params = {};
+      if (search) params.search = search;
+      if (dept) params.department = dept;
+      let s = ISO_DATE.test(fromDate) ? fromDate : "";
+      let e = ISO_DATE.test(toDate) ? toDate : "";
+      if (s && e && s > e) [s, e] = [e, s];
+      if (s) params.start_date = s;
+      if (e) params.end_date = e;
+
+      const res = await api.get("/copperbook/personal-summary", { params });
+      if (mySeq !== reqSeq.current) return;
+      const list = res.data.employees || [];
+      setEmployees(list);
+      setTotals(res.data.totals || EMPTY_PERSONAL_TOTALS);
+      // never shrink the department list when a filter is applied
+      setDepartments((prev) =>
+        mergeDepartments(prev, res.data.departments, list.map((x) => x.department))
+      );
+    } catch {
+      if (mySeq === reqSeq.current) toast.error("Failed to load Personal Amount.");
+    } finally {
+      if (mySeq === reqSeq.current) setLoading(false);
+    }
+  }, [search, dept, fromDate, toDate]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handlePeriodChange = (p) => {
+    setPeriod(p);
+    if (p === "custom") return;
+    const { start, end } = getPeriodRange(p);
+    setFromDate(start);
+    setToDate(end);
+  };
+
+  const reset = () => {
+    setSearchInput(""); setSearch(""); setDept("");
+    setPeriod("all"); setFromDate(""); setToDate("");
+  };
+
+  const toggleSort = (key) =>
+    setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
+
+  const sortedEmployees = useMemo(() => {
+    const numeric = ["total_given", "total_paid", "balance"];
+    const arr = [...employees];
+    arr.sort((a, b) => {
+      let av = a[sort.key];
+      let bv = b[sort.key];
+      if (numeric.includes(sort.key)) {
+        av = Number(av) || 0;
+        bv = Number(bv) || 0;
+      } else {
+        av = String(av ?? "").toLowerCase();
+        bv = String(bv ?? "").toLowerCase();
+      }
+      if (av < bv) return sort.dir === "asc" ? -1 : 1;
+      if (av > bv) return sort.dir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return arr;
+  }, [employees, sort]);
+
+  const openHistory = async (emp) => {
+    setOpenEmp(emp);
+    setTxns([]);
+    setTxnLoading(true);
+    try {
+      const params = emp.employee_id
+        ? { employee_id: emp.employee_id }
+        : { employee_name: emp.employee_name };
+      const res = await api.get("/copperbook/personal-transactions", { params });
+      setTxns(res.data.transactions || []);
+    } catch {
+      toast.error("Failed to load transactions.");
+    } finally {
+      setTxnLoading(false);
+    }
+  };
+
+  const hasFilters = search || dept || fromDate || toDate;
+  const periodLabel = fromDate || toDate
+    ? `${fromDate ? fmtDateOnly(fromDate) : "Beginning"} → ${toDate ? fmtDateOnly(toDate) : "Today"}`
+    : "All time";
+
+  const inputLabel = { fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 4, display: "block" };
+  const inputBold = { fontWeight: 700, color: "#0f172a" };
+
+  return (
+    <div className="page">
+      <main className="page-main" style={{ paddingTop: 16 }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+          {onBack && (
+            <button className="btn btn-primary" onClick={onBack} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}>
+              <ArrowLeft size={16} /> Back
+            </button>
+          )}
+          <div>
+            <h2 style={{ margin: 0 }}>💰 Personal Amount</h2>
+            <div style={{ color: "#6b7280", fontSize: 13.5, marginTop: 2 }}>
+              Amount given to and paid back by each employee
+            </div>
+          </div>
+        </div>
+
+        {/* Summary cards */}
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16, opacity: loading ? 0.6 : 1, transition: "opacity 0.15s ease" }}>
+          <StatCard label="Total Given" value={fmtMoney(totals.total_given)} color="#b45309" hint={`${periodLabel}`} />
+          <StatCard label="Total Paid" value={fmtMoney(totals.total_paid)} color="#16a34a" hint={dept || "All departments"} />
+          <StatCard label="Balance" value={fmtMoney(totals.balance)} color={balColor(totals.balance)} hint="Given − Paid" />
+          <StatCard label="Employees" value={String(totals.employees ?? employees.length)} color="#2f5dd4" hint="With transactions" />
+        </div>
+
+        {/* Filters */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div style={{ minWidth: 150 }}>
+              <label style={inputLabel}>Period</label>
+              <select className="form-control" style={inputBold} value={period} onChange={(e) => handlePeriodChange(e.target.value)}>
+                <option value="all">All Time</option>
+                <option value="week">This Week</option>
+                <option value="month">This Month</option>
+                <option value="quarter">This Quarter</option>
+                <option value="year">This Year</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+            <div style={{ minWidth: 200 }}>
+              <label style={inputLabel}>Department ({departments.length})</label>
+              <select className="form-control" style={inputBold} value={dept} onChange={(e) => setDept(e.target.value)}>
+                <option value="">All Departments</option>
+                {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={inputLabel}>From</label>
+              <input type="date" className="form-control" style={inputBold} value={fromDate} onChange={(e) => { setFromDate(e.target.value); setPeriod("custom"); }} />
+            </div>
+            <div>
+              <label style={inputLabel}>To</label>
+              <input type="date" className="form-control" style={inputBold} value={toDate} onChange={(e) => { setToDate(e.target.value); setPeriod("custom"); }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <label style={inputLabel}>Search</label>
+              <div style={{ position: "relative" }}>
+                <Search size={15} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", opacity: 0.5 }} />
+                <input className="form-control" style={{ paddingLeft: 32, fontWeight: 700 }} placeholder="Employee name…" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
+              </div>
+            </div>
+            <button type="button" className="btn btn-secondary" onClick={reset} disabled={!hasFilters && period === "all"} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <RotateCcw size={15} /> Reset
+            </button>
+          </div>
+        </div>
+
+        {/* Table */}
+        {loading && employees.length === 0 ? (
+          <div className="card empty-state">Loading Personal Amount…</div>
+        ) : employees.length === 0 ? (
+          <div className="card empty-state">
+            {hasFilters ? "No employees match these filters. Try resetting them." : "No personal amount transactions yet."}
+          </div>
+        ) : (
+          <div className="card table-wrap" style={{ opacity: loading ? 0.6 : 1, transition: "opacity 0.15s ease", padding: 0, overflow: "hidden" }}>
+            <div style={{ maxHeight: "62vh", overflow: "auto" }}>
+              <table className="data-table" style={{ minWidth: 900, width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
+                <thead>
+                  <tr>
+                    {PERSONAL_COLUMNS.map((c) => {
+                      const active = sort.key === c.key;
+                      return (
+                        <th
+                          key={c.key}
+                          onClick={() => toggleSort(c.key)}
+                          style={{
+                            textAlign: c.align, cursor: "pointer", userSelect: "none", whiteSpace: "nowrap", fontWeight: 700,
+                            position: "sticky", top: 0, zIndex: 2, background: "#f8fafc",
+                            borderBottom: "1px solid #e2e8f0", padding: "12px 16px",
+                            fontWeight: 800, fontSize: 13.5,
+                            color: active ? "#2f5dd4" : "#0f172a",
+                          }}
+                        >
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            {c.label}
+                            {active && (sort.dir === "asc" ? <ArrowUp size={13} /> : <ArrowDown size={13} />)}
+                          </span>
+                        </th>
+                      );
+                    })}
+                    <th style={{ position: "sticky", top: 0, zIndex: 2, background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedEmployees.map((e) => {
+                    const bc = balColor(e.balance);
+                    return (
+                      <tr
+                        key={e.employee_id ? `id-${e.employee_id}` : `n-${e.employee_name}`}
+                        onClick={() => openHistory(e)}
+                        style={{ cursor: "pointer" }}
+                        onMouseEnter={(ev) => (ev.currentTarget.style.background = "#f8fafc")}
+                        onMouseLeave={(ev) => (ev.currentTarget.style.background = "")}
+                      >
+                        <td style={{ padding: "12px 16px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span
+                              style={{
+                                width: 32, height: 32, borderRadius: "50%", background: avatarColor(e.employee_name),
+                                color: "#fff", fontSize: 12, fontWeight: 700, display: "inline-flex",
+                                alignItems: "center", justifyContent: "center", flexShrink: 0,
+                              }}
+                            >
+                              {initialsOf(e.employee_name)}
+                            </span>
+                            <span style={{ fontWeight: 600 }}>{e.employee_name}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: "12px 16px" }}>{e.department || "—"}</td>
+                        <td style={{ textAlign: "right", whiteSpace: "nowrap", padding: "12px 16px" }}>{fmtMoney(e.total_given)}</td>
+                        <td style={{ textAlign: "right", whiteSpace: "nowrap", padding: "12px 16px" }}>{fmtMoney(e.total_paid)}</td>
+                        <td style={{ textAlign: "right", whiteSpace: "nowrap", padding: "12px 16px" }}>
+                          <div style={{ fontWeight: 700, color: bc }}>{fmtMoney(e.balance)}</div>
+                          <span style={{ display: "inline-block", marginTop: 2, fontSize: 11, fontWeight: 600, color: bc, background: `${bc}1a`, padding: "1px 8px", borderRadius: 10 }}>
+                            {balText(e.balance)}
+                          </span>
+                        </td>
+                        <td style={{ whiteSpace: "nowrap", padding: "12px 16px", color: "#475569" }}>{fmtDateOnly(e.last_date)}</td>
+                        <td style={{ textAlign: "center", padding: "12px 16px" }}>
+                          <button
+                            className="btn btn-secondary"
+                            onClick={(ev) => { ev.stopPropagation(); openHistory(e); }}
+                          >
+                            History
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: "#f8fafc" }}>
+                    <td colSpan={2} style={{ fontWeight: 700, padding: "14px 16px", borderTop: "2px solid #e2e8f0", position: "sticky", bottom: 0, background: "#f8fafc" }}>
+                      Total ({totals.employees} employees)
+                    </td>
+                    <td style={{ textAlign: "right", fontWeight: 800, whiteSpace: "nowrap", padding: "14px 16px", borderTop: "2px solid #e2e8f0", position: "sticky", bottom: 0, background: "#f8fafc" }}>{fmtMoney(totals.total_given)}</td>
+                    <td style={{ textAlign: "right", fontWeight: 800, whiteSpace: "nowrap", padding: "14px 16px", borderTop: "2px solid #e2e8f0", position: "sticky", bottom: 0, background: "#f8fafc" }}>{fmtMoney(totals.total_paid)}</td>
+                    <td style={{ textAlign: "right", fontWeight: 800, whiteSpace: "nowrap", padding: "14px 16px", color: balColor(totals.balance), borderTop: "2px solid #e2e8f0", position: "sticky", bottom: 0, background: "#f8fafc" }}>{fmtMoney(totals.balance)}</td>
+                    <td colSpan={2} style={{ borderTop: "2px solid #e2e8f0", position: "sticky", bottom: 0, background: "#f8fafc" }}></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* History modal */}
+        {openEmp && (
+          <div
+            className="modal-overlay"
+            style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
+            onClick={() => setOpenEmp(null)}
+          >
+            <div className="modal card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 820, width: "92%", maxHeight: "90vh", overflowY: "auto", padding: 24 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span
+                    style={{
+                      width: 44, height: 44, borderRadius: "50%", background: avatarColor(openEmp.employee_name),
+                      color: "#fff", fontSize: 15, fontWeight: 700, display: "inline-flex",
+                      alignItems: "center", justifyContent: "center",
+                    }}
+                  >
+                    {initialsOf(openEmp.employee_name)}
+                  </span>
+                  <div>
+                    <h3 style={{ margin: 0 }}>{openEmp.employee_name}</h3>
+                    <div style={{ margin: "2px 0 0", color: "#6b7280", fontSize: 13 }}>{openEmp.department || "—"}</div>
+                  </div>
+                </div>
+                <button className="btn btn-secondary" onClick={() => setOpenEmp(null)} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <X size={14} /> Close
+                </button>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+                <StatCard label="Total Given" value={fmtMoney(openEmp.total_given)} color="#b45309" />
+                <StatCard label="Total Paid" value={fmtMoney(openEmp.total_paid)} color="#16a34a" />
+                <StatCard label="Balance" value={fmtMoney(openEmp.balance)} color={balColor(openEmp.balance)} hint={balText(openEmp.balance)} />
+              </div>
+
+              {txnLoading ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#64748b" }}>
+                  <Loader2 size={16} className="spin" /> Loading transactions…
+                </div>
+              ) : txns.length === 0 ? (
+                <div className="empty-state">No transactions for this employee.</div>
+              ) : (
+                <div style={{ overflowX: "auto", border: "1px solid #e5e7eb", borderRadius: 8 }}>
+                  <table className="data-table" style={{ width: "100%" }}>
+                    <thead>
+                      <tr>
+                        {[["Date", "left"], ["Type", "left"], ["Amount", "right"], ["Note", "left"]].map(([label, align]) => (
+                          <th
+                            key={label}
+                            style={{
+                              textAlign: align, fontWeight: 800, fontSize: 13.5, color: "#1e3a8a",
+                              background: "#eef2ff", borderBottom: "2px solid #c7d2fe", padding: "10px 14px",
+                            }}
+                          >
+                            {label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {txns.map((t) => {
+                        const given = t.txn_type !== "paid";
+                        const c = given ? "#b45309" : "#16a34a";
+                        return (
+                          <tr key={t.id}>
+                            <td style={{ whiteSpace: "nowrap" }}>{fmtDateOnly(t.txn_date)}</td>
+                            <td>
+                              <span className="badge" style={{ background: `${c}20`, color: c, fontWeight: 600, padding: "3px 10px", borderRadius: 12, fontSize: 12 }}>
+                                {given ? "Given" : "Paid"}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: "right", fontWeight: 600, whiteSpace: "nowrap", color: c }}>
+                              {given ? "+" : "−"} {fmtMoney(t.amount)}
+                            </td>
+                            <td style={{ fontSize: 12.5, color: "#475569" }}>{t.note || "—"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
 export default function CopperBookPage({ onBack }) {
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
@@ -183,6 +642,7 @@ export default function CopperBookPage({ onBack }) {
   const [editForm, setEditForm] = useState({});
 
   const [showAllEmployees, setShowAllEmployees] = useState(false);
+  const [showPersonal, setShowPersonal] = useState(false);
   const [rollYear, setRollYear] = useState("all");
   const [rollHideEmpty, setRollHideEmpty] = useState(true);
   const [rollNewestFirst, setRollNewestFirst] = useState(true);
@@ -238,7 +698,8 @@ export default function CopperBookPage({ onBack }) {
       setEquity({ ...EMPTY_EQUITY, ...(data.equity || {}) });
       setMonthlyRollback(Array.isArray(data.monthly_rollback) ? data.monthly_rollback : []);
       setAllTimeEquity({ ...EMPTY_EQUITY, ...(data.all_time_equity || {}) });
-      setDepartments(data.departments || []);
+      // keep the department list sticky so it never shrinks when a filter is applied
+      setDepartments((prev) => mergeDepartments(prev, data.departments));
       setViewTotal(Number(data.view_total) || 0);
       setRows((prev) => (append ? [...prev, ...(data.requests || [])] : data.requests || []));
     } catch {
@@ -314,7 +775,11 @@ export default function CopperBookPage({ onBack }) {
 
     try {
       await api.post(`/copperbook/${detail.id}/${endpoint}`, { action, remarks: remarks.trim() });
-      toast.success(`Marked ${action.replace("_", " ")}.`);
+      toast.success(
+        prevStatus === "rejected" && action === "approve"
+          ? "Rejection reversed — request approved."
+          : `Marked ${action.replace("_", " ")}.`
+      );
       setOpenId(null);
       setDetail(null);
       setRemarks("");
@@ -322,6 +787,27 @@ export default function CopperBookPage({ onBack }) {
     } catch (err) {
       setDetail({ ...detail, status: prevStatus });
       toast.error(err.response?.data?.error || "Action failed.");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const reapproveEntry = async (entryId) => {
+    if (!detail) return;
+    const note = window.prompt("Remarks for re-approval (optional):", "");
+    if (note === null) return; // cancelled
+    setActing(true);
+    try {
+      await api.post(`/copperbook/employee-entry/${entryId}/action`, {
+        action: "approve",
+        remarks: note.trim(),
+      });
+      toast.success("Entry re-approved.");
+      const r = await api.get(`/copperbook/${detail.id}`);
+      setDetail(r.data);
+      load(1, false);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Could not re-approve entry.");
     } finally {
       setActing(false);
     }
@@ -389,9 +875,13 @@ export default function CopperBookPage({ onBack }) {
     rejected: allEntries.filter((e) => e.status === "rejected"),
   };
   const tabEntries = groups[entryTab] || [];
+  const canReapproveEntries = isCEO && entryTab === "rejected";
 
   if (showAllEmployees) {
     return <AllEmployeesPage onBack={() => setShowAllEmployees(false)} />;
+  }
+  if (showPersonal) {
+    return <PersonalAmountPage onBack={() => setShowPersonal(false)} allDepartments={departments} />;
   }
   const rollYears = [...new Set(monthlyRollback.map((r) => String(r.month).slice(0, 4)))]
     .sort()
@@ -661,7 +1151,7 @@ export default function CopperBookPage({ onBack }) {
       <main className="page-main" style={{ paddingTop: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
           {onBack && (
-            <button className="btn btn-secondary" onClick={onBack} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <button className="btn btn-primary" onClick={onBack} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}>
               <ArrowLeft size={16} /> Back
             </button>
           )}
@@ -687,10 +1177,17 @@ export default function CopperBookPage({ onBack }) {
               );
             })}
 
-            {isSuperAdmin && (
-              <button className="btn btn-primary" onClick={() => setShowAllEmployees(true)} style={{ marginLeft: "auto" }}>
-                Salaries
-              </button>
+            {canManage && (
+              <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button className="btn btn-primary" onClick={() => setShowPersonal(true)}>
+                  Personal Amount
+                </button>
+                {isSuperAdmin && (
+                  <button className="btn btn-primary" onClick={() => setShowAllEmployees(true)}>
+                    Salaries
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -912,6 +1409,7 @@ export default function CopperBookPage({ onBack }) {
                                     <th style={{ textAlign: "right" }}>Total</th>
                                     <th>Status</th>
                                     <th>Remarks</th>
+                                    {canReapproveEntries && <th style={{ textAlign: "center" }}>Action</th>}
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -924,12 +1422,24 @@ export default function CopperBookPage({ onBack }) {
                                       <td style={{ textAlign: "right", fontWeight: 700 }}>₹{Number(e.total_amount || 0).toLocaleString("en-IN")}</td>
                                       <td><StatusBadge status={e.status} /></td>
                                       <td style={{ fontSize: 12.5, color: "#475569" }}>{e.remarks || "—"}</td>
+                                      {canReapproveEntries && (
+                                        <td style={{ textAlign: "center" }}>
+                                          <button
+                                            className="btn btn-primary"
+                                            disabled={acting}
+                                            onClick={() => reapproveEntry(e.id)}
+                                            style={{ padding: "4px 10px", fontSize: 12 }}
+                                          >
+                                            ✅ Approve
+                                          </button>
+                                        </td>
+                                      )}
                                     </tr>
                                   ))}
                                   <tr style={{ background: "#f8fafc" }}>
                                     <td colSpan={4} style={{ textAlign: "right", fontWeight: 600 }}>{ENTRY_TABS.find(([k]) => k === entryTab)?.[1]} Total:</td>
                                     <td style={{ textAlign: "right", fontWeight: 700 }}>{fmtMoney(sumOf(tabEntries))}</td>
-                                    <td colSpan={2}></td>
+                                    <td colSpan={canReapproveEntries ? 3 : 2}></td>
                                   </tr>
                                 </tbody>
                               </table>
@@ -1059,7 +1569,46 @@ export default function CopperBookPage({ onBack }) {
                         </div>
                       )}
 
-                      {detail.status !== "pending" && detail.status !== "forwarded_to_ceo" && (
+                      {detail.status === "rejected" && isCEO && (
+                        <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 16, marginTop: 16, position: "sticky", bottom: -24, background: "#fff", paddingBottom: 8 }}>
+                          <div style={{ fontSize: 13, color: "#e11d48", fontWeight: 600, marginBottom: 4 }}>
+                            This request was rejected.
+                          </div>
+                          <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>
+                            Changed your mind? Use <b>Edit</b> (top right) to correct the amount or remarks if needed,
+                            then approve it below.
+                          </div>
+                          <textarea
+                            className="form-control"
+                            rows={3}
+                            value={remarks}
+                            onChange={(e) => setRemarks(e.target.value)}
+                            placeholder="Remarks for re-approval (optional)…"
+                          />
+                          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                            <button
+                              className="btn btn-primary"
+                              disabled={acting}
+                              onClick={() => doAction("ceo-action", "approve")}
+                            >
+                              {acting ? "…" : "✅ Approve Again"}
+                            </button>
+                            {canManage && (
+                              <button
+                                className="btn btn-secondary"
+                                disabled={acting}
+                                onClick={startEdit}
+                              >
+                                ✏️ Edit Amount / Remarks
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {detail.status !== "pending" &&
+                        detail.status !== "forwarded_to_ceo" &&
+                        !(detail.status === "rejected" && isCEO) && (
                         <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 12, marginTop: 12, color: "#6b7280", fontSize: 13 }}>
                           This request has been finalized ({STATUS_LABEL[detail.status] || detail.status}).
                         </div>
@@ -1067,6 +1616,12 @@ export default function CopperBookPage({ onBack }) {
                     </>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                      {detail.status === "rejected" && (
+                        <div style={{ background: "#fff1f2", border: "1px solid #fecdd3", color: "#9f1239", padding: "8px 12px", borderRadius: 8, fontSize: 12.5 }}>
+                          This request is currently rejected. After saving your changes, close the editor and click
+                          <b> Approve Again</b> to approve it.
+                        </div>
+                      )}
                       <div className="form-group" style={{ margin: 0 }}>
                         <label className="form-label">Business Unit / Department</label>
                         <input

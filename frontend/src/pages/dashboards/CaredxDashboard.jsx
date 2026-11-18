@@ -1,5 +1,5 @@
 // frontend/src/pages/dashboards/CaredxDashboard.jsx
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import {
   Upload, Download, Plus, RefreshCw, Filter, Wallet, CreditCard, Landmark,
@@ -90,7 +90,7 @@ export default function CaredxDashboard() {
   const [expenseFormOpen, setExpenseFormOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
 
-  // ✅ Salary state
+  // Salary entries are fetched and merged into the Expenses table (no separate section).
   const [salaryEntries, setSalaryEntries] = useState([]);
 
   // -------------------------------------------------------------------------
@@ -152,7 +152,6 @@ export default function CaredxDashboard() {
     }
   }, [startDate, endDate, quarter, year]);
 
-  // ✅ Fetch salary entries
   const fetchSalaries = useCallback(async () => {
     try {
       const response = await api.get("/caredx/salaries", { params: dateParams });
@@ -170,6 +169,24 @@ export default function CaredxDashboard() {
   useEffect(() => { refetchAll(); }, [refetchAll]);
 
   // -------------------------------------------------------------------------
+  // Normalize salary entries so they look like expense rows
+  // -------------------------------------------------------------------------
+  const normalizedSalaryEntries = useMemo(() => {
+    return salaryEntries.map((s, idx) => ({
+      id: s.id ?? `salary-${idx}-${s.entry_date || s.expense_date || ""}`,
+      expense_date: s.expense_date || s.entry_date || s.date || "",
+      category: "Salary & Payrolls",
+      amount: Number(
+        s.amount ?? s.net_salary ?? s.total_salary ?? s.salary ?? s.net_pay ?? 0
+      ),
+      remarks: s.remarks || "",
+      employee_name: s.employee_name || "",
+      payment_type: s.payment_type || "",
+      _isSalary: true,
+    }));
+  }, [salaryEntries]);
+
+  // -------------------------------------------------------------------------
   // Filtering
   // -------------------------------------------------------------------------
   const filteredLabEntries = labEntries.filter((e) => {
@@ -180,17 +197,27 @@ export default function CaredxDashboard() {
     return true;
   });
 
-  const filteredExpenses = expenses.filter((e) => {
-    if (typeFilter === "Income") return false;
-    if (selectedCategory) return e.category === selectedCategory;
-    return true;
-  });
+  // Salaries are expenses → merged in here. No separate Salary & Payrolls section.
+  const filteredExpenses = useMemo(() => {
+    if (typeFilter === "Income") return [];
 
-  const shouldShowSalary =
-    typeFilter !== "Income" &&
-    (!selectedCategory || selectedCategory === "Salary & Payrolls");
+    const parts = [];
 
-  const filteredSalaryEntries = salaryEntries.filter(() => shouldShowSalary);
+    // Regular (non-salary) expenses
+    if (selectedCategory !== "Salary & Payrolls") {
+      expenses.forEach((e) => {
+        if (selectedCategory && e.category !== selectedCategory) return;
+        parts.push(e);
+      });
+    }
+
+    // Salary entries — treated as expenses
+    if (!selectedCategory || selectedCategory === "Salary & Payrolls") {
+      parts.push(...normalizedSalaryEntries);
+    }
+
+    return parts;
+  }, [expenses, normalizedSalaryEntries, typeFilter, selectedCategory]);
 
   const labTotalPages = Math.max(1, Math.ceil(filteredLabEntries.length / PAGE_SIZE));
   const paginatedLabEntries = filteredLabEntries.slice((labPage - 1) * PAGE_SIZE, labPage * PAGE_SIZE);
@@ -325,9 +352,22 @@ export default function CaredxDashboard() {
   };
 
   const openNewExpense = () => { setEditingExpense(null); setExpenseFormOpen(true); };
-  const openEditExpense = (expense) => { setEditingExpense(expense); setExpenseFormOpen(true); };
+
+  // Salary rows cannot be edited/deleted from this dashboard.
+  const openEditExpense = (expense) => {
+    if (expense?._isSalary) {
+      toast.error("Salary entries can only be edited from Corporate Management.");
+      return;
+    }
+    setEditingExpense(expense);
+    setExpenseFormOpen(true);
+  };
 
   const handleExpenseDelete = async (expense) => {
+    if (expense?._isSalary) {
+      toast.error("Salary entries can only be deleted from Corporate Management.");
+      return;
+    }
     const confirmed = window.confirm(`Delete the "${expense.category}" expense dated ${expense.expense_date}?`);
     if (!confirmed) return;
     try {
@@ -527,59 +567,6 @@ export default function CaredxDashboard() {
           <FinanceCharts trend={summary.trend || []} categoryBreakdown={summary.category_breakdown || []} />
         )}
 
-        {/* ============ SALARY & PAYROLLS ============ */}
-        {shouldShowSalary && (
-          <div style={{ marginBottom: 20 }}>
-            <div className="section-header">
-              <p className="section-title">Salary &amp; Payrolls</p>
-            </div>
-            {filteredSalaryEntries.length === 0 ? (
-              <div className="card empty-state">
-                {selectedCategory === "Salary & Payrolls"
-                  ? "No salary entries for the selected period."
-                  : "No salary entries recorded."}
-              </div>
-            ) : (
-              <div className="card table-wrap">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Type</th>
-                      <th>Category</th>
-                      <th>Employee Name</th>
-                      <th className="text-right">Amount</th>
-                      <th>Payment Type</th>
-                      <th>Exec Dept</th>
-                      <th className="text-right">Salary</th>
-                      <th className="text-right">Allowance</th>
-                      <th>Remarks</th>
-                      <th className="text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredSalaryEntries.map((e, i) => (
-                      <tr key={e.id ?? `sal-${i}`}>
-                        <td style={{ whiteSpace: "nowrap" }}>{e.entry_date || e.expense_date}</td>
-                        <td>{e.entry_type || "Expenses"}</td>
-                        <td>Salary &amp; Payrolls</td>
-                        <td>{e.employee_name || "—"}</td>
-                        <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(e.amount)}</td>
-                        <td>{e.payment_type || "—"}</td>
-                        <td>{e.exec_department || "Caredx"}</td>
-                        <td className="text-right">{e.salary_amount != null ? formatCurrency(e.salary_amount) : "—"}</td>
-                        <td className="text-right">{e.allowance_amount != null ? formatCurrency(e.allowance_amount) : "—"}</td>
-                        <td>{e.remarks || "—"}</td>
-                        <td className="text-right"><span style={{ opacity: 0.4 }}>—</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* ============ LAB DATA ENTRY ============ */}
         {typeFilter !== "Expenses" && (
           <>
@@ -620,7 +607,7 @@ export default function CaredxDashboard() {
           </>
         )}
 
-        {/* ============ EXPENSES ============ */}
+        {/* ============ EXPENSES (includes Salary & Payrolls merged in) ============ */}
         {typeFilter !== "Income" && (
           <>
             <div className="section-header">

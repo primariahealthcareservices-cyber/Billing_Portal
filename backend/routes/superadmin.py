@@ -1170,15 +1170,23 @@ def department_import(department):
 
 
 # ----------------------------------------------------------------------
-# SalesEnterprise KPI
+# SalesEnterprise KPI (FIXED: Added department filter)
 # ----------------------------------------------------------------------
 @superadmin_bp.route("/salesenterprise/kpis", methods=["GET"])
 @role_required("SuperAdmin")
 def get_salesenterprise_kpis():
     year = request.args.get("year", type=int)
     quarter = request.args.get("quarter")
+    department = request.args.get("department")
+    
     query = SalesEnterpriseKPI.query
     if year: query = query.filter_by(year=year)
     if quarter: query = query.filter_by(quarter=quarter)
-    kpis = query.order_by(SalesEnterpriseKPI.year.desc(), SalesEnterpriseKPI.quarter.desc()).all()
+    if department: query = query.filter_by(department=department)
+    
+    kpis = query.order_by(
+        SalesEnterpriseKPI.year.desc(), 
+        SalesEnterpriseKPI.quarter.desc(),
+        SalesEnterpriseKPI.month
+    ).all()
     return jsonify({"kpis": [k.to_dict() for k in kpis]}), 200

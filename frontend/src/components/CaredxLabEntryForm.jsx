@@ -17,7 +17,6 @@ const NUMERIC_FIELDS = [
   "cash",
   "online",
   "paid_to_other_labs",
-  "rmp",
   "salaries_expense",
   "referral_amount",
   "referral_cash",
@@ -25,7 +24,6 @@ const NUMERIC_FIELDS = [
   "sales",
 ];
 
-// Options shown in both dropdowns
 const PAYMENT_TYPE_OPTIONS = [
   { value: "", label: "—" },
   { value: "Cash", label: "Cash" },
@@ -36,7 +34,6 @@ const PAYMENT_TYPE_OPTIONS = [
   { value: "NEFT", label: "NEFT" },
 ];
 
-// Which amount fields are relevant for a given payment type
 const showsCash = (pt) => pt === "Cash" || pt === "Cash + UPI";
 const showsOnline = (pt) => pt === "UPI" || pt === "Cash + UPI";
 
@@ -49,7 +46,6 @@ const createEmptyForm = () => ({
   cash: "",
   online: "",
   paid_to_other_labs: "",
-  rmp: "",
   salaries_expense: "",
   expense_details: "",
   referral_by: "",
@@ -65,7 +61,6 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
   const [form, setForm] = useState(createEmptyForm());
   const [saving, setSaving] = useState(false);
 
-  // Populate form whenever the modal opens (new entry) or the editing target changes
   useEffect(() => {
     if (!open) return;
 
@@ -81,7 +76,6 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
         online: editingEntry.online != null ? String(editingEntry.online) : "",
         paid_to_other_labs:
           editingEntry.paid_to_other_labs != null ? String(editingEntry.paid_to_other_labs) : "",
-        rmp: editingEntry.rmp != null ? String(editingEntry.rmp) : "",
         salaries_expense:
           editingEntry.salaries_expense != null ? String(editingEntry.salaries_expense) : "",
         expense_details: editingEntry.expense_details || "",
@@ -109,13 +103,11 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
     setForm((prev) => {
       const next = { ...prev, [name]: value };
 
-      // Main payment_type rules: hide + clear amount field that no longer applies
       if (name === "payment_type") {
         if (!showsCash(value)) next.cash = "";
         if (!showsOnline(value)) next.online = "";
       }
 
-      // Referral payment_type rules
       if (name === "referral_payment_type") {
         if (!showsCash(value)) next.referral_cash = "";
         if (!showsOnline(value)) next.referral_online = "";
@@ -140,6 +132,14 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
       toast.error("Please enter the test name.");
       return;
     }
+    if (!form.total_amount_paid || Number(form.total_amount_paid) <= 0) {
+      toast.error("Please enter a valid total amount paid.");
+      return;
+    }
+    if (!form.referral_by.trim()) {
+      toast.error("Please enter who referred the patient.");
+      return;
+    }
 
     const payload = { ...form };
     NUMERIC_FIELDS.forEach((field) => {
@@ -147,7 +147,6 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
       payload[field] = Number.isFinite(value) ? value : 0;
     });
 
-    // Trim dropdown values → send null when "—" is selected
     payload.payment_type = payload.payment_type?.trim() || null;
     payload.referral_payment_type = payload.referral_payment_type?.trim() || null;
 
@@ -196,23 +195,29 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
           {/* ── date + employee ─────────────────────────────────────── */}
           <div className="form-row">
             <div className="form-group">
-              <label className="form-label">Date</label>
+              <label className="form-label">
+                Date <span style={{ color: "red" }}>*</span>
+              </label>
               <input
                 type="date"
                 name="entry_date"
                 value={form.entry_date}
                 onChange={handleChange}
                 className="form-control"
+                required
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Employee Name</label>
+              <label className="form-label">
+                Employee Name <span style={{ color: "red" }}>*</span>
+              </label>
               <input
                 name="employee_name"
                 value={form.employee_name}
                 onChange={handleChange}
                 placeholder="e.g. Priya Sharma"
                 className="form-control"
+                required
               />
             </div>
           </div>
@@ -220,23 +225,29 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
           {/* ── patient + test ──────────────────────────────────────── */}
           <div className="form-row">
             <div className="form-group">
-              <label className="form-label">Patient Name</label>
+              <label className="form-label">
+                Patient Name <span style={{ color: "red" }}>*</span>
+              </label>
               <input
                 name="patient_name"
                 value={form.patient_name}
                 onChange={handleChange}
                 placeholder="e.g. Ramesh Kumar"
                 className="form-control"
+                required
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Test Name</label>
+              <label className="form-label">
+                Test Name <span style={{ color: "red" }}>*</span>
+              </label>
               <input
                 name="test_name"
                 value={form.test_name}
                 onChange={handleChange}
                 placeholder="e.g. HLA Typing"
                 className="form-control"
+                required
               />
             </div>
           </div>
@@ -244,7 +255,9 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
           {/* ── Total Amount + Payment Type ─────────────────────────── */}
           <div className="form-row">
             <div className="form-group">
-              <label className="form-label">Total Amount Paid (₹)</label>
+              <label className="form-label">
+                Total Amount Paid (₹) <span style={{ color: "red" }}>*</span>
+              </label>
               <input
                 type="number"
                 step="0.01"
@@ -254,15 +267,19 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
                 onChange={handleChange}
                 placeholder="0.00"
                 className="form-control"
+                required
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Payment Type</label>
+              <label className="form-label">
+                Payment Type <span style={{ color: "red" }}>*</span>
+              </label>
               <select
                 name="payment_type"
                 value={form.payment_type}
                 onChange={handleChange}
                 className="form-control"
+                required
               >
                 {PAYMENT_TYPE_OPTIONS.map((opt) => (
                   <option key={opt.value || "none"} value={opt.value}>
@@ -278,7 +295,9 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
             <div className="form-row">
               {mainShowsCash && (
                 <div className="form-group">
-                  <label className="form-label">Cash (₹)</label>
+                  <label className="form-label">
+                    Cash (₹) <span style={{ color: "red" }}>*</span>
+                  </label>
                   <input
                     type="number"
                     step="0.01"
@@ -288,12 +307,15 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
                     onChange={handleChange}
                     placeholder="0.00"
                     className="form-control"
+                    required
                   />
                 </div>
               )}
               {mainShowsOnline && (
                 <div className="form-group">
-                  <label className="form-label">Online (₹)</label>
+                  <label className="form-label">
+                    Online (₹) <span style={{ color: "red" }}>*</span>
+                  </label>
                   <input
                     type="number"
                     step="0.01"
@@ -303,16 +325,19 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
                     onChange={handleChange}
                     placeholder="0.00"
                     className="form-control"
+                    required
                   />
                 </div>
               )}
             </div>
           )}
 
-          {/* ── Other fixed amounts ─────────────────────────────────── */}
+          {/* ── Paid to Other Labs (RMP removed) ────────────────────── */}
           <div className="form-row">
             <div className="form-group">
-              <label className="form-label">Paid to Other Labs (₹)</label>
+              <label className="form-label">
+                Paid to Other Labs (₹) <span style={{ color: "red" }}>*</span>
+              </label>
               <input
                 type="number"
                 step="0.01"
@@ -322,48 +347,7 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
                 onChange={handleChange}
                 placeholder="0.00"
                 className="form-control"
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">RMP (₹)</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                name="rmp"
-                value={form.rmp}
-                onChange={handleChange}
-                placeholder="0.00"
-                className="form-control"
-              />
-            </div>
-          </div>
-
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Salaries Expense (₹)</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                name="salaries_expense"
-                value={form.salaries_expense}
-                onChange={handleChange}
-                placeholder="0.00"
-                className="form-control"
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Sales (₹)</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                name="sales"
-                value={form.sales}
-                onChange={handleChange}
-                placeholder="0.00"
-                className="form-control"
+                required
               />
             </div>
           </div>
@@ -371,17 +355,22 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
           {/* ── Referral block ──────────────────────────────────────── */}
           <div className="form-row">
             <div className="form-group">
-              <label className="form-label">Referral By</label>
+              <label className="form-label">
+                Referral By <span style={{ color: "red" }}>*</span>
+              </label>
               <input
                 name="referral_by"
                 value={form.referral_by}
                 onChange={handleChange}
-                placeholder="Optional"
+                placeholder="Name of referrer"
                 className="form-control"
+                required
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Referral Amount (₹)</label>
+              <label className="form-label">
+                Referral Amount (₹) <span style={{ color: "red" }}>*</span>
+              </label>
               <input
                 type="number"
                 step="0.01"
@@ -391,6 +380,7 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
                 onChange={handleChange}
                 placeholder="0.00"
                 className="form-control"
+                required
               />
             </div>
           </div>
@@ -398,12 +388,15 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
           {/* Referral payment type dropdown */}
           <div className="form-row">
             <div className="form-group">
-              <label className="form-label">Referral Payment Type</label>
+              <label className="form-label">
+                Referral Payment Type <span style={{ color: "red" }}>*</span>
+              </label>
               <select
                 name="referral_payment_type"
                 value={form.referral_payment_type}
                 onChange={handleChange}
                 className="form-control"
+                required
               >
                 {PAYMENT_TYPE_OPTIONS.map((opt) => (
                   <option key={opt.value || "none"} value={opt.value}>
@@ -420,7 +413,9 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
             <div className="form-row">
               {referralShowsCash && (
                 <div className="form-group">
-                  <label className="form-label">Referral Cash (₹)</label>
+                  <label className="form-label">
+                    Referral Cash (₹) <span style={{ color: "red" }}>*</span>
+                  </label>
                   <input
                     type="number"
                     step="0.01"
@@ -430,12 +425,15 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
                     onChange={handleChange}
                     placeholder="0.00"
                     className="form-control"
+                    required
                   />
                 </div>
               )}
               {referralShowsOnline && (
                 <div className="form-group">
-                  <label className="form-label">Referral Online (₹)</label>
+                  <label className="form-label">
+                    Referral Online (₹) <span style={{ color: "red" }}>*</span>
+                  </label>
                   <input
                     type="number"
                     step="0.01"
@@ -445,6 +443,7 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
                     onChange={handleChange}
                     placeholder="0.00"
                     className="form-control"
+                    required
                   />
                 </div>
               )}
@@ -453,7 +452,9 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
 
           {/* ── Remarks ─────────────────────────────────────────────── */}
           <div className="form-group">
-            <label className="form-label">Remarks</label>
+            <label className="form-label">
+              Remarks <span style={{ color: "red" }}>*</span>
+            </label>
             <textarea
               name="expense_details"
               value={form.expense_details}
@@ -461,6 +462,7 @@ export default function CaredxLabEntryForm({ open, onClose, onSaved, editingEntr
               rows={3}
               placeholder="Optional remarks about this lab entry"
               className="form-control"
+              required
             />
           </div>
 

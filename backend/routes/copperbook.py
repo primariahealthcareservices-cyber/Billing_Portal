@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from models import db, User, Notification
 from models_copperbook import (
     CopperBookRequest, CopperBookAssignee, CopperBookAttachment, CopperBookEmployeeEntry,
-    CopperBookMonthlyCash,
+    CopperBookMonthlyCash, CopperBookPersonalTxn,
 )
 from utils import send_email
 
@@ -49,6 +49,10 @@ ROLLBACK_MONTHS = 24
 
 FIXED_OPENING_MONTH   = (2026, 1)
 FIXED_OPENING_BALANCE = 1_000_000.0
+
+# Personal Amount: accepted spellings coming from the Staff Portal
+PERSONAL_GIVEN_ALIASES = ("given", "give", "credit", "advance", "issued", "out")
+PERSONAL_PAID_ALIASES = ("paid", "pay", "debit", "return", "returned", "repaid", "settled", "in")
 
 _SEARCH_NORM = _re.compile(r'[^a-z0-9]+')
 
@@ -113,6 +117,13 @@ def _roll_up_status(req):
     if any(s == "pending" for s in statuses):
         return "forwarded_to_ceo"
     return "partially_approved"
+
+
+def _reapproval_note(new_remarks, old_remarks):
+    note = f"Re-approved: {new_remarks}" if new_remarks else "Re-approved"
+    if old_remarks:
+        note += f" | Earlier rejection: {old_remarks}"
+    return note[:255]
 
 
 def _sum_by(r, status):
@@ -295,7 +306,7 @@ def _monthly_rollback():
     cash_overrides = {c.month: float(c.available_cash) for c in CopperBookMonthlyCash.query.all()}
 
     result = []
-    prev_current_balance = 0.0   
+    prev_current_balance = 0.0
     running_approved     = 0.0
 
     y, m = first
@@ -348,6 +359,65 @@ def _dept_key(name):
 
 def _can_manage(user):
     return bool(user) and user.role in MANAGE_ROLES
+
+
+# ---------------------------------------------------------------------------
+# Personal Amount helpers
+# ---------------------------------------------------------------------------
+def _personal_type(raw):
+    t = (str(raw or "")).strip().lower()
+    if t in PERSONAL_GIVEN_ALIASES:
+        return "given"
+    if t in PERSONAL_PAID_ALIASES:
+        return "paid"
+    return None
+
+
+def _personal_key(t):
+    if t.employee_id:
+        return f"id:{t.employee_id}"
+    return "name:" + (t.employee_name or "").strip().lower()
+
+
+def _personal_txn_to_dict(t):
+    return {
+        "id": t.id,
+        "remote_key": t.remote_key,
+        "employee_id": t.employee_id,
+        "employee_name": t.employee_name,
+        "employee_department": t.employee_department,
+        "txn_type": t.txn_type,
+        "amount": float(t.amount or 0),
+        "txn_date": t.txn_date.isoformat() if t.txn_date else None,
+        "note": t.note,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+    }
+
+
+def _personal_filtered_query():
+    q = CopperBookPersonalTxn.query
+
+    search = (request.args.get("search") or "").strip()
+    department = (request.args.get("department") or "").strip()
+    start_d = _parse_date(request.args.get("start_date"))
+    end_d = _parse_date(request.args.get("end_date"))
+
+    if search:
+        like = f"%{search}%"
+        q = q.filter(or_(
+            CopperBookPersonalTxn.employee_name.ilike(like),
+            CopperBookPersonalTxn.employee_department.ilike(like),
+            CopperBookPersonalTxn.note.ilike(like),
+        ))
+    if department:
+        q = q.filter(CopperBookPersonalTxn.employee_department == department)
+
+    eff = func.coalesce(CopperBookPersonalTxn.txn_date, func.date(CopperBookPersonalTxn.created_at))
+    if start_d:
+        q = q.filter(eff >= start_d)
+    if end_d:
+        q = q.filter(eff <= end_d)
+    return q
 
 
 def _branded_html(heading: str, intro: str, details: dict, message: str, closing: str) -> str:
@@ -605,7 +675,7 @@ def _sync_delete_to_staffportal(req: CopperBookRequest, deleted_by: str, remarks
         return False, str(e)
 
 
-# ✅ NEW ENDPOINT: Receive manual available_cash sync from Staff Portal
+# Receive manual available_cash sync from Staff Portal
 @cb_bp.route("/intake-cash", methods=["POST", "OPTIONS"])
 def intake_cash():
     if request.method == "OPTIONS":
@@ -629,6 +699,166 @@ def intake_cash():
 
     db.session.commit()
     return jsonify({"message": "Cash updated successfully."}), 200
+
+
+# ✅ Receive Personal Amount transactions from the Staff Portal
+@cb_bp.route("/intake-personal", methods=["POST", "OPTIONS"])
+def intake_personal():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    if not _service_token_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    items = data.get("transactions")
+    if not isinstance(items, list):
+        items = [data]
+
+    saved = deleted = skipped = 0
+    try:
+        for item in items:
+            if not isinstance(item, dict):
+                skipped += 1
+                continue
+
+            remote_key = str(item.get("remote_key") or item.get("remote_id") or item.get("id") or "").strip() or None
+            if remote_key:
+                remote_key = remote_key[:60]
+
+            if (item.get("event") or "").lower() == "delete":
+                if remote_key:
+                    deleted += CopperBookPersonalTxn.query.filter_by(remote_key=remote_key).delete()
+                continue
+
+            name = (item.get("employee_name") or "").strip()
+            txn_type = _personal_type(item.get("txn_type") or item.get("type"))
+            try:
+                amount = float(item.get("amount"))
+            except (TypeError, ValueError):
+                amount = None
+
+            if not name or txn_type is None or amount is None or not math.isfinite(amount) or amount < 0:
+                skipped += 1
+                continue
+            amount = min(round(amount, 2), MAX_AMOUNT)
+
+            try:
+                emp_id = int(item.get("employee_id")) if item.get("employee_id") not in (None, "") else None
+            except (TypeError, ValueError):
+                emp_id = None
+
+            row = CopperBookPersonalTxn.query.filter_by(remote_key=remote_key).first() if remote_key else None
+            if not row:
+                row = CopperBookPersonalTxn(remote_key=remote_key)
+                db.session.add(row)
+
+            row.employee_id = emp_id
+            row.employee_name = name[:150]
+            row.employee_department = (item.get("employee_department") or item.get("department") or "").strip()[:100] or None
+            row.txn_type = txn_type
+            row.amount = amount
+            row.txn_date = _parse_date(item.get("txn_date") or item.get("date")) or datetime.utcnow().date()
+            row.note = (item.get("note") or item.get("remarks") or "").strip() or None
+            saved += 1
+
+        db.session.commit()
+        return jsonify({"message": "Personal amount synced.", "saved": saved, "deleted": deleted, "skipped": skipped}), 200
+    except Exception as e:
+        db.session.rollback()
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# ✅ Per-employee Personal Amount summary
+#   Employee Name | Department | Total Given | Total Paid | Outstanding | Last Date
+@cb_bp.route("/personal-summary", methods=["GET", "OPTIONS"])
+@jwt_required()
+def personal_summary():
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    txns = _personal_filtered_query().all()
+
+    groups = {}
+    for t in txns:
+        key = _personal_key(t)
+        g = groups.get(key)
+        if not g:
+            g = groups[key] = {
+                "employee_id": t.employee_id,
+                "employee_name": t.employee_name,
+                "department": t.employee_department,
+                "total_given": 0.0,
+                "total_paid": 0.0,
+                "last_date": None,
+                "txn_count": 0,
+            }
+        amt = float(t.amount or 0)
+        if t.txn_type == "paid":
+            g["total_paid"] += amt
+        else:
+            g["total_given"] += amt
+        g["txn_count"] += 1
+
+        d = t.txn_date or (t.created_at.date() if t.created_at else None)
+        if d and (g["last_date"] is None or d > g["last_date"]):
+            g["last_date"] = d
+            g["employee_name"] = t.employee_name
+            if t.employee_department:
+                g["department"] = t.employee_department
+
+    employees = []
+    for g in groups.values():
+        employees.append({
+            "employee_id": g["employee_id"],
+            "employee_name": g["employee_name"],
+            "department": g["department"],
+            "total_given": round(g["total_given"], 2),
+            "total_paid": round(g["total_paid"], 2),
+            "balance": round(g["total_given"] - g["total_paid"], 2),
+            "last_date": g["last_date"].isoformat() if g["last_date"] else None,
+            "txn_count": g["txn_count"],
+        })
+    employees.sort(key=lambda x: (x["employee_name"] or "").lower())
+
+    totals = {
+        "total_given": round(sum(e["total_given"] for e in employees), 2),
+        "total_paid": round(sum(e["total_paid"] for e in employees), 2),
+        "balance": round(sum(e["balance"] for e in employees), 2),
+        "employees": len(employees),
+    }
+
+    all_depts = sorted({
+        (d or "").strip()
+        for (d,) in db.session.query(CopperBookPersonalTxn.employee_department).distinct().all()
+        if (d or "").strip()
+    })
+
+    return jsonify({"employees": employees, "totals": totals, "departments": all_depts}), 200
+
+
+# ✅ Transaction history of one employee
+@cb_bp.route("/personal-transactions", methods=["GET", "OPTIONS"])
+@jwt_required()
+def personal_transactions():
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    emp_id = request.args.get("employee_id", type=int)
+    name = (request.args.get("employee_name") or "").strip()
+    if not emp_id and not name:
+        return jsonify({"error": "employee_id or employee_name is required."}), 400
+
+    q = CopperBookPersonalTxn.query
+    if emp_id:
+        q = q.filter(CopperBookPersonalTxn.employee_id == emp_id)
+    else:
+        q = q.filter(func.lower(func.trim(CopperBookPersonalTxn.employee_name)) == name.lower())
+
+    eff = func.coalesce(CopperBookPersonalTxn.txn_date, func.date(CopperBookPersonalTxn.created_at))
+    rows = q.order_by(eff.desc(), CopperBookPersonalTxn.id.desc()).all()
+
+    return jsonify({"transactions": [_personal_txn_to_dict(t) for t in rows]}), 200
 
 
 @cb_bp.route("/intake-ping", methods=["GET", "OPTIONS"])
@@ -809,7 +1039,7 @@ def list_all():
     if scope == "ceo":
         q = q.filter(CopperBookRequest.assigned_to_role == "ceo")
     if payroll_only:
-        q = q.filter(CopperBookRequest.is_payroll == True) 
+        q = q.filter(CopperBookRequest.is_payroll == True)
     if department:
         _dk = _dept_key(department)
         _col = func.lower(func.trim(CopperBookRequest.department))
@@ -1140,8 +1370,12 @@ def ceo_action(rid):
         return jsonify({"error": "Only SuperAdmin / CEO can act."}), 403
 
     r = CopperBookRequest.query.get_or_404(rid)
-    if r.status != "forwarded_to_ceo":
-        return jsonify({"error": f"Request {r.request_number} is not pending CEO action."}), 400
+
+    was_rejected = r.status == "rejected"
+    if r.status not in ("forwarded_to_ceo", "rejected"):
+        return jsonify({
+            "error": f"Request {r.request_number} is not pending CEO action or rejected."
+        }), 400
 
     payload = request.get_json(silent=True) or {}
     action = payload.get("action")
@@ -1149,6 +1383,8 @@ def ceo_action(rid):
 
     if action not in ("approve", "reject"):
         return jsonify({"error": "Invalid action."}), 400
+    if was_rejected and action != "approve":
+        return jsonify({"error": "This request is already rejected. It can only be re-approved."}), 400
     if action == "reject" and not remarks:
         return jsonify({"error": "Rejection reason is required."}), 400
 
@@ -1163,6 +1399,11 @@ def ceo_action(rid):
                     e.remarks = e.remarks or remarks or None
                     e.action_by = user.name
                     e.action_at = now
+                elif was_rejected and e.status == "rejected":
+                    e.remarks = _reapproval_note(remarks, e.remarks)
+                    e.status = "approved"
+                    e.action_by = user.name
+                    e.action_at = now
     else:
         r.status = "rejected"
         if r.is_payroll:
@@ -1175,23 +1416,34 @@ def ceo_action(rid):
 
     r.ceo_action_by = user.name
     r.ceo_action_at = now
-    r.ceo_remarks = remarks or None
+    if was_rejected:
+        r.ceo_remarks = (f"Re-approved: {remarks}" if remarks else "Re-approved")[:255]
+        r.assigned_to_role = "ceo"
+    else:
+        r.ceo_remarks = remarks or None
     db.session.commit()
 
     _sync_to_staffportal(r)
 
-    verb = "approved" if action == "approve" else "rejected"
+    if action == "approve":
+        verb = "re-approved" if was_rejected else "approved"
+    else:
+        verb = "rejected"
+
+    details = {
+        "Request Number": r.request_number,
+        "Amount": _fmt_money(_request_amount(r)),
+        "Decision": verb.title(),
+        **({"Previous Status": "Rejected"} if was_rejected else {}),
+        **({"Remarks": remarks} if remarks else {}),
+    }
     _notify_role_async(
         ["SuperAdmin", "Corporate"],
         in_app_message=f"CopperBook {r.request_number} was {verb} by CEO {user.name}.",
         related_id=r.id,
         email_subject=f"CopperBook — Request {r.request_number} {verb.title()} by CEO",
         email_heading=f"CEO {verb.title()} CopperBook Request {r.request_number}",
-        email_details={
-            "Request Number": r.request_number,
-            "Decision": verb.title(),
-            **({"Remarks": remarks} if remarks else {}),
-        },
+        email_details=details,
     )
     db.session.commit()
 
@@ -1220,9 +1472,16 @@ def employee_entry_action(entry_id):
     remarks = (payload.get("remarks") or "").strip()
     if action not in ("approve", "reject"):
         return jsonify({"error": "Invalid action."}), 400
+    if action == "reject" and not remarks:
+        return jsonify({"error": "Rejection reason is required."}), 400
+
+    was_rejected = entry.status == "rejected"
 
     entry.status = "approved" if action == "approve" else "rejected"
-    entry.remarks = remarks or None
+    if action == "approve" and was_rejected:
+        entry.remarks = _reapproval_note(remarks, entry.remarks)
+    else:
+        entry.remarks = remarks or None
     entry.action_by = user.name
     entry.action_at = datetime.utcnow()
 

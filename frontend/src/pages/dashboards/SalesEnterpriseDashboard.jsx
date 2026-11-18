@@ -22,7 +22,6 @@ const DEPARTMENTS = [
 ];
 const currentYear = new Date().getFullYear();
 
-// ----- Quarter → months mapping -----
 const QUARTER_MONTHS = {
   Q1: ["January", "February", "March"],
   Q2: ["April", "May", "June"],
@@ -30,7 +29,6 @@ const QUARTER_MONTHS = {
   Q4: ["October", "November", "December"]
 };
 
-// ----- Display names for each KPI -----
 const KPI_DISPLAY_NAMES = {
   revenue_growth: "Revenue Growth Rate",
   win_rate: "Win Rate",
@@ -46,7 +44,6 @@ const KPI_DISPLAY_NAMES = {
   forecast_accuracy: "Forecast Accuracy"
 };
 
-// ----- Formula definitions with display strings -----
 const FORMULA_CONFIG = {
   revenue_growth: {
     inputs: ['current_revenue', 'prior_revenue'],
@@ -118,16 +115,8 @@ const FORMULA_CONFIG = {
       return rev / reps;
     }
   },
-  ramp_time: {
-    inputs: [],          // direct entry
-    formulaDisplay: null,
-    compute: null
-  },
-  lead_response_time: {
-    inputs: [],          // direct entry
-    formulaDisplay: null,
-    compute: null
-  },
+  ramp_time: { inputs: [], formulaDisplay: null, compute: null },
+  lead_response_time: { inputs: [], formulaDisplay: null, compute: null },
   nrr: {
     inputs: ['starting_arr', 'expansion', 'contraction', 'churn'],
     formulaDisplay: '(Starting ARR + Expansion – Contraction – Churn) / Starting ARR × 100',
@@ -164,7 +153,6 @@ const FORMULA_CONFIG = {
 
 const KPI_KEYS = Object.keys(FORMULA_CONFIG);
 
-// ----- Grouping for display -----
 const CATEGORIES = {
   '📈 Growth KPIs': ['revenue_growth', 'win_rate', 'stage_conversion', 'pipeline_coverage'],
   '⚡ Efficiency KPIs': ['sales_cycle_length', 'cac', 'rep_productivity', 'ramp_time', 'lead_response_time'],
@@ -181,19 +169,16 @@ export default function SalesEnterpriseDashboard() {
   const [department, setDepartment] = useState("IT");
   const [month, setMonth] = useState("January");
 
-  // --- Filter state for the table ---
   const [filterDepartment, setFilterDepartment] = useState("");
   const [filterMonth, setFilterMonth] = useState("");
 
-  // --- View modal state ---
-  const [viewingKpi, setViewingKpi] = useState(null); // holds the KPI object to view
+  const [viewingKpi, setViewingKpi] = useState(null);
 
   const [formData, setFormData] = useState(
     KPI_KEYS.reduce((acc, key) => ({ ...acc, [key]: "" }), {})
   );
   const [rawInputs, setRawInputs] = useState({});
 
-  // Compute KPIs from raw inputs (only in add mode)
   const computeKPIs = useCallback(() => {
     const newKpis = {};
     KPI_KEYS.forEach((key) => {
@@ -230,67 +215,59 @@ export default function SalesEnterpriseDashboard() {
     fetchKpis();
   }, [fetchKpis]);
 
-  // Handle raw input changes for formula fields
   const handleRawChange = (e) => {
     const { name, value } = e.target;
     setRawInputs((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Handle direct input changes (for direct-entry KPIs or edit mode)
   const handleDirectChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  if (!year || !quarter || !department || !month) {
-    toast.error("Year, Quarter, Department, and Month are required.");
-    return;
-  }
-
-  // --- Duplicate check (only for new entries) ---
-  if (!editing) {
-    const duplicate = kpis.some(
-      (k) =>
-        k.year === parseInt(year) &&
-        k.quarter === quarter &&
-        k.department === department &&
-        k.month === month
-    );
-    if (duplicate) {
-      toast.error(
-        `A KPI record already exists for ${department} – ${month} ${year} (${quarter}).`
-      );
+    e.preventDefault();
+    if (!year || !quarter || !department || !month) {
+      toast.error("Year, Quarter, Department, and Month are required.");
       return;
     }
-  }
 
-  const payload = {
-    year: parseInt(year),
-    quarter,
-    department,
-    month,
-    ...formData,
-  };
-  for (let key in payload) {
-    if (payload[key] === "") payload[key] = null;
-  }
-
-  try {
-    if (editing) {
-      await api.put(`/salesenterprise/kpis/${editing}`, payload);
-      toast.success("KPI updated");
-    } else {
-      await api.post("/salesenterprise/kpis", payload);
-      toast.success("KPI added");
+    if (!editing) {
+      const duplicate = kpis.some(
+        (k) =>
+          k.year === parseInt(year) &&
+          k.quarter === quarter &&
+          k.department === department &&
+          k.month === month
+      );
+      if (duplicate) {
+        toast.error(
+          `A KPI record already exists for ${department} – ${month} ${year} (${quarter}).`
+        );
+        return;
+      }
     }
-    resetForm();
-    fetchKpis();
-  } catch (err) {
-    const msg = err.response?.data?.message || "Failed to save KPI";
-    toast.error(msg);
-  }
-};
+
+    const payload = { year: parseInt(year), quarter, department, month, ...formData };
+    for (let key in payload) {
+      if (payload[key] === "") payload[key] = null;
+    }
+
+    try {
+      if (editing) {
+        await api.put(`/salesenterprise/kpis/${editing}`, payload);
+        toast.success("KPI updated");
+      } else {
+        await api.post("/salesenterprise/kpis", payload);
+        toast.success("KPI added");
+      }
+      resetForm();
+      fetchKpis();
+    } catch (err) {
+      const msg = err.response?.data?.message || "Failed to save KPI";
+      toast.error(msg);
+    }
+  };
+
   const handleEdit = (kpi) => {
     setEditing(kpi.id);
     setYear(kpi.year);
@@ -327,18 +304,14 @@ export default function SalesEnterpriseDashboard() {
   };
 
   const cancelEdit = resetForm;
-
-  // ----- Quarter → months filter for the dropdown -----
   const availableMonths = QUARTER_MONTHS[quarter] || [];
 
-  // ----- Client‑side filtering for the table -----
   const filteredKpis = kpis.filter(k => {
     const deptMatch = filterDepartment ? k.department === filterDepartment : true;
     const monthMatch = filterMonth ? k.month === filterMonth : true;
     return deptMatch && monthMatch;
   });
 
-  // ----- Render a single KPI card (unchanged) -----
   const renderKpiCard = (key) => {
     const config = FORMULA_CONFIG[key];
     const isFormula = config.inputs && config.inputs.length > 0;
@@ -439,35 +412,25 @@ export default function SalesEnterpriseDashboard() {
     }
   };
 
-  // ----- Render a category with its KPIs -----
   const renderCategory = (title, keys) => {
     const isEfficiency = title === "⚡ Efficiency KPIs";
-
     return (
       <div key={title} style={{ marginBottom: 20 }}>
         <h3 style={{ margin: "16px 0 8px", color: "#1a202c", fontSize: "1.1rem", borderBottom: "2px solid #e2e8f0", paddingBottom: "4px" }}>
           {title}
         </h3>
-        <div
-          style={{
-            display: isEfficiency ? "grid" : "flex",
-            flexWrap: isEfficiency ? "unset" : "wrap",
-            gridTemplateColumns: isEfficiency ? "repeat(3, 1fr)" : undefined,
-            gap: isEfficiency ? "12px" : "0",
-            alignItems: "stretch"
-          }}
-        >
+        <div style={{
+          display: isEfficiency ? "grid" : "flex",
+          flexWrap: isEfficiency ? "unset" : "wrap",
+          gridTemplateColumns: isEfficiency ? "repeat(3, 1fr)" : undefined,
+          gap: isEfficiency ? "12px" : "0",
+          alignItems: "stretch"
+        }}>
           {keys.map((key) => {
             const card = renderKpiCard(key);
             if (isEfficiency) {
               return React.cloneElement(card, {
-                style: {
-                  ...card.props.style,
-                  width: "100%",
-                  margin: 0,
-                  flex: "none",
-                  minWidth: "unset"
-                }
+                style: { ...card.props.style, width: "100%", margin: 0, flex: "none", minWidth: "unset" }
               });
             }
             return card;
@@ -477,27 +440,15 @@ export default function SalesEnterpriseDashboard() {
     );
   };
 
-  // ----- View Modal -----
   const ViewModal = ({ kpi, onClose }) => {
     if (!kpi) return null;
     return (
       <div style={{
-        position: "fixed",
-        top: 0, left: 0, right: 0, bottom: 0,
-        background: "rgba(0,0,0,0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000
+        position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+        background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000
       }}>
         <div style={{
-          background: "#fff",
-          padding: "24px",
-          borderRadius: "12px",
-          maxWidth: "600px",
-          width: "90%",
-          maxHeight: "80vh",
-          overflowY: "auto"
+          background: "#fff", padding: "24px", borderRadius: "12px", maxWidth: "600px", width: "90%", maxHeight: "80vh", overflowY: "auto"
         }}>
           <h3 style={{ marginTop: 0, borderBottom: "1px solid #e2e8f0", paddingBottom: "8px" }}>
             KPI Details – {kpi.department} ({kpi.quarter} {kpi.year})
@@ -510,9 +461,7 @@ export default function SalesEnterpriseDashboard() {
               </div>
             ))}
           </div>
-          <button className="btn btn-secondary" onClick={onClose} style={{ marginTop: "8px" }}>
-            Close
-          </button>
+          <button className="btn btn-secondary" onClick={onClose} style={{ marginTop: "8px" }}>Close</button>
         </div>
       </div>
     );
@@ -522,135 +471,75 @@ export default function SalesEnterpriseDashboard() {
     <div className="page">
       <Navbar title="Sales Enterprise Portal" roleColor="#f97316" />
       <main className="page-main">
-        {/* Add/Edit Form */}
         <div className="card" style={{ marginBottom: 24 }}>
           <h2>{editing ? "Edit" : "Add"} KPI for Quarter</h2>
           <form onSubmit={handleSubmit}>
             <div className="form-row">
               <div className="form-group">
                 <label>Year</label>
-                <input
-                  type="number"
-                  value={year}
-                  onChange={(e) => setYear(e.target.value)}
-                  className="form-control"
-                  required
-                />
+                <input type="number" value={year} onChange={(e) => setYear(e.target.value)} className="form-control" required />
               </div>
               <div className="form-group">
                 <label>Quarter</label>
-                <select
-                  value={quarter}
-                  onChange={(e) => {
-                    setQuarter(e.target.value);
-                    // Auto‑select the first month of that quarter
-                    const months = QUARTER_MONTHS[e.target.value];
-                    if (months && months.length) {
-                      setMonth(months[0]);
-                    }
-                  }}
-                  className="form-control"
-                  required
-                >
-                  {QUARTERS.map((q) => (
-                    <option key={q} value={q}>{q}</option>
-                  ))}
+                <select value={quarter} onChange={(e) => {
+                  setQuarter(e.target.value);
+                  const months = QUARTER_MONTHS[e.target.value];
+                  if (months && months.length) setMonth(months[0]);
+                }} className="form-control" required>
+                  {QUARTERS.map((q) => (<option key={q} value={q}>{q}</option>))}
                 </select>
               </div>
               <div className="form-group">
                 <label>Department</label>
-                <select
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  className="form-control"
-                  required
-                >
-                  {DEPARTMENTS.map((d) => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
+                <select value={department} onChange={(e) => setDepartment(e.target.value)} className="form-control" required>
+                  {DEPARTMENTS.map((d) => (<option key={d} value={d}>{d}</option>))}
                 </select>
               </div>
               <div className="form-group">
                 <label>Month</label>
-                <select
-                  value={month}
-                  onChange={(e) => setMonth(e.target.value)}
-                  className="form-control"
-                  required
-                >
-                  {availableMonths.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
+                <select value={month} onChange={(e) => setMonth(e.target.value)} className="form-control" required>
+                  {availableMonths.map((m) => (<option key={m} value={m}>{m}</option>))}
                 </select>
               </div>
             </div>
 
-            {/* KPI sections */}
             {editing ? (
               <div className="form-row" style={{ flexWrap: "wrap" }}>
                 {KPI_KEYS.map((key) => renderKpiCard(key))}
               </div>
             ) : (
-              Object.entries(CATEGORIES).map(([title, keys]) =>
-                renderCategory(title, keys)
-              )
+              Object.entries(CATEGORIES).map(([title, keys]) => renderCategory(title, keys))
             )}
 
             <div className="modal-footer" style={{ marginTop: 16 }}>
-              {editing && (
-                <button type="button" className="btn btn-secondary" onClick={cancelEdit}>
-                  Cancel
-                </button>
-              )}
-              <button type="submit" className="btn btn-primary">
-                {editing ? "Update" : "Save"}
-              </button>
+              {editing && (<button type="button" className="btn btn-secondary" onClick={cancelEdit}>Cancel</button>)}
+              <button type="submit" className="btn btn-primary">{editing ? "Update" : "Save"}</button>
             </div>
           </form>
         </div>
 
-        {/* Filter Bar */}
         <div style={{ display: "flex", gap: "16px", alignItems: "center", marginBottom: "16px", flexWrap: "wrap" }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label style={{ marginRight: "6px" }}>Filter by Department:</label>
-            <select
-              value={filterDepartment}
-              onChange={(e) => setFilterDepartment(e.target.value)}
-              className="form-control"
-              style={{ display: "inline-block", width: "auto" }}
-            >
+            <select value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)} className="form-control" style={{ display: "inline-block", width: "auto" }}>
               <option value="">All</option>
-              {DEPARTMENTS.map(d => (
-                <option key={d} value={d}>{d}</option>
-              ))}
+              {DEPARTMENTS.map(d => (<option key={d} value={d}>{d}</option>))}
             </select>
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label style={{ marginRight: "6px" }}>Filter by Month:</label>
-            <select
-              value={filterMonth}
-              onChange={(e) => setFilterMonth(e.target.value)}
-              className="form-control"
-              style={{ display: "inline-block", width: "auto" }}
-            >
+            <select value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="form-control" style={{ display: "inline-block", width: "auto" }}>
               <option value="">All</option>
-              {MONTHS.map(m => (
-                <option key={m} value={m}>{m}</option>
-              ))}
+              {MONTHS.map(m => (<option key={m} value={m}>{m}</option>))}
             </select>
           </div>
           {(filterDepartment || filterMonth) && (
-            <button
-              className="btn btn-secondary"
-              onClick={() => { setFilterDepartment(""); setFilterMonth(""); }}
-              style={{ fontSize: "0.8rem" }}
-            >
+            <button className="btn btn-secondary" onClick={() => { setFilterDepartment(""); setFilterMonth(""); }} style={{ fontSize: "0.8rem" }}>
               Clear Filters
             </button>
           )}
         </div>
 
-        {/* Existing KPIs Table */}
         <h3>Existing KPIs</h3>
         {loading ? (
           <div>Loading...</div>
@@ -659,22 +548,10 @@ export default function SalesEnterpriseDashboard() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Year</th>
-                  <th>Quarter</th>
-                  <th>Department</th>
-                  <th>Month</th>
-                  <th>Rev Growth</th>
-                  <th>Win Rate</th>
-                  <th>Stage Conv</th>
-                  <th>Pipeline Cov</th>
-                  <th>Sales Cycle</th>
-                  <th>CAC</th>
-                  <th>Rep Prod</th>
-                  <th>Ramp</th>
-                  <th>Lead Resp</th>
-                  <th>NRR</th>
-                  <th>Quota Att</th>
-                  <th>Forecast Acc</th>
+                  <th>Year</th><th>Quarter</th><th>Department</th><th>Month</th>
+                  <th>Rev Growth</th><th>Win Rate</th><th>Stage Conv</th><th>Pipeline Cov</th>
+                  <th>Sales Cycle</th><th>CAC</th><th>Rep Prod</th><th>Ramp</th>
+                  <th>Lead Resp</th><th>NRR</th><th>Quota Att</th><th>Forecast Acc</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -713,10 +590,7 @@ export default function SalesEnterpriseDashboard() {
         )}
       </main>
 
-      {/* View Modal */}
-      {viewingKpi && (
-        <ViewModal kpi={viewingKpi} onClose={() => setViewingKpi(null)} />
-      )}
+      {viewingKpi && <ViewModal kpi={viewingKpi} onClose={() => setViewingKpi(null)} />}
     </div>
   );
 }

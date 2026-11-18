@@ -95,11 +95,31 @@ class CopperBookEmployeeEntry(db.Model):
     attachment_mimetype = db.Column(db.String(100), nullable=True)
 
 
-# ✅ NEW MODEL for Monthly Available Cash
+# Monthly Available Cash (manual sync from Staff Portal)
 class CopperBookMonthlyCash(db.Model):
     __tablename__ = "copper_book_monthly_cash"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    month = db.Column(db.String(7), unique=True, nullable=False, index=True) # Format: 'YYYY-MM'
+    month = db.Column(db.String(7), unique=True, nullable=False, index=True)  # 'YYYY-MM'
     available_cash = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# Personal Amount transactions (mirrored from Staff Portal)
+#   txn_type = "given" -> money given to the employee
+#   txn_type = "paid"  -> money paid back / settled by the employee
+class CopperBookPersonalTxn(db.Model):
+    __tablename__ = "copper_book_personal_txns"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # id of the transaction in the Staff Portal (e.g. "pa-123"); makes sync idempotent
+    remote_key = db.Column(db.String(60), unique=True, nullable=True, index=True)
+    employee_id = db.Column(db.Integer, nullable=True, index=True)
+    employee_name = db.Column(db.String(150), nullable=False, index=True)
+    employee_department = db.Column(db.String(100), nullable=True)
+    txn_type = db.Column(db.String(10), nullable=False, default="given")  # given | paid
+    amount = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    txn_date = db.Column(db.Date, nullable=True, index=True)
+    note = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

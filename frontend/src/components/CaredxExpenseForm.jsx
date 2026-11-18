@@ -1,3 +1,4 @@
+// frontend/src/components/CaredxExpenseForm.jsx
 import React, { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import toast from "react-hot-toast";
@@ -15,7 +16,6 @@ const emptyForm = () => ({
   vehicle_type: "",
 });
 
-// Updated category list
 const CATEGORIES = [
   "Salary & Payrolls",
   "Corpus Fund",
@@ -51,7 +51,6 @@ export default function CaredxExpenseForm({ open, onClose, onSaved, editingExpen
 
   if (!open) return null;
 
-  // Categories that must be entered via Corporate Management only
   const isSalaryCategory = form.category === "Salary & Payrolls";
   const isCorpusFund = form.category === "Corpus Fund";
   const isBlockedCategory = isSalaryCategory || isCorpusFund;
@@ -63,7 +62,6 @@ export default function CaredxExpenseForm({ open, onClose, onSaved, editingExpen
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Prevent blocked categories from being submitted here
     if (isBlockedCategory) {
       toast.error(
         isCorpusFund
@@ -73,19 +71,16 @@ export default function CaredxExpenseForm({ open, onClose, onSaved, editingExpen
       return;
     }
 
-    // Validate category
     if (!form.category.trim()) {
       toast.error("Please select an expense category.");
       return;
     }
 
-    // Validate amount
     if (!form.amount || Number(form.amount) <= 0) {
       toast.error("Please enter a valid amount.");
       return;
     }
 
-    // Remarks is mandatory for all editable categories
     if (!form.remarks.trim()) {
       toast.error("Remarks are required.");
       return;
@@ -127,17 +122,22 @@ export default function CaredxExpenseForm({ open, onClose, onSaved, editingExpen
           {/* Date & Amount */}
           <div className="form-row">
             <div className="form-group">
-              <label className="form-label">Date</label>
+              <label className="form-label">
+                Date <span style={{ color: "red" }}>*</span>
+              </label>
               <input
                 type="date"
                 name="expense_date"
                 value={form.expense_date}
                 onChange={handleChange}
                 className="form-control"
+                required
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Amount (₹)</label>
+              <label className="form-label">
+                Amount (₹) <span style={{ color: "red" }}>*</span>
+              </label>
               <input
                 type="number"
                 step="0.01"
@@ -147,18 +147,22 @@ export default function CaredxExpenseForm({ open, onClose, onSaved, editingExpen
                 onChange={handleChange}
                 placeholder="0.00"
                 className="form-control"
+                required
               />
             </div>
           </div>
 
           {/* Category */}
           <div className="form-group">
-            <label className="form-label">Expenses Category</label>
+            <label className="form-label">
+              Expenses Category <span style={{ color: "red" }}>*</span>
+            </label>
             <select
               name="category"
               value={form.category}
               onChange={handleChange}
               className="form-control"
+              required
             >
               <option value="">Select a category</option>
               {CATEGORIES.map((cat) => (
@@ -169,7 +173,7 @@ export default function CaredxExpenseForm({ open, onClose, onSaved, editingExpen
             </select>
           </div>
 
-          {/* Blocked Category Message (Salaries / Corpus Fund) */}
+          {/* Blocked Category Message */}
           {isBlockedCategory && (
             <div
               className="alert alert-info"
@@ -193,48 +197,53 @@ export default function CaredxExpenseForm({ open, onClose, onSaved, editingExpen
             </div>
           )}
 
-          {/* Editable fields – hidden for blocked categories */}
+          {/* Editable fields */}
           {!isBlockedCategory && (
             <>
-              {/* Employee/Person Name (generic) */}
               <div className="form-group">
-                <label className="form-label">Name / Item</label>
+                <label className="form-label">
+                  Employee Name <span style={{ color: "red" }}>*</span>
+                </label>
                 <input
                   name="employee_name"
                   value={form.employee_name}
                   onChange={handleChange}
-                  placeholder="e.g. Employee name, item name, vendor"
+                  placeholder="e.g. Employee name"
                   className="form-control"
+                  required
                 />
               </div>
 
-              {/* Purpose */}
               <div className="form-group">
-                <label className="form-label">Purpose</label>
+                <label className="form-label">
+                  Purpose <span style={{ color: "red" }}>*</span>
+                </label>
                 <input
                   name="purpose"
                   value={form.purpose}
                   onChange={handleChange}
                   placeholder="Brief purpose of this expense"
                   className="form-control"
+                  required
                 />
               </div>
 
-              {/* Vehicle Type – shown only for Travel & Hospitality */}
               {form.category === "Travel & Hospitality" && (
                 <div className="form-group">
-                  <label className="form-label">Transport / Travel Type</label>
+                  <label className="form-label">
+                    Transport / Travel Type <span style={{ color: "red" }}>*</span>
+                  </label>
                   <input
                     name="vehicle_type"
                     value={form.vehicle_type}
                     onChange={handleChange}
                     placeholder="e.g. Car, Bike, Cab, Bus"
                     className="form-control"
+                    required
                   />
                 </div>
               )}
 
-              {/* Remarks – mandatory */}
               <div className="form-group">
                 <label className="form-label">
                   Remarks <span style={{ color: "red" }}>*</span>

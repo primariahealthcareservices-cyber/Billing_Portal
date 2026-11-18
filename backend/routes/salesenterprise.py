@@ -34,20 +34,11 @@ def get_kpis():
 @role_required("SalesEnterprise")
 def create_kpi():
     data = request.get_json(silent=True) or {}
-    # Validate required fields
     if not data.get("year") or not data.get("quarter"):
         return jsonify({"message": "Year and quarter are required."}), 400
-    # Department and month are now required (frontend sends them)
+    
     dept = data.get("department", "IT")
     mon = data.get("month", "January")
-
-    # (Optional) Check duplicate across all four fields – enable if you added the unique constraint
-    # existing = SalesEnterpriseKPI.query.filter_by(
-    #     year=data["year"], quarter=data["quarter"],
-    #     department=dept, month=mon
-    # ).first()
-    # if existing:
-    #     return jsonify({"message": "KPI for this combination already exists."}), 409
 
     kpi = SalesEnterpriseKPI(
         year=data["year"],
@@ -80,12 +71,11 @@ def update_kpi(kpi_id):
         return jsonify({"message": "KPI not found."}), 404
     data = request.get_json(silent=True) or {}
 
-    # Fields that can be updated
     updatable_fields = [
         "revenue_growth", "win_rate", "stage_conversion", "pipeline_coverage",
         "sales_cycle_length", "cac", "rep_productivity", "ramp_time",
         "lead_response_time", "nrr", "quota_attainment", "forecast_accuracy",
-        "department", "month"   # now updatable
+        "department", "month", "year", "quarter"
     ]
     for field in updatable_fields:
         if field in data and data[field] is not None:

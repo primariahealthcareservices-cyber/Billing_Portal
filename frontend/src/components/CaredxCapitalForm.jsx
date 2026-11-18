@@ -208,7 +208,9 @@ export default function CaredxCapitalForm({ open, onClose, onSaved, editingCapit
           </div>
 
           <div className="form-group">
-            <label className="form-label">Remarks</label>
+            <label className="form-label">
+              Remarks <span style={{ color: "red" }}>*</span>
+            </label>
             <textarea
               name="remarks"
               value={form.remarks}
@@ -216,6 +218,7 @@ export default function CaredxCapitalForm({ open, onClose, onSaved, editingCapit
               rows={2}
               placeholder="Optional notes"
               className="form-control"
+              required
             />
           </div>
 

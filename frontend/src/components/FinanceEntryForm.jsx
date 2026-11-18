@@ -66,6 +66,12 @@ const invoiceHref = (entry) => {
   return `${apiOrigin}${entry.invoice_url}${tokenParam}`;
 };
 
+// ✅ NEW: red asterisk used on every mandatory field
+const Star = () => <span style={{ color: "red" }}>*</span>;
+
+// ✅ NEW: set to true if the file upload must also be mandatory
+const REQUIRE_ATTACHMENT = false;
+
 const DEPARTMENTS_CONFIG = [
   { label: "Corporate Management", value: "Corporate" },
   { label: "Office Administration", value: "Adminstrationfunctionalunit" },
@@ -82,7 +88,7 @@ const DEPARTMENTS_CONFIG = [
 const deptLabel = (value) =>
   DEPARTMENTS_CONFIG.find((d) => d.value === value)?.label || value;
 
-// ✅ CHANGED: "Equity Infusion" → "Capital Equity" (now the first/default option)
+// "Equity Infusion" → "Capital Equity" (first/default option)
 const CAPITAL_CATEGORIES = [
   "Capital Equity",
   "Partner Contribution",
@@ -143,6 +149,8 @@ export default function FinanceEntryForm({
   const isCorporate = department === "Corporate";
   const isMedTech = department === "MedTech";
   const isEverglades = department === "Everglades";
+  // CareDx keeps "Product / Item Name"; all other departments use "Employee Name"
+  const isCareDx = apiBase === "caredx";
 
   const salaryCategoryName = options?.is_salary_category || "Salary & Payrolls";
   const ledgerCategoryName = "Ledger";
@@ -221,12 +229,19 @@ export default function FinanceEntryForm({
   const isEditingSalaryEntry =
     isSalaryCategory && !!(editingEntry && editingEntry.id !== undefined && editingEntry.id !== null);
 
-  // ✅ For Corporate + Miscellaneous: suppress the "Name / Item" field
   const baseCategoryConfig = STANDARD_CATEGORY_FIELDS[form.category] || null;
-  const categoryFieldConfig =
-    (isCorporate && form.category === "Miscellaneous" && baseCategoryConfig)
-      ? { ...baseCategoryConfig, showEmployeeName: false }
-      : baseCategoryConfig;
+
+  let categoryFieldConfig = baseCategoryConfig;
+
+  // Corporate + Miscellaneous: hide the "Name / Item" field
+  if (isCorporate && form.category === "Miscellaneous" && baseCategoryConfig) {
+    categoryFieldConfig = { ...baseCategoryConfig, showEmployeeName: false };
+  }
+
+  // Products & Innovation → "Employee Name" in every department except CareDx
+  if (form.category === "Products & Innovation" && !isCareDx && baseCategoryConfig) {
+    categoryFieldConfig = { ...baseCategoryConfig, labelName: "Employee Name" };
+  }
 
   const showCategoryFields =
     !isCapital &&
@@ -235,6 +250,13 @@ export default function FinanceEntryForm({
     !isLedger &&
     !isSalaryCategory &&
     categoryFieldConfig;
+
+  // ✅ NEW: GST Tax % / Tax Invoice No. are only on screen in the standard form
+  //    and in the MedTech items form (not in the category-driven form).
+  const showGstTaxField =
+    !!options?.show_gst_tax && (requireItemsForCategory || !showCategoryFields);
+  const showTaxInvoiceField =
+    !!options?.show_tax_invoice_number && (requireItemsForCategory || !showCategoryFields);
 
   const corpusDepartments = (
     options?.corpus_fund_departments ||
@@ -470,9 +492,9 @@ export default function FinanceEntryForm({
 
   if (!open || !options) return null;
 
-  // ✅ Category options: for Capital, use local CAPITAL_CATEGORIES
-  //    (with a legacy fallback so existing "Equity Infusion" entries still
-  //    display when edited).
+  // Category options: for Capital, use local CAPITAL_CATEGORIES
+  // (with a legacy fallback so existing "Equity Infusion" entries still
+  // display when edited).
   const categoryOptionsForType = form.entry_type === "Capital"
     ? (
         isEditingExisting &&
@@ -484,7 +506,6 @@ export default function FinanceEntryForm({
     : (options?.categories?.[form.entry_type] || []);
 
   const revenueTypes = options?.revenue_types || [];
-  const gstRequired = (options?.gst_required_categories || []).includes(form.category);
 
   const handleTypeChange = (event) => {
     const newType = event.target.value;
@@ -515,7 +536,6 @@ export default function FinanceEntryForm({
       setForm((prev) => ({
         ...prev,
         entry_type: "Capital",
-        // ✅ Now defaults to "Capital Equity"
         category: DEFAULT_CAPITAL_CATEGORY,
         sub_category: "Capital",
         client_name: "",
@@ -671,11 +691,19 @@ export default function FinanceEntryForm({
     return form.payment_type;
   };
 
+  // ✅ NEW: only matters when REQUIRE_ATTACHMENT is true
+  const attachmentMissing = () =>
+    REQUIRE_ATTACHMENT &&
+    !invoiceFile &&
+    !(editingEntry && editingEntry.invoice_url && !removeInvoice);
+
   const renderInvoiceField = () => {
     if (!showInvoiceField) return null;
     return (
       <div className="form-group">
-        <label className="form-label">Upload File (optional)</label>
+        <label className="form-label">
+          Upload File {REQUIRE_ATTACHMENT ? <Star /> : "(optional)"}
+        </label>
         {editingEntry && editingEntry.invoice_url && !removeInvoice && (
           <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
             <a href={invoiceHref(editingEntry)} target="_blank" rel="noreferrer"
@@ -707,7 +735,7 @@ export default function FinanceEntryForm({
   const renderPaymentTypeField = (required = true) => (
     <div className="form-group">
       <label className="form-label">
-        Payment Type {required && <span style={{ color: "red" }}>*</span>}
+        Payment Type {required && <Star />}
       </label>
       <select
         name="payment_type"
@@ -747,6 +775,7 @@ export default function FinanceEntryForm({
     if (form.payment_type === "Others" && !customPaymentType.trim()) {
       toast.error("Please enter the custom payment type."); return;
     }
+    if (!form.remarks.trim()) { toast.error("Remarks are required."); return; }
 
     setSaving(true);
     try {
@@ -760,7 +789,7 @@ export default function FinanceEntryForm({
         amount,
         payment_type: getFinalPaymentType(),
         purpose: form.purpose.trim(),
-        remarks: form.remarks || "",
+        remarks: form.remarks.trim(),
         entry_date: form.entry_date,
       };
       const url = `/${apiBase}/entries`;
@@ -786,6 +815,8 @@ export default function FinanceEntryForm({
 
     if (isEditingExisting) {
       if (!form.exec_department) { toast.error("Select a department."); return; }
+      if (!form.client_name.trim()) { toast.error("Client name is required."); return; }
+      if (!(form.generated_by || "").trim()) { toast.error("Employee name is required."); return; }
       if (!form.purpose.trim()) { toast.error("Purpose is required."); return; }
       const amount = Number(form.amount);
       if (!Number.isFinite(amount) || amount <= 0) { toast.error("Enter a valid amount."); return; }
@@ -793,6 +824,7 @@ export default function FinanceEntryForm({
       if (form.payment_type === "Others" && !customPaymentType.trim()) {
         toast.error("Please enter the custom payment type."); return;
       }
+      if (!form.remarks.trim()) { toast.error("Remarks are required."); return; }
 
       setSaving(true);
       try {
@@ -801,13 +833,13 @@ export default function FinanceEntryForm({
           entry_type: isCorpusFundExpense ? "Expenses" : CORPUS_FUND,
           category: CORPUS_FUND,
           exec_department: form.exec_department,
-          client_name: form.client_name || "",
+          client_name: form.client_name.trim(),
           generated_by: empNameValue,
           employee_name: empNameValue,
           amount,
           payment_type: getFinalPaymentType(),
           purpose: form.purpose.trim(),
-          remarks: form.remarks || "",
+          remarks: form.remarks.trim(),
           entry_date: form.entry_date,
         };
         await api.put(`${url}/${editingEntry.id}`, body);
@@ -832,10 +864,13 @@ export default function FinanceEntryForm({
       if (!Number.isFinite(amt) || amt <= 0) { toast.error(`Row ${n}: enter a valid amount.`); return; }
       if (!row.purpose.trim()) { toast.error(`Row ${n}: purpose is required.`); return; }
     }
+    if (!form.client_name.trim()) { toast.error("Client name is required."); return; }
+    if (!(form.generated_by || "").trim()) { toast.error("Employee name is required."); return; }
     if (!form.payment_type) { toast.error("Select a payment type."); return; }
     if (form.payment_type === "Others" && !customPaymentType.trim()) {
       toast.error("Please enter the custom payment type."); return;
     }
+    if (!form.remarks.trim()) { toast.error("Remarks are required."); return; }
 
     setSaving(true);
     try {
@@ -844,10 +879,10 @@ export default function FinanceEntryForm({
         entry_type: "Expenses",
         category: CORPUS_FUND,
         entry_date: form.entry_date,
-        client_name: form.client_name || "",
+        client_name: form.client_name.trim(),
         generated_by: empNameValue,
         employee_name: empNameValue,
-        remarks: form.remarks || "",
+        remarks: form.remarks.trim(),
         payment_type: getFinalPaymentType(),
         entries: corpusRows.map((row) => ({
           exec_department: row.exec_department,
@@ -893,20 +928,28 @@ export default function FinanceEntryForm({
     if (isLedger) {
       if (!ledgerCustomer.trim()) { toast.error("Customer name is required."); return; }
       const isEditingLedger = editingEntry && editingEntry._type === "ledger";
+      if (!isEditingLedger && String(ledgerNewAmount).trim() === "") {
+        toast.error("New amount is required (enter 0 to record only a payment)."); return;
+      }
       let totalAmount;
       if (isEditingLedger) totalAmount = ledgerTotalAmount;
       else {
         const newAmt = parseFloat(ledgerNewAmount) || 0;
         totalAmount = ledgerOutstanding + newAmt;
       }
+      if (String(ledgerPaid).trim() === "") {
+        toast.error("Paid amount is required (enter 0 if nothing was paid)."); return;
+      }
       if (totalAmount <= 0) { toast.error("Total amount must be > 0."); return; }
       const paid = parseFloat(ledgerPaid) || 0;
-      if (paid > 0 && !form.payment_type) {
-        toast.error("Select a payment type for the paid amount."); return;
+      if (!form.payment_type) {
+        toast.error("Select a payment type."); return;
       }
-      if (paid > 0 && form.payment_type === "Others" && !customPaymentType.trim()) {
+      if (form.payment_type === "Others" && !customPaymentType.trim()) {
         toast.error("Please enter the custom payment type."); return;
       }
+      if (!form.remarks.trim()) { toast.error("Remarks are required."); return; }
+      if (attachmentMissing()) { toast.error("Please upload the invoice / attachment."); return; }
 
       setSaving(true);
       try {
@@ -967,11 +1010,23 @@ export default function FinanceEntryForm({
       for (const emp of employees) {
         if (!emp.exec_department) { toast.error("Select a department for all employees."); valid = false; break; }
         if (!emp.employee_name.trim()) { toast.error("Enter employee name."); valid = false; break; }
+        if (!(emp.generated_by || "").trim()) {
+          toast.error(`Enter "Generated By" for ${emp.employee_name}.`); valid = false; break;
+        }
+        if (String(emp.salary_amount).trim() === "") {
+          toast.error(`Enter Salary for ${emp.employee_name} (0 if none).`); valid = false; break;
+        }
+        if (String(emp.allowance_amount).trim() === "") {
+          toast.error(`Enter TADA for ${emp.employee_name} (0 if none).`); valid = false; break;
+        }
         const sal = parseFloat(emp.salary_amount) || 0;
         const allow = parseFloat(emp.allowance_amount) || 0;
         if (sal <= 0 && allow <= 0) {
           toast.error(`For ${emp.employee_name || "employee"}, at least one of Salary or TADA must be > 0.`);
           valid = false; break;
+        }
+        if (!(emp.remarks || "").trim()) {
+          toast.error(`Enter remarks for ${emp.employee_name}.`); valid = false; break;
         }
       }
       if (!valid) return;
@@ -982,6 +1037,7 @@ export default function FinanceEntryForm({
       return submitSalaryEntries();
     }
 
+    // ---- Category-driven form: every visible field is mandatory ----
     if (showCategoryFields) {
       if (categoryFieldConfig.showEmployeeName && !form.employee_name.trim()) {
         toast.error(`Please enter ${categoryFieldConfig.labelName || "name"}.`); return;
@@ -989,33 +1045,67 @@ export default function FinanceEntryForm({
       if (categoryFieldConfig.showVehicleType && !form.vehicle_type.trim()) {
         toast.error(`Please enter ${categoryFieldConfig.labelVehicle || "vehicle type"}.`); return;
       }
-      if (categoryFieldConfig.showPurpose && !form.remarks.trim()) {
+      if (categoryFieldConfig.showPurpose && !form.purpose.trim()) {
         toast.error("Please enter the purpose."); return;
+      }
+      if (!form.remarks.trim()) {
+        toast.error("Please enter the remarks."); return;
       }
     }
 
-    if (!showCategoryFields && !isSalaryCategory && !isLedger) {
-      if (options.show_generated_by && !form.generated_by.trim()) {
-        toast.error("Please enter the employee name (Generated By)."); return;
-      }
+    // ---- Fields shared by the category-driven and standard forms ----
+    if (options.show_client_name && !form.client_name.trim()) {
+      toast.error("Please enter the client name."); return;
+    }
+    if (options.show_gst_number && !form.gst_number.trim()) {
+      toast.error("Please enter the GST Number."); return;
+    }
+    if (options.show_generated_by && !form.generated_by.trim()) {
+      toast.error("Please enter the employee name (Generated By)."); return;
+    }
+    if (options.show_revenue_type && !form.revenue_type) {
+      toast.error("Please select the revenue type."); return;
+    }
+
+    // ---- Standard (non-category) form only ----
+    if (!showCategoryFields) {
       if (options.show_patient_fields && !form.patient_name.trim()) {
         toast.error("Please enter the patient name."); return;
       }
+      if (options.show_patient_fields && !form.patient_place.trim()) {
+        toast.error("Please enter the patient place."); return;
+      }
+      if (!form.remarks.trim()) {
+        toast.error("Please enter the remarks."); return;
+      }
     }
-    if (options.show_gst_number && gstRequired && !form.gst_number.trim()) {
-      toast.error(`GST Number is required for ${form.category} entries.`); return;
+
+    // ---- GST tax / tax invoice (standard + MedTech items forms) ----
+    if (showGstTaxField && String(form.gst_tax_percent).trim() === "") {
+      toast.error("Please enter the GST Tax (%)."); return;
+    }
+    if (showTaxInvoiceField && !form.tax_invoice_number.trim()) {
+      toast.error("Please enter the Tax Invoice Number."); return;
     }
 
     let cleanItems = [];
     if (requireItemsForCategory) {
+      for (let i = 0; i < items.length; i += 1) {
+        const it = items[i];
+        const n = i + 1;
+        if (!it.item_name.trim()) { toast.error(`Item ${n}: enter the item name.`); return; }
+        const qty = Number(it.quantity);
+        if (!Number.isFinite(qty) || qty <= 0) { toast.error(`Item ${n}: enter a valid quantity.`); return; }
+        const price = Number(it.unit_price);
+        if (String(it.unit_price).trim() === "" || !Number.isFinite(price) || price <= 0) {
+          toast.error(`Item ${n}: enter a valid unit price.`); return;
+        }
+      }
       cleanItems = items.map((item) => ({
         item_name: item.item_name.trim(),
         quantity: Number(item.quantity),
         unit_price: Number(item.unit_price),
-      })).filter((item) => item.item_name);
-      if (cleanItems.length === 0) {
-        toast.error("Add at least one item."); return;
-      }
+      }));
     } else {
       const amount = Number(form.amount);
       if (!Number.isFinite(amount) || amount <= 0) {
@@ -1026,6 +1116,9 @@ export default function FinanceEntryForm({
     if (!form.payment_type) { toast.error("Please select a payment type."); return; }
     if (form.payment_type === "Others" && !customPaymentType.trim()) {
       toast.error("Please enter the custom payment type."); return;
+    }
+    if (showInvoiceField && attachmentMissing()) {
+      toast.error("Please upload the file."); return;
     }
 
     submitSingleEntry(cleanItems);
@@ -1192,33 +1285,33 @@ export default function FinanceEntryForm({
   const renderCapitalFields = () => (
     <>
       <div className="form-group">
-        <label className="form-label">Name <span style={{ color: "red" }}>*</span></label>
+        <label className="form-label">Name <Star /></label>
         <input name="client_name" value={form.client_name || ""} onChange={handleChange}
                placeholder="Enter name of person, organization, or source"
                className="form-control" required />
       </div>
       <div className="form-row">
         <div className="form-group">
-          <label className="form-label">Amount (₹) <span style={{ color: "red" }}>*</span></label>
+          <label className="form-label">Amount (₹) <Star /></label>
           <input type="number" step="0.01" min="0" name="amount" value={form.amount}
                  onChange={handleChange} placeholder="0.00" className="form-control" required />
         </div>
         <div className="form-group">
-          <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
+          <label className="form-label">Date <Star /></label>
           <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
                  className="form-control" required />
         </div>
         {renderPaymentTypeField(true)}
       </div>
       <div className="form-group">
-        <label className="form-label">Purpose <span style={{ color: "red" }}>*</span></label>
+        <label className="form-label">Purpose <Star /></label>
         <textarea name="purpose" value={form.purpose || ""} onChange={handleChange} rows={3}
                   placeholder="Reason or purpose" className="form-control" required />
       </div>
       <div className="form-group">
-        <label className="form-label">Remarks</label>
+        <label className="form-label">Remarks <Star /></label>
         <textarea name="remarks" value={form.remarks} onChange={handleChange} rows={2}
-                  placeholder="Optional notes" className="form-control" />
+                  placeholder="Remarks (required)" className="form-control" required />
       </div>
     </>
   );
@@ -1237,7 +1330,7 @@ export default function FinanceEntryForm({
         <>
           <div className="form-group">
             <label className="form-label">
-              Department <span style={{ color: "red" }}>*</span>
+              Department <Star />
             </label>
             <select name="exec_department" value={form.exec_department || ""}
                     onChange={handleChange} className="form-control" required>
@@ -1255,25 +1348,25 @@ export default function FinanceEntryForm({
 
           <div className="form-row">
             <div className="form-group">
-              <label className="form-label">Client Name</label>
+              <label className="form-label">Client Name <Star /></label>
               <input name="client_name" value={form.client_name || ""} onChange={handleChange}
-                     placeholder="Enter the client name" className="form-control" />
+                     placeholder="Enter the client name" className="form-control" required />
             </div>
             <div className="form-group">
-              <label className="form-label">Employee Name</label>
+              <label className="form-label">Employee Name <Star /></label>
               <input name="generated_by" value={form.generated_by || ""} onChange={handleChange}
-                     placeholder="Enter employee name" className="form-control" />
+                     placeholder="Enter employee name" className="form-control" required />
             </div>
           </div>
 
           <div className="form-row">
             <div className="form-group">
-              <label className="form-label">Amount (₹) <span style={{ color: "red" }}>*</span></label>
+              <label className="form-label">Amount (₹) <Star /></label>
               <input type="number" step="0.01" min="0" name="amount" value={form.amount}
                      onChange={handleChange} placeholder="0.00" className="form-control" required />
             </div>
             <div className="form-group">
-              <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
+              <label className="form-label">Date <Star /></label>
               <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
                      className="form-control" required />
             </div>
@@ -1281,16 +1374,16 @@ export default function FinanceEntryForm({
           </div>
 
           <div className="form-group">
-            <label className="form-label">Purpose <span style={{ color: "red" }}>*</span></label>
+            <label className="form-label">Purpose <Star /></label>
             <input name="purpose" value={form.purpose || ""} onChange={handleChange}
                    placeholder="e.g. Corpus allocation for R&D expansion"
                    className="form-control" required />
           </div>
 
           <div className="form-group">
-            <label className="form-label">Remarks</label>
+            <label className="form-label">Remarks <Star /></label>
             <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={2}
-                      placeholder="Optional notes" className="form-control" />
+                      placeholder="Remarks (required)" className="form-control" required />
           </div>
         </>
       );
@@ -1308,11 +1401,11 @@ export default function FinanceEntryForm({
               <div className="form-row">
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">
-                    Department <span style={{ color: "red" }}>*</span>
+                    Department <Star />
                   </label>
                   <select value={row.exec_department}
                           onChange={(e) => handleCorpusRowChange(row._key, "exec_department", e.target.value)}
-                          className="form-control">
+                          className="form-control" required>
                     <option value="">Select Department</option>
                     {corpusDepartments.map((key) => (
                       <option key={key} value={key}>{deptLabel(key)}</option>
@@ -1321,22 +1414,22 @@ export default function FinanceEntryForm({
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">
-                    Amount (₹) <span style={{ color: "red" }}>*</span>
+                    Amount (₹) <Star />
                   </label>
                   <input type="number" step="0.01" min="0" value={row.amount}
                          onChange={(e) => handleCorpusRowChange(row._key, "amount", e.target.value)}
-                         placeholder="0.00" className="form-control" />
+                         placeholder="0.00" className="form-control" required />
                 </div>
               </div>
 
               <div className="form-group">
                 <label className="form-label">
-                  Purpose <span style={{ color: "red" }}>*</span>
+                  Purpose <Star />
                 </label>
                 <input value={row.purpose}
                        onChange={(e) => handleCorpusRowChange(row._key, "purpose", e.target.value)}
                        placeholder="e.g. Corpus allocation for R&D expansion"
-                       className="form-control" />
+                       className="form-control" required />
               </div>
 
               {row.exec_department && (
@@ -1369,20 +1462,20 @@ export default function FinanceEntryForm({
 
         <div className="form-row">
           <div className="form-group">
-            <label className="form-label">Client Name</label>
+            <label className="form-label">Client Name <Star /></label>
             <input name="client_name" value={form.client_name || ""} onChange={handleChange}
-                   placeholder="Enter the client name" className="form-control" />
+                   placeholder="Enter the client name" className="form-control" required />
           </div>
           <div className="form-group">
-            <label className="form-label">Employee Name</label>
+            <label className="form-label">Employee Name <Star /></label>
             <input name="generated_by" value={form.generated_by || ""} onChange={handleChange}
-                   placeholder="Enter employee name" className="form-control" />
+                   placeholder="Enter employee name" className="form-control" required />
           </div>
         </div>
 
         <div className="form-row">
           <div className="form-group">
-            <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
+            <label className="form-label">Date <Star /></label>
             <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange}
                    className="form-control" required />
           </div>
@@ -1390,9 +1483,9 @@ export default function FinanceEntryForm({
         </div>
 
         <div className="form-group">
-          <label className="form-label">Remarks</label>
+          <label className="form-label">Remarks <Star /></label>
           <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={2}
-                    placeholder="Optional notes (applies to all rows)" className="form-control" />
+                    placeholder="Remarks (applies to all rows, required)" className="form-control" required />
         </div>
       </>
     );
@@ -1404,17 +1497,15 @@ export default function FinanceEntryForm({
       {options.show_client_name && (
         <div className="form-row">
           <div className="form-group">
-            <label className="form-label">Client Name</label>
+            <label className="form-label">Client Name <Star /></label>
             <input name="client_name" value={form.client_name} onChange={handleChange}
-                   placeholder="Enter the client name" className="form-control" />
+                   placeholder="Enter the client name" className="form-control" required />
           </div>
           {options.show_gst_number && (
             <div className="form-group">
-              <label className="form-label">
-                GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}
-              </label>
+              <label className="form-label">GST Number <Star /></label>
               <input name="gst_number" value={form.gst_number} onChange={handleChange}
-                     placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
+                     placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" required />
             </div>
           )}
         </div>
@@ -1424,18 +1515,18 @@ export default function FinanceEntryForm({
         <div className="form-row">
           {options.show_gst_tax && (
             <div className="form-group">
-              <label className="form-label">GST Tax (%)</label>
+              <label className="form-label">GST Tax (%) <Star /></label>
               <input type="number" min="0" max="100" step="0.01" name="gst_tax_percent"
                      value={form.gst_tax_percent} onChange={handleChange}
-                     placeholder="e.g. 18" className="form-control" />
+                     placeholder="e.g. 18" className="form-control" required />
             </div>
           )}
           {options.show_tax_invoice_number && (
             <div className="form-group">
-              <label className="form-label">Tax Invoice Number</label>
+              <label className="form-label">Tax Invoice Number <Star /></label>
               <input name="tax_invoice_number" value={form.tax_invoice_number}
                      onChange={handleChange} placeholder="e.g. INV-2026-0142"
-                     className="form-control" />
+                     className="form-control" required />
             </div>
           )}
         </div>
@@ -1444,14 +1535,14 @@ export default function FinanceEntryForm({
       {options.show_patient_fields && (
         <div className="form-row">
           <div className="form-group">
-            <label className="form-label">Patient Name</label>
+            <label className="form-label">Patient Name <Star /></label>
             <input name="patient_name" value={form.patient_name} onChange={handleChange}
-                   placeholder="e.g. Ramesh Kumar" className="form-control" />
+                   placeholder="e.g. Ramesh Kumar" className="form-control" required />
           </div>
           <div className="form-group">
-            <label className="form-label">Patient Place</label>
+            <label className="form-label">Patient Place <Star /></label>
             <input name="patient_place" value={form.patient_place} onChange={handleChange}
-                   placeholder="e.g. Guntur" className="form-control" />
+                   placeholder="e.g. Guntur" className="form-control" required />
           </div>
         </div>
       )}
@@ -1460,16 +1551,16 @@ export default function FinanceEntryForm({
         <div className="form-row">
           {options.show_generated_by && (
             <div className="form-group">
-              <label className="form-label">Generated By</label>
+              <label className="form-label">Generated By <Star /></label>
               <input name="generated_by" value={form.generated_by} onChange={handleChange}
-                     placeholder="e.g. John Mathew" className="form-control" />
+                     placeholder="e.g. John Mathew" className="form-control" required />
             </div>
           )}
           {options.show_revenue_type && (
             <div className="form-group">
-              <label className="form-label">Revenue Type</label>
+              <label className="form-label">Revenue Type <Star /></label>
               <select name="revenue_type" value={form.revenue_type}
-                      onChange={handleChange} className="form-control">
+                      onChange={handleChange} className="form-control" required>
                 {revenueTypes.map((rt) => (<option key={rt} value={rt}>{rt}</option>))}
               </select>
             </div>
@@ -1477,12 +1568,21 @@ export default function FinanceEntryForm({
         </div>
       )}
 
+      {/* GST number when there is no client-name column to sit beside */}
+      {options.show_gst_number && !options.show_client_name && (
+        <div className="form-group">
+          <label className="form-label">GST Number <Star /></label>
+          <input name="gst_number" value={form.gst_number} onChange={handleChange}
+                 placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" required />
+        </div>
+      )}
+
       {renderInvoiceField()}
 
       <div className="form-group">
-        <label className="form-label">Remarks</label>
+        <label className="form-label">Remarks <Star /></label>
         <textarea name="remarks" value={form.remarks} onChange={handleChange} rows={3}
-                  placeholder="Optional notes about this entry" className="form-control" />
+                  placeholder="Notes about this entry (required)" className="form-control" required />
       </div>
     </>
   );
@@ -1495,53 +1595,49 @@ export default function FinanceEntryForm({
       <>
         {config.showEmployeeName && (
           <div className="form-group">
-            <label className="form-label">{config.labelName || "Name"} <span style={{ color: "red" }}>*</span></label>
+            <label className="form-label">{config.labelName || "Name"} <Star /></label>
             <input name="employee_name" value={form.employee_name || ""} onChange={handleChange}
-                   placeholder={`Enter ${config.labelName || "name"}`} className="form-control" />
+                   placeholder={`Enter ${config.labelName || "name"}`} className="form-control" required />
           </div>
         )}
         {config.showVehicleType && (
           <div className="form-group">
-            <label className="form-label">{config.labelVehicle || "Vehicle Type"} <span style={{ color: "red" }}>*</span></label>
+            <label className="form-label">{config.labelVehicle || "Vehicle Type"} <Star /></label>
             <input name="vehicle_type" value={form.vehicle_type || ""} onChange={handleChange}
-                   placeholder="e.g. Car, Bike, Cab" className="form-control" />
+                   placeholder="e.g. Car, Bike, Cab" className="form-control" required />
           </div>
         )}
 
         <div className="form-row">
           {options.show_client_name && (
             <div className="form-group">
-              <label className="form-label">Client Name</label>
+              <label className="form-label">Client Name <Star /></label>
               <input name="client_name" value={form.client_name || ""} onChange={handleChange}
-                     placeholder="Enter the client name" className="form-control" />
+                     placeholder="Enter the client name" className="form-control" required />
             </div>
           )}
           {options.show_gst_number && (
             <div className="form-group">
-              <label className="form-label">
-                GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}
-              </label>
+              <label className="form-label">GST Number <Star /></label>
               <input name="gst_number" value={form.gst_number || ""} onChange={handleChange}
-                     placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
+                     placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" required />
             </div>
           )}
         </div>
 
         {options.show_generated_by && (
           <div className="form-group">
-            <label className="form-label">
-              Generated By {form.entry_type === "Income" && <span style={{ color: "red" }}>*</span>}
-            </label>
+            <label className="form-label">Generated By <Star /></label>
             <input name="generated_by" value={form.generated_by || ""} onChange={handleChange}
-                   placeholder="Enter employee name" className="form-control" />
+                   placeholder="Enter employee name" className="form-control" required />
           </div>
         )}
 
         {options.show_revenue_type && (
           <div className="form-group">
-            <label className="form-label">Revenue Type</label>
+            <label className="form-label">Revenue Type <Star /></label>
             <select name="revenue_type" value={form.revenue_type} onChange={handleChange}
-                    className="form-control">
+                    className="form-control" required>
               {revenueTypes.map((rt) => (<option key={rt} value={rt}>{rt}</option>))}
             </select>
           </div>
@@ -1549,14 +1645,14 @@ export default function FinanceEntryForm({
 
         {config.showPurpose && (
           <div className="form-group">
-            <label className="form-label">Purpose <span style={{ color: "red" }}>*</span></label>
+            <label className="form-label">Purpose <Star /></label>
             <input name="purpose" value={form.purpose || ""} onChange={handleChange}
-                   placeholder="Brief purpose" className="form-control" />
+                   placeholder="Brief purpose" className="form-control" required />
           </div>
         )}
 
         <div className="form-group">
-          <label className="form-label">Remarks <span style={{ color: "red" }}>*</span></label>
+          <label className="form-label">Remarks <Star /></label>
           <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3}
                     placeholder="Detailed remarks (required)" className="form-control" required />
         </div>
@@ -1589,7 +1685,7 @@ export default function FinanceEntryForm({
     return (
       <>
         <div className="form-group">
-          <label className="form-label">Customer Name</label>
+          <label className="form-label">Customer Name <Star /></label>
           <input type="text" value={ledgerCustomer}
                  onChange={(e) => setLedgerCustomer(e.target.value)}
                  placeholder="Enter customer name" className="form-control" required />
@@ -1636,7 +1732,9 @@ export default function FinanceEntryForm({
 
         <div className="form-row">
           <div className="form-group">
-            <label className="form-label">{isEditingLedger ? "Total Amount (₹)" : "New Amount to Add (₹)"}</label>
+            <label className="form-label">
+              {isEditingLedger ? "Total Amount (₹)" : "New Amount to Add (₹)"} <Star />
+            </label>
             <input type="number" step="0.01" min="0"
                    value={isEditingLedger ? ledgerTotalAmount : ledgerNewAmount}
                    onChange={(e) => {
@@ -1652,20 +1750,20 @@ export default function FinanceEntryForm({
                    placeholder="0.00" className="form-control" required />
           </div>
           <div className="form-group">
-            <label className="form-label">Paid (₹)</label>
+            <label className="form-label">Paid (₹) <Star /></label>
             <input type="number" step="0.01" min="0" value={ledgerPaid}
                    onChange={(e) => {
                      const paid = parseFloat(e.target.value) || 0;
                      setLedgerPaid(e.target.value);
                      if (isEditingLedger) setLedgerBalance(ledgerTotalAmount - paid);
                      else {
-                       const total = ledgerOutstanding + parseFloat(ledgerNewAmount) || 0;
+                       const total = ledgerOutstanding + (parseFloat(ledgerNewAmount) || 0);
                        setLedgerBalance(total - paid);
                      }
                    }}
-                   placeholder="0.00" className="form-control" />
+                   placeholder="0.00" className="form-control" required />
           </div>
-          {renderPaymentTypeField(false)}
+          {renderPaymentTypeField(true)}
         </div>
 
         {!isEditingLedger && (
@@ -1683,19 +1781,21 @@ export default function FinanceEntryForm({
         </div>
 
         <div className="form-group">
-          <label className="form-label">Date</label>
+          <label className="form-label">Date <Star /></label>
           <input type="date" name="entry_date" value={form.entry_date}
                  onChange={handleChange} className="form-control" required />
         </div>
 
         <div className="form-group">
-          <label className="form-label">Remarks</label>
+          <label className="form-label">Remarks <Star /></label>
           <textarea name="remarks" value={form.remarks} onChange={handleChange} rows={2}
-                    placeholder="Optional notes" className="form-control" />
+                    placeholder="Remarks (required)" className="form-control" required />
         </div>
 
         <div className="form-group">
-          <label className="form-label">Invoice / Attachment (optional)</label>
+          <label className="form-label">
+            Invoice / Attachment {REQUIRE_ATTACHMENT ? <Star /> : "(optional)"}
+          </label>
           {isEditingLedger && editingEntry.invoice_url && !removeInvoice && (
             <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
               <a href={invoiceHref(editingEntry)} target="_blank" rel="noreferrer"
@@ -1723,6 +1823,7 @@ export default function FinanceEntryForm({
           <p style={{ fontSize: "0.9rem" }}>
             <strong>Note:</strong> To add new amount, enter the amount in "New Amount to Add".
             To record a payment, set "New Amount" to 0 and enter the paid amount.
+            Enter 0 in "Paid" if nothing has been paid yet.
           </p>
         </div>
       </>
@@ -1748,9 +1849,9 @@ export default function FinanceEntryForm({
 
           <div className="form-row">
             <div className="form-group">
-              <label className="form-label">Type</label>
+              <label className="form-label">Type <Star /></label>
               <select name="entry_type" value={form.entry_type} onChange={handleTypeChange}
-                      className="form-control">
+                      className="form-control" required>
                 {(options.entry_types || [])
                   .filter((type) => isCorporate || type !== "Capital")
                   .map((type) => (
@@ -1758,16 +1859,14 @@ export default function FinanceEntryForm({
                   ))}
               </select>
             </div>
-            {/* ✅ Category dropdown now shown for Capital too (Corporate-only),
-                   using local CAPITAL_CATEGORIES with a legacy fallback */}
             {!isLegacyCorpusType && (
               <div className="form-group">
-                <label className="form-label">Category</label>
+                <label className="form-label">Category <Star /></label>
                 {form.entry_type === "Ledger" ? (
                   <input value="Ledger" disabled className="form-control" />
                 ) : (
                   <select name="category" value={form.category} onChange={handleCategoryChange}
-                          className="form-control"
+                          className="form-control" required
                           disabled={isEditingExisting && isCorpusFundExpense && isCorporate}>
                     {categoryOptionsForType.map((cat) => (
                       <option key={cat} value={cat}>{cat}</option>
@@ -1803,7 +1902,7 @@ export default function FinanceEntryForm({
 
           {!isCapital && !isCorpusFundType && !isCorpusFundRestricted && requireItemsForCategory && (
             <div className="form-group">
-              <label className="form-label">Items</label>
+              <label className="form-label">Items <Star /></label>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {items.map((item) => {
                   const lineTotal = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
@@ -1813,13 +1912,13 @@ export default function FinanceEntryForm({
                                   gap: 8, alignItems: "center" }}>
                       <input value={item.item_name}
                              onChange={(e) => handleItemChange(item._key, "item_name", e.target.value)}
-                             placeholder="Item name" className="form-control" />
+                             placeholder="Item name *" className="form-control" required />
                       <input type="number" min="0" step="0.01" value={item.quantity}
                              onChange={(e) => handleItemChange(item._key, "quantity", e.target.value)}
-                             placeholder="Qty" className="form-control" />
+                             placeholder="Qty *" className="form-control" required />
                       <input type="number" min="0" step="0.01" value={item.unit_price}
                              onChange={(e) => handleItemChange(item._key, "unit_price", e.target.value)}
-                             placeholder="Unit price" className="form-control" />
+                             placeholder="Unit price *" className="form-control" required />
                       <span style={{ textAlign: "right", fontWeight: 600, fontSize: 13 }}>
                         {formatCurrency(lineTotal)}
                       </span>
@@ -1839,12 +1938,12 @@ export default function FinanceEntryForm({
 
               <div className="form-row" style={{ marginTop: 12 }}>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
+                  <label className="form-label">Date <Star /></label>
                   <input type="date" name="entry_date" value={form.entry_date}
                          onChange={handleChange} className="form-control" required />
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">Payment Type <span style={{ color: "red" }}>*</span></label>
+                  <label className="form-label">Payment Type <Star /></label>
                   <select name="payment_type" value={form.payment_type || ""}
                           onChange={handleChange} className="form-control" required>
                     <option value="">Select payment type</option>
@@ -1866,29 +1965,27 @@ export default function FinanceEntryForm({
                 </div>
                 {options.show_gst_tax && (
                   <div className="form-group" style={{ flex: 1 }}>
-                    <label className="form-label">GST Tax (%)</label>
+                    <label className="form-label">GST Tax (%) <Star /></label>
                     <input type="number" min="0" max="100" step="0.01" name="gst_tax_percent"
                            value={form.gst_tax_percent} onChange={handleChange}
-                           placeholder="e.g. 18" className="form-control" />
+                           placeholder="e.g. 18" className="form-control" required />
                   </div>
                 )}
                 {options.show_tax_invoice_number && (
                   <div className="form-group" style={{ flex: 1 }}>
-                    <label className="form-label">Tax Invoice Number</label>
+                    <label className="form-label">Tax Invoice Number <Star /></label>
                     <input name="tax_invoice_number" value={form.tax_invoice_number}
                            onChange={handleChange} placeholder="e.g. INV-2026-0142"
-                           className="form-control" />
+                           className="form-control" required />
                   </div>
                 )}
               </div>
 
               {options.show_gst_number && (
                 <div className="form-group">
-                  <label className="form-label">
-                    GST Number {gstRequired ? `(required for ${form.category})` : "(optional)"}
-                  </label>
+                  <label className="form-label">GST Number <Star /></label>
                   <input name="gst_number" value={form.gst_number} onChange={handleChange}
-                         placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" />
+                         placeholder="e.g. 22AAAAA0000A1Z5" className="form-control" required />
                 </div>
               )}
 
@@ -1916,14 +2013,14 @@ export default function FinanceEntryForm({
            !isSalaryCategory && (
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Amount (₹)</label>
+                <label className="form-label">Amount (₹) <Star /></label>
                 <input type="number" step="0.01" min="0" name="amount" value={form.amount}
                        onChange={handleChange} placeholder="0.00" className="form-control" required />
               </div>
               <div className="form-group">
-                <label className="form-label">Date</label>
+                <label className="form-label">Date <Star /></label>
                 <input type="date" name="entry_date" value={form.entry_date}
-                       onChange={handleChange} className="form-control" />
+                       onChange={handleChange} className="form-control" required />
               </div>
               {renderPaymentTypeField(true)}
             </div>
@@ -1952,17 +2049,17 @@ export default function FinanceEntryForm({
 
           {!isCapital && !isCorpusFundType && !isCorpusFundRestricted && isSalaryCategory && isCorporate && (
             <div className="form-group">
-              <label className="form-label">Employees</label>
+              <label className="form-label">Employees <Star /></label>
               {employees.map((emp) => (
                 <div key={emp._key}
                      style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12,
                               marginBottom: 12, position: "relative" }}>
                   <div className="form-row">
                     <div className="form-group" style={{ flex: 1 }}>
-                      <label className="form-label">Department</label>
+                      <label className="form-label">Department <Star /></label>
                       <select value={emp.exec_department}
                               onChange={(e) => handleEmployeeChange(emp._key, "exec_department", e.target.value)}
-                              className="form-control">
+                              className="form-control" required>
                         <option value="">Select Department</option>
                         {(options.exec_departments || []).map((deptKey) => (
                           <option key={deptKey} value={deptKey}>{deptLabel(deptKey)}</option>
@@ -1970,31 +2067,31 @@ export default function FinanceEntryForm({
                       </select>
                     </div>
                     <div className="form-group" style={{ flex: 1 }}>
-                      <label className="form-label">Employee Name</label>
+                      <label className="form-label">Employee Name <Star /></label>
                       <input value={emp.employee_name}
                              onChange={(e) => handleEmployeeChange(emp._key, "employee_name", e.target.value)}
-                             placeholder="Employee name" className="form-control" />
+                             placeholder="Employee name" className="form-control" required />
                     </div>
                     <div className="form-group" style={{ flex: 1 }}>
-                      <label className="form-label">Generated By</label>
+                      <label className="form-label">Generated By <Star /></label>
                       <input value={emp.generated_by || ""}
                              onChange={(e) => handleEmployeeChange(emp._key, "generated_by", e.target.value)}
-                             placeholder="Generated By" className="form-control" />
+                             placeholder="Generated By" className="form-control" required />
                     </div>
                   </div>
 
                   <div className="form-row">
                     <div className="form-group" style={{ flex: 1 }}>
-                      <label className="form-label">Salary (₹)</label>
+                      <label className="form-label">Salary (₹) <Star /></label>
                       <input type="number" min="0" step="0.01" value={emp.salary_amount}
                              onChange={(e) => handleEmployeeChange(emp._key, "salary_amount", e.target.value)}
-                             placeholder="0.00" className="form-control" />
+                             placeholder="0.00" className="form-control" required />
                     </div>
                     <div className="form-group" style={{ flex: 1 }}>
-                      <label className="form-label">TADA (₹)</label>
+                      <label className="form-label">TADA (₹) <Star /></label>
                       <input type="number" min="0" step="0.01" value={emp.allowance_amount}
                              onChange={(e) => handleEmployeeChange(emp._key, "allowance_amount", e.target.value)}
-                             placeholder="0.00" className="form-control" />
+                             placeholder="0.00" className="form-control" required />
                     </div>
                   </div>
                   <div className="form-row">
@@ -2004,10 +2101,10 @@ export default function FinanceEntryForm({
                              style={{ backgroundColor: "#f3f4f6" }} />
                     </div>
                     <div className="form-group" style={{ flex: 1 }}>
-                      <label className="form-label">Remarks</label>
+                      <label className="form-label">Remarks <Star /></label>
                       <input value={emp.remarks || ""}
                              onChange={(e) => handleEmployeeChange(emp._key, "remarks", e.target.value)}
-                             placeholder="Optional" className="form-control" />
+                             placeholder="Remarks (required)" className="form-control" required />
                     </div>
                   </div>
                   {!isEditingSalaryEntry && (
@@ -2028,7 +2125,7 @@ export default function FinanceEntryForm({
 
               <div className="form-row" style={{ marginTop: 12 }}>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">Date <span style={{ color: "red" }}>*</span></label>
+                  <label className="form-label">Date <Star /></label>
                   <input type="date" name="entry_date" value={form.entry_date}
                          onChange={handleChange} className="form-control" required />
                 </div>

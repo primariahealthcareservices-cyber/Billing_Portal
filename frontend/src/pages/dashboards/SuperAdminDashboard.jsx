@@ -357,7 +357,7 @@ export default function SuperAdminDashboard() {
   const [draftSearchTerm, setDraftSearchTerm] = useState("");
 
   const [selectedQuarter, setSelectedQuarter] = useState("");
-  const [selectedYear, setSelectedYear] = useState("");
+  const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
   const [selectedSubDept, setSelectedSubDept] = useState("All");
   const [salesKpis, setSalesKpis] = useState([]);
   const [salesKpisLoading, setSalesKpisLoading] = useState(false);
@@ -407,7 +407,7 @@ export default function SuperAdminDashboard() {
 
   useEffect(() => {
     if (activeDept !== "SalesEnterprise") return;
-    if (selectedSubDept === "All" || !selectedYear) {
+    if (!selectedYear) {
       setSalesKpis([]);
       setSalesAggregated({ averages: {}, monthlyData: [] });
       setSalesSelectedDept(null);
@@ -422,8 +422,10 @@ export default function SuperAdminDashboard() {
     const fetchKpis = async () => {
       setSalesKpisLoading(true);
       try {
-        const params = { department: selectedSubDept, year: parseInt(selectedYear, 10) };
+        const params = { year: parseInt(selectedYear, 10) };
+        if (selectedSubDept !== "All") params.department = selectedSubDept;
         if (selectedQuarter) params.quarter = `Q${selectedQuarter}`;
+        
         const res = await api.get("/salesenterprise/kpis", { params });
         const records = res.data.kpis || [];
         setSalesKpis(records);
@@ -601,6 +603,7 @@ export default function SuperAdminDashboard() {
     setSelectedCategory(null);
     setSalesSelectedDept(null);
     setSelectedSubDept("All");
+    setSelectedYear(String(new Date().getFullYear()));
 
     setDataView("all");
     setDraftTransactionType("all");
@@ -622,7 +625,7 @@ export default function SuperAdminDashboard() {
 
     setStartDate(defaultStart); setEndDate(defaultEnd);
     setSearchTerm(""); setSelectedCategory(null);
-    setSelectedQuarter(""); setSelectedYear(""); setSelectedSubDept("All");
+    setSelectedQuarter(""); setSelectedYear(defaultYear); setSelectedSubDept("All");
     setSalesSelectedDept(null);
     setQuarterFilter(""); setYearFilter(defaultYear);
     setDataView("all"); setPage(1);
@@ -1019,7 +1022,6 @@ export default function SuperAdminDashboard() {
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Year</label>
                 <select className="form-control" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)}>
-                  <option value="">Select Year</option>
                   {Array.from({ length: 10 }, (_, i) => { const y = new Date().getFullYear() - i; return <option key={y} value={y}>{y}</option>; })}
                 </select>
               </div>
@@ -1207,12 +1209,12 @@ export default function SuperAdminDashboard() {
 
                 <p className="section-title" style={{ marginBottom: 8 }}>Categories Panel</p>
                 <div className="card">
-                  {selectedSubDept === "All" ? (
-                    <div style={{ textAlign: "center", padding: "20px 0", color: "#6b7280" }}>Select a sub‑department to view its KPI averages.</div>
-                  ) : salesKpisLoading ? (
+                  {salesKpisLoading ? (
                     <div style={{ textAlign: "center", padding: "20px 0", color: "#6b7280" }}>Loading KPIs...</div>
                   ) : salesKpis.length === 0 ? (
-                    <div style={{ textAlign: "center", padding: "20px 0", color: "#6b7280" }}>No KPI data found for {selectedSubDept} in the selected period.</div>
+                    <div style={{ textAlign: "center", padding: "20px 0", color: "#6b7280" }}>
+                      No KPI data found for {selectedSubDept === "All" ? "any sub-department" : selectedSubDept} in the selected period.
+                    </div>
                   ) : (
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "16px" }}>
                       {KPI_KEYS.map((key) => {
@@ -1234,12 +1236,12 @@ export default function SuperAdminDashboard() {
                   Display Panel {selectedSubDept !== "All" ? `– ${selectedSubDept}` : ""}
                 </p>
                 <div className="card">
-                  {selectedSubDept === "All" ? (
-                    <div style={{ textAlign: "center", padding: "30px 0", color: "#6b7280" }}>Select a sub‑department to view monthly KPI trends.</div>
-                  ) : salesKpisLoading ? (
+                  {salesKpisLoading ? (
                     <div style={{ textAlign: "center", padding: "30px 0", color: "#6b7280" }}>Loading charts...</div>
                   ) : salesKpis.length === 0 ? (
-                    <div style={{ textAlign: "center", padding: "30px 0", color: "#6b7280" }}>No KPI data available for {selectedSubDept} in the selected period.</div>
+                    <div style={{ textAlign: "center", padding: "30px 0", color: "#6b7280" }}>
+                      No KPI data available for {selectedSubDept === "All" ? "any sub-department" : selectedSubDept} in the selected period.
+                    </div>
                   ) : (
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
                       {KPI_KEYS.map((key) => {
@@ -1381,79 +1383,141 @@ export default function SuperAdminDashboard() {
                   </div>
                 )}
 
-                {/* ---- Salary & Payrolls (Caredx) ---- */}
+                {/* ---- CareDx Expenses ----
+                     Salary & Payrolls is an EXPENSE, so in "All Categories" (and every
+                     other category) it is shown inside the SAME Expenses table, mixed in
+                     date order with the other expenses.
+                     Only when the "Salary & Payrolls" category button is selected do we
+                     show the detailed salary table (employee / salary / allowance columns). */}
                 {(() => {
-                  const salaryRows = visibleCaredxExpenses.filter((e) => isSalaryEntry(e));
-                  const otherRows = visibleCaredxExpenses.filter((e) => !isSalaryEntry(e));
                   const showSalaryOnly = selectedCategory === "Salary & Payrolls";
-                  return (
-                    <>
-                      {(showSalaryOnly || salaryRows.length > 0) && (
-                        <div style={{ marginBottom: 24 }}>
-                          <p className="section-title" style={{ marginBottom: 12 }}>
-                            Salary &amp; Payrolls
-                            {selectedCategory && (
-                              <span style={{ fontSize: 13, color: "#9ca3af", marginLeft: 8, fontWeight: 400 }}>— {selectedCategory}</span>
-                            )}
-                          </p>
-                          <FinanceTable
-                            entries={salaryRows}
-                            currentDepartment="Caredx"
-                            onView={(entry) => setViewEntry({ type: "finance", data: entry })}
-                          />
-                        </div>
-                      )}
-                      {!showSalaryOnly && (
-                        <div>
-                          <p className="section-title" style={{ marginBottom: 12 }}>
-                            Other Expenses
-                            {selectedCategory && (
-                              <span style={{ fontSize: 13, color: "#9ca3af", marginLeft: 8, fontWeight: 400 }}>— {selectedCategory}</span>
-                            )}
-                          </p>
-                          {otherRows.length === 0 ? (
-                            <div className="card empty-state">
-                              {selectedCategory ? `No data found in category "${selectedCategory}".` : "No data found for this filter."}
-                            </div>
-                          ) : (
-                            <div className="card table-wrap">
-                              <table className="data-table">
-                                <thead>
-                                  <tr>
-                                    <th>Date</th>
-                                    <th>Category</th>
-                                    <th className="text-right">Amount</th>
-                                    <th>Payment Type</th>
-                                    <th style={{ minWidth: remarkCellStyle.minWidth }}>Remarks</th>
-                                    <th className="text-right">Actions</th>
+
+                  /* ── Detailed salary table (category button = Salary & Payrolls) ── */
+                  if (showSalaryOnly) {
+                    const salaryRows = visibleCaredxExpenses.filter((e) => isSalaryEntry(e));
+                    return (
+                      <div style={{ marginBottom: 24 }}>
+                        <p className="section-title" style={{ marginBottom: 12 }}>
+                          Salary &amp; Payrolls
+                          <span style={{ fontSize: 13, color: "#9ca3af", marginLeft: 8, fontWeight: 400 }}>— {selectedCategory}</span>
+                        </p>
+                        {salaryRows.length === 0 ? (
+                          <div className="card empty-state">No salary entries for the selected period.</div>
+                        ) : (
+                          <div className="card table-wrap">
+                            <table className="data-table">
+                              <thead>
+                                <tr>
+                                  <th>Date</th>
+                                  <th>Type</th>
+                                  <th>Category</th>
+                                  <th>Employee</th>
+                                  <th className="text-right">Amount</th>
+                                  <th>Payment Type</th>
+                                  <th>Purpose</th>
+                                  <th className="text-right">Salary</th>
+                                  <th className="text-right">Allowance</th>
+                                  <th style={{ minWidth: remarkCellStyle.minWidth }}>Remarks</th>
+                                  <th className="text-right">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {salaryRows.map((e, i) => (
+                                  <tr key={e.id ?? `sal-${i}`}>
+                                    <td style={{ whiteSpace: "nowrap" }}>{e.expense_date || e.entry_date}</td>
+                                    <td>{e.entry_type || "Expenses"}</td>
+                                    <td>{e.category || "Salary & Payrolls"}</td>
+                                    <td>{e.employee_name || "—"}</td>
+                                    <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(entryAmount(e))}</td>
+                                    <td>{renderPaymentBadge(e.payment_type)}</td>
+                                    <td>{e.purpose || "—"}</td>
+                                    <td className="text-right">{e.salary_amount != null ? formatCurrency(e.salary_amount) : "—"}</td>
+                                    <td className="text-right">{e.allowance_amount != null ? formatCurrency(e.allowance_amount) : "—"}</td>
+                                    <td style={remarkCellStyle}><RemarkCell text={e.remarks || ""} /></td>
+                                    <td className="text-right">
+                                      <button type="button" className="btn-icon" onClick={() => setViewEntry({ type: "finance", data: e })} title="View">
+                                        <Eye size={15} />
+                                      </button>
+                                    </td>
                                   </tr>
-                                </thead>
-                                <tbody>
-                                  {otherRows.map((e, i) => {
-                                    const corpus = isCorpusEntry(e);
-                                    return (
-                                      <tr key={`${corpus ? "c" : "e"}-${e.id ?? e._key ?? i}-${i}`}>
-                                        <td style={{ whiteSpace: "nowrap" }}>{e.expense_date || e.entry_date}</td>
-                                        <td>{corpus ? CORPUS_FUND_LABEL : e.category}</td>
-                                        <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(entryAmount(e))}</td>
-                                        <td>{renderPaymentBadge(e.payment_type)}</td>
-                                        <td style={remarkCellStyle}><RemarkCell text={e.remarks || ""} /></td>
-                                        <td>
-                                          <button type="button" className="btn-icon" onClick={() => setViewEntry({ type: corpus ? "finance" : "expense", data: e })} title="View">
-                                            <Eye size={15} />
-                                          </button>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                              {renderPagination()}
-                            </div>
-                          )}
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  /* ── ONE combined Expenses table (salary + all other expenses) ── */
+                  const expenseRows = [...visibleCaredxExpenses].sort((a, b) => {
+                    const dateA = String(a.expense_date || a.entry_date || "");
+                    const dateB = String(b.expense_date || b.entry_date || "");
+                    return dateB.localeCompare(dateA); // newest first
+                  });
+
+                  return (
+                    <div>
+                      <p className="section-title" style={{ marginBottom: 12 }}>
+                        Expenses
+                        {selectedCategory && (
+                          <span style={{ fontSize: 13, color: "#9ca3af", marginLeft: 8, fontWeight: 400 }}>— {selectedCategory}</span>
+                        )}
+                      </p>
+                      {expenseRows.length === 0 ? (
+                        <div className="card empty-state">
+                          {selectedCategory ? `No data found in category "${selectedCategory}".` : "No data found for this filter."}
+                        </div>
+                      ) : (
+                        <div className="card table-wrap">
+                          <table className="data-table">
+                            <thead>
+                              <tr>
+                                <th>Date</th>
+                                <th>Category</th>
+                                <th>Employee</th>
+                                <th className="text-right">Amount</th>
+                                <th>Payment Type</th>
+                                <th style={{ minWidth: remarkCellStyle.minWidth }}>Remarks</th>
+                                <th className="text-right">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {expenseRows.map((e, i) => {
+                                const corpus = isCorpusEntry(e);
+                                const salary = isSalaryEntry(e);
+                                const categoryLabel = corpus
+                                  ? CORPUS_FUND_LABEL
+                                  : salary
+                                    ? "Salary & Payrolls"
+                                    : e.category;
+                                return (
+                                  <tr key={`${corpus ? "c" : salary ? "s" : "e"}-${e.id ?? e._key ?? i}-${i}`}>
+                                    <td style={{ whiteSpace: "nowrap" }}>{e.expense_date || e.entry_date}</td>
+                                    <td>{categoryLabel}</td>
+                                    <td>{e.employee_name || "—"}</td>
+                                    <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(entryAmount(e))}</td>
+                                    <td>{renderPaymentBadge(e.payment_type)}</td>
+                                    <td style={remarkCellStyle}><RemarkCell text={e.remarks || ""} /></td>
+                                    <td className="text-right">
+                                      <button
+                                        type="button"
+                                        className="btn-icon"
+                                        onClick={() => setViewEntry({ type: corpus || salary ? "finance" : "expense", data: e })}
+                                        title="View"
+                                      >
+                                        <Eye size={15} />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                          {renderPagination()}
                         </div>
                       )}
-                    </>
+                    </div>
                   );
                 })()}
               </>
