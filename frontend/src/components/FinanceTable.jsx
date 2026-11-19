@@ -104,10 +104,8 @@ export default function FinanceTable({
         <th>Category</th>
         {showEmployeeName && <th>Employee Name</th>}
         {showClientName && <th>Client Name</th>}
-        {showClientName && <th>Client Place</th>}
         <th className="text-right">Amount</th>
         <th>Payment Type</th>
-        <th>Purpose</th>
         <th>Remarks</th>
         <th className="text-right">Actions</th>
       </tr>
@@ -119,7 +117,6 @@ export default function FinanceTable({
   // -----------------------------------------------------------------------
   const renderRow = (entry, idx) => {
     const salary = isSalaryEntry(entry);
-    const isFinanceRow = salary || isCorpusEntry(entry);
 
     const dateVal = entry.entry_date || entry.expense_date || "";
     const typeVal = entry.entry_type || (salary ? "Expenses" : "");
@@ -207,22 +204,10 @@ export default function FinanceTable({
         <td>{categoryVal}</td>
         {showEmployeeName && <td>{empName}</td>}
         {showClientName && <td>{entry.client_name || "—"}</td>}
-        {showClientName && <td>{entry.patient_place || "—"}</td>}
         <td className="text-right" style={{ fontWeight: 600 }}>
           {formatCurrency(entry.amount)}
         </td>
         <td>{renderPaymentBadge(entry.payment_type)}</td>
-        <td
-          style={{
-            maxWidth: 180,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-          title={entry.purpose || ""}
-        >
-          {entry.purpose || "—"}
-        </td>
         <td
           style={{
             maxWidth: 260,

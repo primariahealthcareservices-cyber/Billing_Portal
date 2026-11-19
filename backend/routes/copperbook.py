@@ -47,8 +47,11 @@ ENTRY_VIEWS = ("pending", "approved", "rejected")
 
 ROLLBACK_MONTHS = 24
 
-FIXED_OPENING_MONTH   = (2026, 1)
-FIXED_OPENING_BALANCE = 1_000_000.0
+# The rollback chain starts here. The Roll Over Balance of this month is
+# FIXED_OPENING_BALANCE; every later month rolls from the previous month's
+# Current Balance (so Jan 2026 roll-over = Dec 2025 current balance).
+FIXED_OPENING_MONTH   = (2025, 1)
+FIXED_OPENING_BALANCE = 50_000.0
 
 # Personal Amount: accepted spellings coming from the Staff Portal
 PERSONAL_GIVEN_ALIASES = ("given", "give", "credit", "advance", "issued", "out")
@@ -294,26 +297,23 @@ def _monthly_rollback():
         b[0] += ce
         b[1] += ap
 
-    if not per_month:
-        return []
-
     today = datetime.utcnow().date()
 
-    earliest_year = min(per_month)[0]
-    first = (earliest_year, 1)
-    last  = max(max(per_month), (today.year, today.month))
+    # The chain always starts at the fixed opening month (Jan 2025).
+    # Anything dated before it is ignored (it is already inside the opening balance).
+    first = FIXED_OPENING_MONTH
+    last  = max(max(per_month, default=first), (today.year, today.month))
 
     cash_overrides = {c.month: float(c.available_cash) for c in CopperBookMonthlyCash.query.all()}
 
     result = []
-    prev_current_balance = 0.0
+    prev_current_balance = FIXED_OPENING_BALANCE   # Jan 2025 roll-over = 50,000
     running_approved     = 0.0
 
     y, m = first
     while (y, m) <= last:
-        if (y, m) == FIXED_OPENING_MONTH:
-            prev_current_balance = FIXED_OPENING_BALANCE
-
+        # No reset inside the loop: every month after the first rolls from
+        # the previous month's Current Balance.
         ce, ap = per_month.get((y, m), (0.0, 0.0))
 
         roll_over_balance = round(prev_current_balance, 2)
@@ -599,6 +599,8 @@ def _sync_to_staffportal(req: CopperBookRequest):
         pass
 
 
+# billing-portal/backend/routes/copperbook.py
+
 def _sync_edit_to_staffportal(req: CopperBookRequest):
     base = (os.getenv("STAFFPORTAL_BASE_URL") or "").rstrip("/")
     token = os.getenv("COPPERBOOK_CALLBACK_TOKEN") or ""
@@ -619,6 +621,7 @@ def _sync_edit_to_staffportal(req: CopperBookRequest):
             req.reference_date.isoformat()
             if getattr(req, "reference_date", None) else None
         ),
+        "employee_entries": [_entry_to_dict(e) for e in req.employee_entries],
     }
     try:
         resp = requests.post(
@@ -629,13 +632,12 @@ def _sync_edit_to_staffportal(req: CopperBookRequest):
         )
         if resp.ok:
             return True, "ok"
-        print(f"[copperbook] edit sync failed {req.request_number}: {resp.status_code} {resp.text[:300]}")
+        print(f"[copperbook] edit sync failed {req.request_number}: "
+              f"{resp.status_code} {resp.text[:300]}")
         return False, f"Staff Portal responded {resp.status_code}"
     except Exception as e:
         print(f"[copperbook] edit sync error {req.request_number}:", e)
         return False, str(e)
-
-
 def _sync_delete_to_staffportal(req: CopperBookRequest, deleted_by: str, remarks: str | None):
     base = (os.getenv("STAFFPORTAL_BASE_URL") or "").rstrip("/")
     token = os.getenv("COPPERBOOK_CALLBACK_TOKEN") or ""
@@ -673,7 +675,6 @@ def _sync_delete_to_staffportal(req: CopperBookRequest, deleted_by: str, remarks
     except Exception as e:
         print(f"[copperbook] delete sync error {req.request_number}:", e)
         return False, str(e)
-
 
 # Receive manual available_cash sync from Staff Portal
 @cb_bp.route("/intake-cash", methods=["POST", "OPTIONS"])

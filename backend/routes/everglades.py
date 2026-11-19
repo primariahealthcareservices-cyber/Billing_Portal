@@ -16,16 +16,20 @@ CONFIG = DEPARTMENT_CONFIG[DEPARTMENT]
 
 CAPITAL_CATEGORIES = (
     "Equity Infusion",
+    "Capital Equity",
     "Partner Contribution",
     "Asset Capitalization",
     "Reserve Fund Transfer",
     "Other Capital",
 )
 
+# Payment types allowed for Everglades entries
+EVERGLADES_PAYMENT_TYPES = ("UPI", "Cash", "UPI+Cash", "Bank", "NEFT")
+
 everglades_bp = Blueprint("everglades", __name__, url_prefix="/api/everglades")
 
-# Only "Products & Innovation" supports item-level details.
-EVERGLADES_ITEM_CATEGORIES = ["Products & Innovation"]
+# Everglades uses a simple amount-only form (no item rows)
+EVERGLADES_ITEM_CATEGORIES = []
 
 
 # ==================== HELPERS ====================
@@ -131,6 +135,7 @@ def options():
         "is_salary_category": SALARY_CATEGORY,
         "is_ledger_category": "Ledger",
         "capital_categories": list(CAPITAL_CATEGORIES),
+        "payment_types": list(EVERGLADES_PAYMENT_TYPES),
     }), 200
 
 
@@ -158,10 +163,11 @@ def create_entry():
     # ====================== CAPITAL ENTRY ======================
     if entry_type == "Capital":
         errors = []
-        capital_category = (data.get("capital_category") or data.get("fund_category") or "").strip()
+        capital_category = (data.get("capital_category") or data.get("fund_category") or data.get("category") or "").strip()
         client_name = (data.get("client_name") or "").strip()
         purpose = (data.get("purpose") or "").strip()
         remarks_val = (data.get("remarks") or "").strip()
+        payment_type_val = (data.get("payment_type") or "").strip() or None
         entry_date_val = _parse_date(data.get("entry_date"), default=date.today())
         amount_raw = data.get("amount")
 
@@ -178,6 +184,7 @@ def create_entry():
             if amount_val <= 0:
                 errors.append("Amount must be greater than 0.")
         except (TypeError, ValueError):
+            amount_val = 0
             errors.append("Amount must be a valid number.")
 
         if errors:
@@ -190,6 +197,7 @@ def create_entry():
             sub_category="Capital",
             fund_category=capital_category,
             client_name=client_name,
+            payment_type=payment_type_val,
             amount=amount_val,
             purpose=purpose,
             remarks=remarks_val,
@@ -208,7 +216,7 @@ def create_entry():
 
     # ---- LEDGER HANDLING ----
     category = data.get("category")
-    remarks = data.get("remarks", "")
+    remarks = data.get("remarks", "") or ""
     entry_date = _parse_date(data.get("entry_date"), default=date.today())
 
     if entry_type == "Ledger":
@@ -255,20 +263,15 @@ def create_entry():
         }), 201
 
     # ---- REGULAR FINANCE ENTRY ----
+    # Fields: Date, Type, Category, Client Name, Amount, Payment Type, Remarks
+    # (no generated_by / revenue_type / gst_number / purpose / invoice)
     if is_json:
         return jsonify({"message": "Non-Ledger entries must be sent as form data."}), 400
 
     data = request.form
-    generated_by = (data.get("generated_by") or "").strip()
-    revenue_type = data.get("revenue_type")
     client_name = (data.get("client_name") or "").strip() or None
-    gst_number = (data.get("gst_number") or "").strip() or None
-    tax_invoice_number = (data.get("tax_invoice_number") or "").strip() or None
-    employee_name = (data.get("employee_name") or "").strip() or None
-    vehicle_type = (data.get("vehicle_type") or "").strip() or None
-    amount = data.get("amount")
-
-    is_salary = (entry_type == "Expenses" and category == SALARY_CATEGORY)
+    payment_type = (data.get("payment_type") or "").strip() or None
+    remarks = (data.get("remarks") or "").strip()
 
     errors = []
     if entry_type not in ENTRY_TYPES:
@@ -276,98 +279,40 @@ def create_entry():
     allowed_categories = CONFIG["categories"].get(entry_type, [])
     if category not in allowed_categories:
         errors.append(f"category must be one of: {', '.join(allowed_categories)}.")
-    if is_salary:
+    if entry_type == "Expenses" and category == SALARY_CATEGORY:
         errors.append("Salaries must be entered by Corporate Management only.")
-
-    if not is_salary:
-        require_items = CONFIG["show_items"] and category in EVERGLADES_ITEM_CATEGORIES
-
-        if entry_type == "Income" and not generated_by:
-            errors.append("generated_by (employee name) is required for Income entries.")
-        if CONFIG["show_revenue_type"] and revenue_type not in CONFIG["revenue_types"]:
-            errors.append(f"revenue_type must be one of: {', '.join(CONFIG['revenue_types'])}.")
-        if CONFIG["show_gst_number"] and category in CONFIG["gst_required_categories"] and not gst_number:
-            errors.append(f"gst_number is required for {category} entries.")
-
-        gst_tax_percent, gst_tax_error = _parse_gst_tax_percent(data.get("gst_tax_percent"))
-        if gst_tax_error:
-            errors.append(gst_tax_error)
-
-        if require_items:
-            items_data = _parse_items_field(data.get("items"))
-            if items_data is None:
-                items_data = []
-                errors.append("Items data could not be read.")
-            clean_items, items_total, item_errors = _validate_items(items_data)
-            errors.extend(item_errors)
-            base_amount = items_total
-        else:
-            clean_items = []
-            items_total = 0
-            try:
-                base_amount = float(data.get("amount") or 0)
-            except (TypeError, ValueError):
-                base_amount = 0
-            if base_amount <= 0:
-                errors.append("Amount must be greater than 0.")
-    else:
-        clean_items = []
-        items_total = 0
-        gst_tax_percent = 0.0
-        base_amount = 0
-        generated_by = None
-        revenue_type = None
-        gst_number = None
-        tax_invoice_number = None
-        amount = 0
-
-    invoice_path = invoice_original = invoice_mimetype = None
-    invoice_file = request.files.get("invoice")
-    if CONFIG["show_invoice"] and invoice_file and invoice_file.filename and not is_salary:
-        try:
-            invoice_path, invoice_original, invoice_mimetype = save_invoice_file(invoice_file, DEPARTMENT)
-        except ValueError as e:
-            errors.append(str(e))
+    if not client_name:
+        errors.append("Client name is required.")
+    if payment_type not in EVERGLADES_PAYMENT_TYPES:
+        errors.append("payment_type must be one of: " + ", ".join(EVERGLADES_PAYMENT_TYPES) + ".")
+    if not remarks:
+        errors.append("Remarks are required.")
+    try:
+        amount_val = float(data.get("amount"))
+        if amount_val <= 0:
+            errors.append("Amount must be greater than 0.")
+    except (TypeError, ValueError):
+        amount_val = 0
+        errors.append("Amount must be a valid number.")
 
     if errors:
         return jsonify({"message": "Validation failed.", "errors": errors}), 400
 
-    if not is_salary:
-        gst_tax_amount = round(base_amount * gst_tax_percent / 100, 2) if gst_tax_percent else 0
-        total_amount = round(base_amount + gst_tax_amount, 2)
-    else:
-        base_amount = 0
-        gst_tax_percent = 0
-        gst_tax_amount = 0
-        total_amount = 0
-
+    amount_val = round(amount_val, 2)
     entry = FinanceEntry(
         department=DEPARTMENT,
         entry_type=entry_type,
         category=category,
-        generated_by=generated_by if not is_salary else None,
-        revenue_type=revenue_type if not is_salary else None,
         client_name=client_name,
-        gst_number=gst_number if not is_salary else None,
-        tax_invoice_number=tax_invoice_number if not is_salary else None,
-        amount=total_amount if not is_salary else 0,
-        base_amount=base_amount,
-        gst_tax_percent=gst_tax_percent,
-        gst_tax_amount=gst_tax_amount,
-        employee_name=employee_name,
-        vehicle_type=vehicle_type,
+        payment_type=payment_type,
+        amount=amount_val,
+        base_amount=amount_val,
+        gst_tax_percent=0,
+        gst_tax_amount=0,
         remarks=remarks,
         entry_date=entry_date,
-        invoice_filename=invoice_path,
-        invoice_original_name=invoice_original,
-        invoice_mimetype=invoice_mimetype,
         created_by_id=get_jwt_identity(),
     )
-
-    if not is_salary and clean_items:
-        for item in clean_items:
-            entry.items.append(FinanceEntryItem(**item))
-
     try:
         db.session.add(entry)
         db.session.commit()
@@ -408,7 +353,8 @@ def list_entries():
             (FinanceEntry.client_name.ilike(like)) |
             (FinanceEntry.gst_number.ilike(like)) |
             (FinanceEntry.tax_invoice_number.ilike(like)) |
-            (FinanceEntry.remarks.ilike(like))
+            (FinanceEntry.remarks.ilike(like)) |
+            (FinanceEntry.payment_type.ilike(like))
         )
     finance_entries = finance_query.order_by(
         FinanceEntry.entry_date.desc(), FinanceEntry.id.desc()
@@ -461,6 +407,7 @@ def list_entries():
 def update_entry(entry_id):
     entry = FinanceEntry.query.filter_by(id=entry_id, department=DEPARTMENT).first()
 
+    # ---------------- CAPITAL ----------------
     if entry and entry.entry_type == "Capital":
         if request.is_json:
             data = request.get_json(silent=True) or {}
@@ -471,6 +418,7 @@ def update_entry(entry_id):
         capital_category = (
             data.get("capital_category")
             or data.get("fund_category")
+            or data.get("category")
             or entry.fund_category
             or ""
         ).strip()
@@ -492,6 +440,7 @@ def update_entry(entry_id):
             if amount_val <= 0:
                 errors.append("Amount must be greater than 0.")
         except (TypeError, ValueError):
+            amount_val = 0
             errors.append("Amount must be a valid number.")
 
         if errors:
@@ -504,6 +453,8 @@ def update_entry(entry_id):
         entry.amount = amount_val
         entry.purpose = purpose
         entry.remarks = remarks_val
+        if "payment_type" in data:
+            entry.payment_type = (data.get("payment_type") or "").strip() or None
 
         if "entry_date" in data:
             parsed = _parse_date(data["entry_date"])
@@ -519,6 +470,7 @@ def update_entry(entry_id):
             return jsonify({"message": "Failed to update Capital entry.", "error": str(exc)}), 500
         return jsonify({"message": "Capital entry updated.", "entry": entry.to_dict()}), 200
 
+    # ---------------- LEDGER ----------------
     if not entry:
         ledger = EvergladesLedger.query.get(entry_id)
         if ledger:
@@ -562,6 +514,7 @@ def update_entry(entry_id):
         else:
             return jsonify({"message": "Entry not found."}), 404
 
+    # ---------------- REGULAR ENTRY ----------------
     if request.is_json:
         data = request.get_json(silent=True) or {}
     else:
@@ -569,10 +522,7 @@ def update_entry(entry_id):
 
     errors = []
 
-    new_category = data.get("category", entry.category) or entry.category
     new_entry_type = data.get("entry_type", entry.entry_type) or entry.entry_type
-
-    require_items = CONFIG["show_items"] and new_category in EVERGLADES_ITEM_CATEGORIES
 
     if "entry_type" in data and data["entry_type"] in ENTRY_TYPES:
         entry.entry_type = data["entry_type"]
@@ -582,25 +532,30 @@ def update_entry(entry_id):
             entry.category = data["category"]
         else:
             errors.append(f"category must be one of: {', '.join(allowed_categories)}")
+    if entry.entry_type == "Expenses" and entry.category == SALARY_CATEGORY:
+        errors.append("Salaries must be entered by Corporate Management only.")
 
-    if "generated_by" in data and data["generated_by"].strip():
-        entry.generated_by = data["generated_by"].strip()
-    elif "generated_by" in data and not data["generated_by"].strip() and new_entry_type == "Income":
-        errors.append("generated_by (employee name) is required for Income entries.")
-    if "revenue_type" in data and data["revenue_type"] in CONFIG["revenue_types"]:
-        entry.revenue_type = data["revenue_type"]
     if "client_name" in data:
-        entry.client_name = (data["client_name"] or "").strip() or None
-    if "gst_number" in data:
-        entry.gst_number = (data["gst_number"] or "").strip() or None
-    if "tax_invoice_number" in data:
-        entry.tax_invoice_number = (data["tax_invoice_number"] or "").strip() or None
-    if "employee_name" in data:
-        entry.employee_name = (data["employee_name"] or "").strip() or None
-    if "vehicle_type" in data:
-        entry.vehicle_type = (data["vehicle_type"] or "").strip() or None
+        client_name = (data["client_name"] or "").strip()
+        if not client_name:
+            errors.append("Client name is required.")
+        else:
+            entry.client_name = client_name
+
+    if "payment_type" in data:
+        pt = (data["payment_type"] or "").strip()
+        if pt in EVERGLADES_PAYMENT_TYPES:
+            entry.payment_type = pt
+        else:
+            errors.append("payment_type must be one of: " + ", ".join(EVERGLADES_PAYMENT_TYPES) + ".")
+
     if "remarks" in data:
-        entry.remarks = data["remarks"]
+        remarks_val = (data["remarks"] or "").strip()
+        if not remarks_val:
+            errors.append("Remarks are required.")
+        else:
+            entry.remarks = remarks_val
+
     if "entry_date" in data:
         parsed = _parse_date(data["entry_date"])
         if parsed:
@@ -610,68 +565,29 @@ def update_entry(entry_id):
     if amount_from_request is not None and amount_from_request != "":
         try:
             base_amount = float(amount_from_request)
-            if base_amount < 0:
-                errors.append("amount must be >= 0.")
+            if base_amount <= 0:
+                errors.append("Amount must be greater than 0.")
         except (TypeError, ValueError):
             errors.append("amount must be a valid number.")
             base_amount = float(entry.base_amount) if entry.base_amount is not None else 0.0
     else:
         base_amount = float(entry.base_amount) if entry.base_amount is not None else 0.0
 
-    if require_items:
-        items_changed = "items" in data
-        if items_changed:
-            items_data = _parse_items_field(data.get("items"))
-            if items_data is None:
-                items_data = []
-                errors.append("Items data could not be read.")
-            clean_items, items_total, item_errors = _validate_items(items_data)
-            errors.extend(item_errors)
-            if not item_errors:
-                for old_item in list(entry.items):
-                    db.session.delete(old_item)
-                entry.items = [FinanceEntryItem(**item) for item in clean_items]
-                base_amount = items_total
-    else:
-        if entry.items:
-            for old_item in list(entry.items):
-                db.session.delete(old_item)
-            entry.items = []
-
-    if "gst_tax_percent" in data:
-        gst_tax_percent, gst_tax_error = _parse_gst_tax_percent(data.get("gst_tax_percent"))
-        if gst_tax_error:
-            errors.append(gst_tax_error)
-    else:
-        gst_tax_percent = float(entry.gst_tax_percent) if entry.gst_tax_percent is not None else 0.0
-
-    if not errors:
-        gst_tax_amount = round(base_amount * gst_tax_percent / 100, 2) if gst_tax_percent else 0
-        entry.base_amount = base_amount
-        entry.gst_tax_percent = gst_tax_percent
-        entry.gst_tax_amount = gst_tax_amount
-        entry.amount = round(base_amount + gst_tax_amount, 2)
-
-    if request.files:
-        invoice_file = request.files.get("invoice")
-        if invoice_file and invoice_file.filename:
-            try:
-                new_path, new_original, new_mimetype = save_invoice_file(invoice_file, DEPARTMENT)
-            except ValueError as e:
-                errors.append(str(e))
-            else:
-                delete_invoice_file(entry.invoice_filename)
-                entry.invoice_filename = new_path
-                entry.invoice_original_name = new_original
-                entry.invoice_mimetype = new_mimetype
-        elif data.get("remove_invoice") == "true":
-            delete_invoice_file(entry.invoice_filename)
-            entry.invoice_filename = None
-            entry.invoice_original_name = None
-            entry.invoice_mimetype = None
+    # Everglades entries are simple: no item rows
+    if entry.items:
+        for old_item in list(entry.items):
+            db.session.delete(old_item)
+        entry.items = []
 
     if errors:
+        db.session.rollback()
         return jsonify({"message": "Validation failed.", "errors": errors}), 400
+
+    base_amount = round(base_amount, 2)
+    entry.base_amount = base_amount
+    entry.gst_tax_percent = 0
+    entry.gst_tax_amount = 0
+    entry.amount = base_amount
 
     try:
         db.session.commit()

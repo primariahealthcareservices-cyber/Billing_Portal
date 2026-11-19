@@ -66,10 +66,10 @@ const invoiceHref = (entry) => {
   return `${apiOrigin}${entry.invoice_url}${tokenParam}`;
 };
 
-// ✅ NEW: red asterisk used on every mandatory field
+// Red asterisk used on every mandatory field
 const Star = () => <span style={{ color: "red" }}>*</span>;
 
-// ✅ NEW: set to true if the file upload must also be mandatory
+// Set to true if the file upload must also be mandatory
 const REQUIRE_ATTACHMENT = false;
 
 const DEPARTMENTS_CONFIG = [
@@ -104,6 +104,9 @@ const ITEM_CATEGORIES = ["Products & Innovation"];
 const CORPUS_FUND = "Corpus Fund";
 
 const PAYMENT_TYPES = ["UPI", "Cash", "Card", "Cheque", "NEFT", "Bank", "Others"];
+
+// ✅ Everglades-only payment types
+const EVERGLADES_PAYMENT_TYPES = ["UPI", "Cash", "UPI+Cash", "Bank", "NEFT"];
 
 const STANDARD_CATEGORY_FIELDS = {
   "Salary & Payrolls": {
@@ -214,6 +217,13 @@ export default function FinanceEntryForm({
   const isLedger = (isMedTech || isEverglades) && form.category === ledgerCategoryName;
   const isSalaryCategory = form.category === salaryCategoryName;
 
+  // ✅ Everglades: simple form (Type, Category, Client Name, Amount, Date, Payment Type, Remarks)
+  const isEvergladesSimple =
+    isEverglades && !isCapital && !isLedger && !isSalaryCategory;
+
+  // ✅ Everglades uses its own payment type list
+  const paymentTypes = isEverglades ? EVERGLADES_PAYMENT_TYPES : PAYMENT_TYPES;
+
   const requireItemsForCategory = isMedTech && ITEM_CATEGORIES.includes(form.category);
 
   const isCorpusFundRestricted =
@@ -224,7 +234,8 @@ export default function FinanceEntryForm({
     !isCorpusFundType &&
     !isCorpusFundRestricted &&
     !isLedger &&
-    !isSalaryCategory;
+    !isSalaryCategory &&
+    !isEvergladesSimple;
 
   const isEditingSalaryEntry =
     isSalaryCategory && !!(editingEntry && editingEntry.id !== undefined && editingEntry.id !== null);
@@ -249,14 +260,20 @@ export default function FinanceEntryForm({
     !isCorpusFundRestricted &&
     !isLedger &&
     !isSalaryCategory &&
+    !isEvergladesSimple &&
     categoryFieldConfig;
 
-  // ✅ NEW: GST Tax % / Tax Invoice No. are only on screen in the standard form
-  //    and in the MedTech items form (not in the category-driven form).
+  // GST Tax % / Tax Invoice No. are only on screen in the standard form
+  // and in the MedTech items form (not in the category-driven form,
+  // and never in the Everglades simple form).
   const showGstTaxField =
-    !!options?.show_gst_tax && (requireItemsForCategory || !showCategoryFields);
+    !isEvergladesSimple &&
+    !!options?.show_gst_tax &&
+    (requireItemsForCategory || !showCategoryFields);
   const showTaxInvoiceField =
-    !!options?.show_tax_invoice_number && (requireItemsForCategory || !showCategoryFields);
+    !isEvergladesSimple &&
+    !!options?.show_tax_invoice_number &&
+    (requireItemsForCategory || !showCategoryFields);
 
   const corpusDepartments = (
     options?.corpus_fund_departments ||
@@ -283,7 +300,11 @@ export default function FinanceEntryForm({
 
     const populateForm = (entry) => {
       const rawPt = entry.payment_type || "";
-      if (rawPt && !PAYMENT_TYPES.includes(rawPt)) {
+      if (isEverglades) {
+        // Everglades has a fixed list; keep whatever value the entry has
+        setForm((prev) => ({ ...prev, payment_type: rawPt }));
+        setCustomPaymentType("");
+      } else if (rawPt && !PAYMENT_TYPES.includes(rawPt)) {
         setForm((prev) => ({ ...prev, payment_type: "Others" }));
         setCustomPaymentType(rawPt);
       } else if (rawPt === "Others") {
@@ -691,7 +712,7 @@ export default function FinanceEntryForm({
     return form.payment_type;
   };
 
-  // ✅ NEW: only matters when REQUIRE_ATTACHMENT is true
+  // Only matters when REQUIRE_ATTACHMENT is true
   const attachmentMissing = () =>
     REQUIRE_ATTACHMENT &&
     !invoiceFile &&
@@ -732,36 +753,45 @@ export default function FinanceEntryForm({
     );
   };
 
-  const renderPaymentTypeField = (required = true) => (
-    <div className="form-group">
-      <label className="form-label">
-        Payment Type {required && <Star />}
-      </label>
-      <select
-        name="payment_type"
-        value={form.payment_type || ""}
-        onChange={handleChange}
-        className="form-control"
-        required={required}
-      >
-        <option value="">Select payment type</option>
-        {PAYMENT_TYPES.map((pt) => (
-          <option key={pt} value={pt}>{pt}</option>
-        ))}
-      </select>
-      {form.payment_type === "Others" && (
-        <input
-          type="text"
-          value={customPaymentType}
-          onChange={(e) => setCustomPaymentType(e.target.value)}
-          placeholder="Enter custom payment type"
+  const renderPaymentTypeField = (required = true) => {
+    // keep an old/legacy value visible when editing
+    const list =
+      form.payment_type &&
+      form.payment_type !== "Others" &&
+      !paymentTypes.includes(form.payment_type)
+        ? [...paymentTypes, form.payment_type]
+        : paymentTypes;
+    return (
+      <div className="form-group">
+        <label className="form-label">
+          Payment Type {required && <Star />}
+        </label>
+        <select
+          name="payment_type"
+          value={form.payment_type || ""}
+          onChange={handleChange}
           className="form-control"
-          style={{ marginTop: 8 }}
           required={required}
-        />
-      )}
-    </div>
-  );
+        >
+          <option value="">Select payment type</option>
+          {list.map((pt) => (
+            <option key={pt} value={pt}>{pt}</option>
+          ))}
+        </select>
+        {form.payment_type === "Others" && (
+          <input
+            type="text"
+            value={customPaymentType}
+            onChange={(e) => setCustomPaymentType(e.target.value)}
+            placeholder="Enter custom payment type"
+            className="form-control"
+            style={{ marginTop: 8 }}
+            required={required}
+          />
+        )}
+      </div>
+    );
+  };
 
   /* ---------------- SUBMIT: Capital ---------------- */
   const submitCapitalEntry = async () => {
@@ -904,6 +934,46 @@ export default function FinanceEntryForm({
     } finally { setSaving(false); }
   };
 
+  /* ---------------- SUBMIT: Everglades (simple form) ---------------- */
+  const submitEvergladesEntry = async () => {
+    if (!form.client_name.trim()) { toast.error("Client name is required."); return; }
+    const amount = Number(form.amount);
+    if (!Number.isFinite(amount) || amount <= 0) { toast.error("Enter a valid amount."); return; }
+    if (!form.entry_date) { toast.error("Select the entry date."); return; }
+    if (!form.payment_type) { toast.error("Select a payment type."); return; }
+    if (!form.remarks.trim()) { toast.error("Remarks are required."); return; }
+
+    setSaving(true);
+    try {
+      const fd = new FormData();
+      fd.append("entry_type", form.entry_type);
+      fd.append("category", form.category);
+      fd.append("client_name", form.client_name.trim());
+      fd.append("amount", String(amount));
+      fd.append("entry_date", form.entry_date);
+      fd.append("payment_type", form.payment_type);
+      fd.append("remarks", form.remarks.trim());
+
+      const config = { headers: { "Content-Type": "multipart/form-data" } };
+      const url = `/${apiBase}/entries`;
+      if (isEditingExisting) {
+        await api.put(`${url}/${editingEntry.id}`, fd, config);
+        toast.success("Entry updated successfully.");
+      } else {
+        await api.post(url, fd, config);
+        toast.success("Entry added successfully.");
+      }
+      if (typeof onSaved === "function") await onSaved();
+      onClose();
+    } catch (error) {
+      const errs = error.response?.data?.errors;
+      toast.error(
+        Array.isArray(errs) ? errs.join(" ")
+          : error.response?.data?.message || "Failed to save entry."
+      );
+    } finally { setSaving(false); }
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
 
@@ -924,6 +994,9 @@ export default function FinanceEntryForm({
 
     if (!form.entry_date) { toast.error("Please select the entry date."); return; }
     if (!form.category) { toast.error("Please select a category."); return; }
+
+    // ✅ Everglades simple form
+    if (isEvergladesSimple) return submitEvergladesEntry();
 
     if (isLedger) {
       if (!ledgerCustomer.trim()) { toast.error("Customer name is required."); return; }
@@ -1491,6 +1564,37 @@ export default function FinanceEntryForm({
     );
   };
 
+  /* ---------------- RENDER: Everglades fields ---------------- */
+  const renderEvergladesFields = () => (
+    <>
+      <div className="form-row">
+        <div className="form-group">
+          <label className="form-label">Client Name <Star /></label>
+          <input name="client_name" value={form.client_name || ""} onChange={handleChange}
+                 placeholder="Enter the client name" className="form-control" required />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Amount (₹) <Star /></label>
+          <input type="number" step="0.01" min="0" name="amount" value={form.amount}
+                 onChange={handleChange} placeholder="0.00" className="form-control" required />
+        </div>
+      </div>
+      <div className="form-row">
+        <div className="form-group">
+          <label className="form-label">Date <Star /></label>
+          <input type="date" name="entry_date" value={form.entry_date}
+                 onChange={handleChange} className="form-control" required />
+        </div>
+        {renderPaymentTypeField(true)}
+      </div>
+      <div className="form-group">
+        <label className="form-label">Remarks <Star /></label>
+        <textarea name="remarks" value={form.remarks || ""} onChange={handleChange} rows={3}
+                  placeholder="Remarks (required)" className="form-control" required />
+      </div>
+    </>
+  );
+
   /* ---------------- RENDER: standard shared fields ---------------- */
   const renderStandardFields = () => (
     <>
@@ -1947,7 +2051,7 @@ export default function FinanceEntryForm({
                   <select name="payment_type" value={form.payment_type || ""}
                           onChange={handleChange} className="form-control" required>
                     <option value="">Select payment type</option>
-                    {PAYMENT_TYPES.map((pt) => (
+                    {paymentTypes.map((pt) => (
                       <option key={pt} value={pt}>{pt}</option>
                     ))}
                   </select>
@@ -2010,7 +2114,8 @@ export default function FinanceEntryForm({
            !isCorpusFundRestricted &&
            !requireItemsForCategory &&
            !isLedger &&
-           !isSalaryCategory && (
+           !isSalaryCategory &&
+           !isEvergladesSimple && (
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Amount (₹) <Star /></label>
@@ -2032,7 +2137,8 @@ export default function FinanceEntryForm({
            !requireItemsForCategory &&
            options.show_gst_tax &&
            !isLedger &&
-           !isSalaryCategory && (
+           !isSalaryCategory &&
+           !isEvergladesSimple && (
             <p className="text-muted" style={{ textAlign: "right", fontSize: 13, marginTop: -8 }}>
               GST Tax ({gstTaxPercentValue || 0}%): {formatCurrency(gstTaxAmount)}
               {" · "}
@@ -2144,7 +2250,9 @@ export default function FinanceEntryForm({
            !isCorpusFundRestricted &&
            !isSalaryCategory &&
            !isLedger && (
-            showCategoryFields ? renderCategoryFields() : renderStandardFields()
+            isEvergladesSimple
+              ? renderEvergladesFields()
+              : showCategoryFields ? renderCategoryFields() : renderStandardFields()
           )}
 
           <div className="modal-footer">
