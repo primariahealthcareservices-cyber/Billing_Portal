@@ -48,11 +48,7 @@ ENTRY_VIEWS = ("pending", "approved", "rejected")
 
 ROLLBACK_MONTHS = 24
 
-# The rollback chain starts here. The Roll Over Balance of this month is
-# FIXED_OPENING_BALANCE; every later month rolls from the previous month's
-# Current Balance (so Jan 2026 roll-over = Dec 2025 current balance).
-FIXED_OPENING_MONTH   = (2025, 1)
-FIXED_OPENING_BALANCE = 50_000.0
+# Monthly rollback starts from the earliest month containing request data.
 
 # Personal Amount: accepted spellings coming from the Staff Portal
 PERSONAL_GIVEN_ALIASES = ("given", "give", "credit", "advance", "issued", "out")
@@ -319,17 +315,17 @@ def _monthly_rollback():
 
     today = datetime.utcnow().date()
 
-    # The chain always starts at the fixed opening month (Jan 2025).
-    # Anything dated before it is ignored (it is already inside the opening balance).
-    first = FIXED_OPENING_MONTH
+    # Start at the earliest month with request data so 2024 and later
+    # transactions are returned as individual monthly rows.
+    # There is no hardcoded opening amount: the first month's roll-over is zero.
+    first = min(per_month, default=(today.year, today.month))
     last = max(max(per_month, default=first), (today.year, today.month))
-
+    opening_balance = 0.0
     cash_overrides = {c.month: float(c.available_cash) for c in CopperBookMonthlyCash.query.all()}
 
     result = []
-    prev_current_balance = FIXED_OPENING_BALANCE   # Jan 2025 roll-over = 50,000
+    prev_current_balance = opening_balance
     running_approved = 0.0
-
     y, m = first
     while (y, m) <= last:
         # No reset inside the loop: every month after the first rolls from
@@ -361,6 +357,7 @@ def _monthly_rollback():
             "cumulative_approved": round(running_approved, 2),
             "current_balance":     current_balance,
             "available_cash":      available_cash,
+            "cash_is_manual":      month_str in cash_overrides,
             "discrepancy":         discrepancy,
         })
 
@@ -371,6 +368,18 @@ def _monthly_rollback():
             y, m = y + 1, 1
 
     return result
+
+
+@cb_bp.route("/monthly-rollback-sync", methods=["GET"])
+def monthly_rollback_sync():
+    """Read-only Monthly Rollback feed for the Staff Portal.
+
+    Billing Portal is authoritative for this ledger. The existing service token
+    protects this endpoint so Staff Portal can display the exact same rows.
+    """
+    if not _service_token_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    return jsonify(_monthly_rollback()), 200
 
 
 def _dept_key(name):

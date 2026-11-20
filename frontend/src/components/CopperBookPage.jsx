@@ -50,10 +50,6 @@ const EMPTY_PERSONAL_TOTALS = { total_given: 0, total_paid: 0, balance: 0, emplo
 const PAGE_SIZE = 25;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-// Must match FIXED_OPENING_MONTH / FIXED_OPENING_BALANCE in backend/routes/copperbook.py
-const OPENING_MONTH = "2025-01";
-const OPENING_BALANCE = 50000;
-
 const fmtLocalDate = (d) => {
   const yy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -896,7 +892,6 @@ export default function CopperBookPage({ onBack }) {
     .filter((r) => rollYear === "all" || String(r.month).startsWith(rollYear))
     .filter((r) =>
       !rollHideEmpty ||
-      r.month === OPENING_MONTH ||
       Number(r.equity_added ?? r.capital_equity ?? 0) !== 0 ||
       Number(r.approved ?? 0) !== 0 ||
       Number(r.discrepancy ?? 0) !== 0
@@ -1019,8 +1014,6 @@ export default function CopperBookPage({ onBack }) {
                     const currentBalance = Number(row.current_balance ?? row.balance ?? 0);
                     const availableCash  = Number(row.available_cash ?? currentBalance);
                     const discrepancy    = Number(row.discrepancy ?? (currentBalance - availableCash));
-                    const isFixedOpening = row.month === OPENING_MONTH;
-
                     return (
                       <tr key={row.month} style={{ borderTop: "1px solid #eef2f7" }}>
                         <td style={{ padding: "6px 10px", color: "#334155", fontWeight: 500, whiteSpace: "nowrap" }}>
@@ -1031,7 +1024,6 @@ export default function CopperBookPage({ onBack }) {
                         </td>
                         <td
                           style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap", color: "#475569" }}
-                          title={isFixedOpening ? `Fixed opening balance (${fmtMoney(OPENING_BALANCE)}) at the start of ${fmtMonthLabel(OPENING_MONTH)}` : undefined}
                         >
                           {fmtMoney(rollOver)}
                         </td>
