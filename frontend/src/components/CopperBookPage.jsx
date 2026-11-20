@@ -28,6 +28,7 @@ const ENTRY_TABS = [
 ];
 
 const CHIPS = ["all", "pending", "forwarded_to_ceo", "approved", "rejected"];
+
 const EMPTY_SUMMARY = {
   all: { count: 0, amount: 0 },
   pending: { count: 0, amount: 0 },
@@ -35,6 +36,7 @@ const EMPTY_SUMMARY = {
   approved: { count: 0, amount: 0 },
   rejected: { count: 0, amount: 0 },
   capital_equity: { count: 0, amount: 0 },
+  expenses: { amount: 0 },
 };
 const EMPTY_EQUITY = {
   capital_equity: 0,
@@ -867,10 +869,9 @@ export default function CopperBookPage({ onBack }) {
   const counts = Object.fromEntries(CHIPS.map((c) => [c, summary[c]?.count || 0]));
   const chipTitle = statusFilter === "all" ? "All" : STATUS_LABEL[statusFilter];
 
-  const totalExpenses = Math.max(
-    0,
-    Number(summary.approved?.amount || 0) - Number(summary.capital_equity?.amount || 0)
-  );
+  // Approved, non-Capital-Equity amount for the current filters.
+  // Calculated on the backend with the same logic as the Monthly Rollback.
+  const totalExpenses = Number(summary.expenses?.amount || 0);
 
   const allEntries = detail?.employee_entries || [];
   const groups = {

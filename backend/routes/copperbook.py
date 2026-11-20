@@ -3,6 +3,7 @@ import os
 import re as _re
 import json
 import math
+import time
 import traceback
 from datetime import datetime, timedelta
 import requests
@@ -59,19 +60,23 @@ PERSONAL_PAID_ALIASES = ("paid", "pay", "debit", "return", "returned", "repaid",
 
 _SEARCH_NORM = _re.compile(r'[^a-z0-9]+')
 
+
 def _normalize_search(s: str) -> str:
     return _SEARCH_NORM.sub('', (s or '').lower())
+
 
 def _service_token_ok():
     expected = os.getenv("FINANCEHUB_SERVICE_TOKEN") or ""
     got = request.headers.get("X-Service-Token") or ""
     return bool(expected) and expected == got
 
+
 def _fmt_money(v):
     try:
         return f"₹ {float(v):,.2f}"
     except Exception:
         return "—"
+
 
 def _parse_date(raw):
     if raw is None:
@@ -146,8 +151,12 @@ def _status_groups(r):
             if not es:
                 continue
             key = st
+            # Pending entries are only labelled "forwarded_to_ceo" when the
+            # whole request is waiting on the CEO. They must never borrow
+            # "approved"/"rejected" from the request status, otherwise
+            # unapproved money is counted as approved in the summary.
             if st == "pending":
-                key = r.status if r.status in VIEW_STATUSES else "pending"
+                key = "forwarded_to_ceo" if r.status == "forwarded_to_ceo" else "pending"
             groups.append((key, float(sum((e.total_amount or 0) for e in es)), len(es)))
         return groups
     return [(r.status, _request_amount(r), None)]
@@ -196,6 +205,17 @@ def _amounts_by_status(r):
     else:
         out["pending"] = amt
     return out
+
+
+def _approved_expense(r):
+    """Approved amount of a request, excluding Capital Equity.
+
+    Uses the same per-entry logic as the Monthly Rollback, so the table
+    footer "Total Expenses" always agrees with the rollback "Approval" column.
+    """
+    if _is_capital_equity(r):
+        return 0.0
+    return _amounts_by_status(r)["approved"]
 
 
 def _capital_equity_summary(start, end, department=None):
@@ -302,13 +322,13 @@ def _monthly_rollback():
     # The chain always starts at the fixed opening month (Jan 2025).
     # Anything dated before it is ignored (it is already inside the opening balance).
     first = FIXED_OPENING_MONTH
-    last  = max(max(per_month, default=first), (today.year, today.month))
+    last = max(max(per_month, default=first), (today.year, today.month))
 
     cash_overrides = {c.month: float(c.available_cash) for c in CopperBookMonthlyCash.query.all()}
 
     result = []
     prev_current_balance = FIXED_OPENING_BALANCE   # Jan 2025 roll-over = 50,000
-    running_approved     = 0.0
+    running_approved = 0.0
 
     y, m = first
     while (y, m) <= last:
@@ -317,16 +337,16 @@ def _monthly_rollback():
         ce, ap = per_month.get((y, m), (0.0, 0.0))
 
         roll_over_balance = round(prev_current_balance, 2)
-        actual_balance    = round(roll_over_balance + ce, 2)
-        current_balance   = round(actual_balance - ap, 2)
+        actual_balance = round(roll_over_balance + ce, 2)
+        current_balance = round(actual_balance - ap, 2)
 
         month_str = f"{y:04d}-{m:02d}"
         if month_str in cash_overrides:
             available_cash = cash_overrides[month_str]
-            discrepancy    = round(current_balance - available_cash, 2)
+            discrepancy = round(current_balance - available_cash, 2)
         else:
             available_cash = current_balance
-            discrepancy    = 0.0
+            discrepancy = 0.0
 
         running_approved += ap
 
@@ -599,8 +619,6 @@ def _sync_to_staffportal(req: CopperBookRequest):
         pass
 
 
-# billing-portal/backend/routes/copperbook.py
-
 def _sync_edit_to_staffportal(req: CopperBookRequest):
     base = (os.getenv("STAFFPORTAL_BASE_URL") or "").rstrip("/")
     token = os.getenv("COPPERBOOK_CALLBACK_TOKEN") or ""
@@ -638,6 +656,8 @@ def _sync_edit_to_staffportal(req: CopperBookRequest):
     except Exception as e:
         print(f"[copperbook] edit sync error {req.request_number}:", e)
         return False, str(e)
+
+
 def _sync_delete_to_staffportal(req: CopperBookRequest, deleted_by: str, remarks: str | None):
     base = (os.getenv("STAFFPORTAL_BASE_URL") or "").rstrip("/")
     token = os.getenv("COPPERBOOK_CALLBACK_TOKEN") or ""
@@ -660,21 +680,33 @@ def _sync_delete_to_staffportal(req: CopperBookRequest, deleted_by: str, remarks
             if getattr(req, "reference_date", None) else None
         ),
     }
-    try:
-        resp = requests.post(
-            f"{base}/api/copperbook/sync",
-            json=payload,
-            headers={"X-Service-Token": token},
-            timeout=8,
-        )
-        if resp.ok:
-            return True, "ok"
-        print(f"[copperbook] delete sync failed {req.request_number}: "
-              f"{resp.status_code} {resp.text[:300]}")
-        return False, f"Staff Portal responded {resp.status_code}"
-    except Exception as e:
-        print(f"[copperbook] delete sync error {req.request_number}:", e)
-        return False, str(e)
+
+    last_err = None
+    for attempt in range(1, 4):          # 3 attempts, 0.5s / 1s / 1.5s backoff
+        try:
+            resp = requests.post(
+                f"{base}/api/copperbook/sync",
+                json=payload,
+                headers={"X-Service-Token": token},
+                timeout=8,
+            )
+            if resp.ok:
+                return True, "ok"
+            last_err = f"Staff Portal responded {resp.status_code}: {resp.text[:200]}"
+            print(f"[copperbook] delete sync attempt {attempt}/3 failed "
+                  f"for {req.request_number}: {last_err}")
+        except Exception as e:
+            last_err = str(e)
+            print(f"[copperbook] delete sync attempt {attempt}/3 error "
+                  f"for {req.request_number}: {e}")
+        if attempt < 3:
+            time.sleep(0.5 * attempt)
+
+    print(f"[copperbook] DELETE NOT PROPAGATED — "
+          f"request_number={req.request_number} remote_id={req.remote_id} "
+          f"reason={last_err}")
+    return False, last_err
+
 
 # Receive manual available_cash sync from Staff Portal
 @cb_bp.route("/intake-cash", methods=["POST", "OPTIONS"])
@@ -869,6 +901,38 @@ def intake_ping():
     if not _service_token_ok():
         return jsonify({"ok": False, "error": "Unauthorized"}), 401
     return jsonify({"ok": True}), 200
+
+
+@cb_bp.route("/by-number/<string:rn>", methods=["GET"])
+def by_number(rn):
+    """
+    Used by the Staff Portal's /admin/backfill-billing to skip rows
+    Billing already has. Service-token protected; not for user traffic.
+    """
+    if not _service_token_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    r = CopperBookRequest.query.filter_by(request_number=rn).first()
+    if not r:
+        return jsonify({"exists": False}), 404
+    return jsonify({"exists": True, "id": r.id, "status": r.status}), 200
+
+
+@cb_bp.route("/existing-numbers", methods=["GET"])
+def existing_numbers():
+    """
+    Returns every request_number billing currently holds.
+    Used by staff's /admin/reconcile-deletes to detect drift in bulk.
+    Service-token protected.
+    """
+    if not _service_token_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    rows = db.session.query(CopperBookRequest.request_number).all()
+    numbers = sorted({
+        rn for (rn,) in rows
+        if rn and rn.strip() and rn.strip().upper() != "PENDING"
+    })
+    return jsonify({"numbers": numbers, "count": len(numbers)}), 200
 
 
 @cb_bp.route("/intake", methods=["POST", "OPTIONS"])
@@ -1111,6 +1175,10 @@ def list_all():
         .all()
     )
 
+    # Approved, non-Capital-Equity money for exactly the rows matching the
+    # current filters. Same logic as the Monthly Rollback "Approval" column.
+    expenses_total = round(sum(_approved_expense(r) for r in all_rows), 2)
+
     flat = []
     for r in all_rows:
         groups = _status_groups(r)
@@ -1133,6 +1201,7 @@ def list_all():
         "count": len(eq_rows),
         "amount": round(sum((x[1][1] or 0) for x in eq_rows), 2),
     }
+    summary["expenses"] = {"amount": expenses_total}
 
     if equity_chip:
         sel = eq_rows
