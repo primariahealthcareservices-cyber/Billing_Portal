@@ -1,34 +1,57 @@
+
 // frontend/src/components/Navbar.jsx
+
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { LogOut, LayoutDashboard, Bell, BookOpen, Check } from "lucide-react";
+import {
+  LogOut,
+  LayoutDashboard,
+  Bell,
+  BookOpen,
+  Check,
+  ListTodo,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import toast from "react-hot-toast";
 import api from "../api/axios.js";
 
-const POLL_MS = 30000; // refresh every 30s
+const POLL_MS = 30000;
 
-export default function Navbar({ title, roleColor = "#2f5dd4", onCopperBook }) {
+export default function Navbar({
+  title,
+  roleColor = "#2f5dd4",
+  onCopperBook,
+  onTodoList,
+}) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+
   const [logoFailed, setLogoFailed] = useState(false);
 
-  // ── Notifications ─────────────────────────────────────────────
+  // Notifications
   const [notifications, setNotifications] = useState([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
+
   const dropdownRef = useRef(null);
 
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const unreadCount = notifications.filter(
+    (n) => !n.is_read
+  ).length;
 
   const fetchNotifications = useCallback(async () => {
     try {
       setLoadingNotifs(true);
+
       const res = await api.get("/notifications/my");
+
       const list = res.data.notifications || [];
       setNotifications(list);
     } catch (err) {
-      console.warn("Failed to load notifications:", err?.message);
+      console.warn(
+        "Failed to load notifications:",
+        err?.message
+      );
     } finally {
       setLoadingNotifs(false);
     }
@@ -36,49 +59,84 @@ export default function Navbar({ title, roleColor = "#2f5dd4", onCopperBook }) {
 
   useEffect(() => {
     fetchNotifications();
+
     const t = setInterval(fetchNotifications, POLL_MS);
+
     return () => clearInterval(t);
   }, [fetchNotifications]);
 
-  // Close dropdown on outside click
+  // Close notification dropdown on outside click
   useEffect(() => {
     const handler = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target)
+      ) {
         setNotifOpen(false);
       }
     };
+
     document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+
+    return () => {
+      document.removeEventListener("mousedown", handler);
+    };
   }, []);
 
+  // Mark individual notification as read
   const markOne = async (n) => {
     if (!n.is_read) {
       try {
         await api.put(`/notifications/${n.id}/read`);
+
         setNotifications((prev) =>
-          prev.map((x) => (x.id === n.id ? { ...x, is_read: true } : x))
+          prev.map((x) =>
+            x.id === n.id
+              ? { ...x, is_read: true }
+              : x
+          )
         );
       } catch (err) {
-        console.warn("Mark read failed", err?.message);
+        console.warn(
+          "Mark read failed",
+          err?.message
+        );
       }
     }
-    // If it's a CopperBook notification → open CopperBook page
-    if (n.related_type === "copperbook" && onCopperBook) {
+
+    // Open CopperBook for CopperBook notifications
+    if (
+      n.related_type === "copperbook" &&
+      onCopperBook
+    ) {
       setNotifOpen(false);
       onCopperBook();
     }
   };
 
+  // Mark all notifications as read
   const markAllRead = async () => {
     try {
       await api.put("/notifications/read-all");
-      setNotifications((prev) => prev.map((x) => ({ ...x, is_read: true })));
-      toast.success("All notifications marked as read.");
+
+      setNotifications((prev) =>
+        prev.map((x) => ({
+          ...x,
+          is_read: true,
+        }))
+      );
+
+      toast.success(
+        "All notifications marked as read."
+      );
     } catch (err) {
-      toast.error("Failed to mark all as read.");
+      toast.error(
+        "Failed to mark all as read."
+      );
     }
   };
 
+  // Logout
   const handleLogout = () => {
     logout();
     toast.success("Logged out successfully.");
@@ -88,29 +146,56 @@ export default function Navbar({ title, roleColor = "#2f5dd4", onCopperBook }) {
   return (
     <header className="navbar">
       <div className="navbar-inner">
+
+        {/* Company Logo and Dashboard Title */}
         <div className="navbar-brand">
           {!logoFailed ? (
             <img
               src="/primaria.png"
               alt="Company Logo"
               onError={() => setLogoFailed(true)}
-              style={{ height: 36, width: "auto", maxWidth: 140, objectFit: "contain", flexShrink: 0 }}
+              style={{
+                height: 36,
+                width: "auto",
+                maxWidth: 140,
+                objectFit: "contain",
+                flexShrink: 0,
+              }}
             />
           ) : (
-            <div className="navbar-icon" style={{ background: roleColor }}>
+            <div
+              className="navbar-icon"
+              style={{ background: roleColor }}
+            >
               <LayoutDashboard size={18} />
             </div>
           )}
+
           <div className="navbar-titles">
-            <p className="navbar-title">{title}</p>
-            <p className="navbar-subtitle">Finance Hub</p>
+            <p className="navbar-title">
+              {title}
+            </p>
+
+            <p className="navbar-subtitle">
+              Finance Hub
+            </p>
           </div>
         </div>
 
-        <div className="navbar-user" style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {/* ── CopperBook button ── */}
+        {/* Right Side Navbar Actions */}
+        <div
+          className="navbar-user"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+
+          {/* CopperBook Button */}
           {onCopperBook && (
             <button
+              type="button"
               onClick={onCopperBook}
               title="Open CopperBook"
               style={{
@@ -125,6 +210,7 @@ export default function Navbar({ title, roleColor = "#2f5dd4", onCopperBook }) {
                 cursor: "pointer",
                 fontWeight: 600,
                 fontSize: 13,
+                whiteSpace: "nowrap",
               }}
             >
               <BookOpen size={16} />
@@ -132,10 +218,42 @@ export default function Navbar({ title, roleColor = "#2f5dd4", onCopperBook }) {
             </button>
           )}
 
-          {/* ── Notifications bell ── */}
-          <div ref={dropdownRef} style={{ position: "relative" }}>
+          {/* To-Do List Button */}
+          {onTodoList && (
             <button
-              onClick={() => setNotifOpen((o) => !o)}
+              type="button"
+              onClick={onTodoList}
+              title="Open To-Do List"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "8px 14px",
+                borderRadius: 8,
+                background: "rgba(124, 58, 237, 0.1)",
+                color: "#7c3aed",
+                border: "1px solid rgba(124, 58, 237, 0.25)",
+                cursor: "pointer",
+                fontWeight: 600,
+                fontSize: 13,
+                whiteSpace: "nowrap",
+              }}
+            >
+              <ListTodo size={16} />
+              To-Do List
+            </button>
+          )}
+
+          {/* Notifications */}
+          <div
+            ref={dropdownRef}
+            style={{ position: "relative" }}
+          >
+            <button
+              type="button"
+              onClick={() =>
+                setNotifOpen((o) => !o)
+              }
               title="Notifications"
               style={{
                 position: "relative",
@@ -151,6 +269,7 @@ export default function Navbar({ title, roleColor = "#2f5dd4", onCopperBook }) {
               }}
             >
               <Bell size={20} />
+
               {unreadCount > 0 && (
                 <span
                   style={{
@@ -168,11 +287,14 @@ export default function Navbar({ title, roleColor = "#2f5dd4", onCopperBook }) {
                     lineHeight: "14px",
                   }}
                 >
-                  {unreadCount > 99 ? "99+" : unreadCount}
+                  {unreadCount > 99
+                    ? "99+"
+                    : unreadCount}
                 </span>
               )}
             </button>
 
+            {/* Notification Dropdown */}
             {notifOpen && (
               <div
                 style={{
@@ -180,15 +302,18 @@ export default function Navbar({ title, roleColor = "#2f5dd4", onCopperBook }) {
                   top: "calc(100% + 8px)",
                   right: 0,
                   width: 380,
+                  maxWidth: "calc(100vw - 24px)",
                   maxHeight: 480,
                   overflowY: "auto",
                   background: "#fff",
                   border: "1px solid #e2e8f0",
                   borderRadius: 10,
-                  boxShadow: "0 10px 30px rgba(15, 23, 42, 0.15)",
+                  boxShadow:
+                    "0 10px 30px rgba(15, 23, 42, 0.15)",
                   zIndex: 2000,
                 }}
               >
+                {/* Dropdown Header */}
                 <div
                   style={{
                     display: "flex",
@@ -201,9 +326,13 @@ export default function Navbar({ title, roleColor = "#2f5dd4", onCopperBook }) {
                     background: "#fff",
                   }}
                 >
-                  <strong style={{ fontSize: 14 }}>Notifications</strong>
+                  <strong style={{ fontSize: 14 }}>
+                    Notifications
+                  </strong>
+
                   {unreadCount > 0 && (
                     <button
+                      type="button"
                       onClick={markAllRead}
                       style={{
                         background: "none",
@@ -216,17 +345,34 @@ export default function Navbar({ title, roleColor = "#2f5dd4", onCopperBook }) {
                         gap: 4,
                       }}
                     >
-                      <Check size={12} /> Mark all read
+                      <Check size={12} />
+                      Mark all read
                     </button>
                   )}
                 </div>
 
-                {loadingNotifs && notifications.length === 0 ? (
-                  <div style={{ padding: 16, textAlign: "center", color: "#64748b", fontSize: 13 }}>
+                {/* Loading State */}
+                {loadingNotifs &&
+                notifications.length === 0 ? (
+                  <div
+                    style={{
+                      padding: 16,
+                      textAlign: "center",
+                      color: "#64748b",
+                      fontSize: 13,
+                    }}
+                  >
                     Loading…
                   </div>
                 ) : notifications.length === 0 ? (
-                  <div style={{ padding: 24, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>
+                  <div
+                    style={{
+                      padding: 24,
+                      textAlign: "center",
+                      color: "#94a3b8",
+                      fontSize: 13,
+                    }}
+                  >
                     No notifications yet.
                   </div>
                 ) : (
@@ -236,23 +382,36 @@ export default function Navbar({ title, roleColor = "#2f5dd4", onCopperBook }) {
                       onClick={() => markOne(n)}
                       style={{
                         padding: "10px 16px",
-                        borderBottom: "1px solid #f1f5f9",
+                        borderBottom:
+                          "1px solid #f1f5f9",
                         cursor: "pointer",
-                        background: n.is_read ? "#fff" : "#eff6ff",
+                        background: n.is_read
+                          ? "#fff"
+                          : "#eff6ff",
                       }}
                     >
                       <div
                         style={{
                           fontSize: 13,
                           color: "#0f172a",
-                          fontWeight: n.is_read ? 400 : 600,
+                          fontWeight: n.is_read
+                            ? 400
+                            : 600,
                           marginBottom: 2,
                         }}
                       >
                         {n.message}
                       </div>
-                      <div style={{ fontSize: 11, color: "#64748b" }}>
-                        {new Date(n.created_at).toLocaleString()}
+
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "#64748b",
+                        }}
+                      >
+                        {new Date(
+                          n.created_at
+                        ).toLocaleString()}
                       </div>
                     </div>
                   ))
@@ -261,20 +420,32 @@ export default function Navbar({ title, roleColor = "#2f5dd4", onCopperBook }) {
             )}
           </div>
 
-          {/* ── User info + avatar + logout ── */}
+          {/* User Information */}
           <div className="navbar-user-info">
-            <p className="navbar-user-name">{user?.name}</p>
+            <p className="navbar-user-name">
+              {user?.name}
+            </p>
+
             <p className="navbar-user-meta">
               {user?.role} · {user?.email}
             </p>
           </div>
+
+          {/* User Avatar */}
           <div className="navbar-avatar">
             {user?.name?.charAt(0)?.toUpperCase() || "U"}
           </div>
-          <button onClick={handleLogout} className="logout-btn">
+
+          {/* Logout Button */}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="logout-btn"
+          >
             <LogOut size={16} />
             Logout
           </button>
+
         </div>
       </div>
     </header>

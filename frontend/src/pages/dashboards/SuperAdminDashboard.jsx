@@ -19,6 +19,7 @@ import CopperBookPage from "../../components/CopperBookPage.jsx";
 import ThreeDChart from "../../components/ThreeDChart.jsx";
 import RemarkCell, { remarkCellStyle } from "../../components/RemarkCell.jsx";
 import api from "../../api/axios.js";
+import TodoListPage from "./TodoListPage";
 
 const DEPARTMENTS_CONFIG = [
   { label: "Overview", value: "overview" },
@@ -62,8 +63,34 @@ const SUB_DEPT_TO_MAIN = {
   "Research Development": "ResearchDevelopment",
 };
 
+const SALARY_LABEL = "Salary & Payrolls";
+
+// Display names for internal department keys (used for the "Exec Dept" column)
+const DEPT_LABELS = {
+  Corporate: "Corporate Management",
+  Adminstrationfunctionalunit: "Office Administration",
+  Caredx: "CareDx",
+  Dental: "Dental",
+  Everglades: "Everglades",
+  IT: "IT Development",
+  "IT Sales": "IT Sales",
+  MedTech: "MedTech",
+  PCM: "PCM",
+  ResearchDevelopment: "Research Development",
+  SalesEnterprise: "Sales Enterprise",
+};
+
+// Replace the raw exec_department key with its friendly label (display only)
+const withExecLabel = (e) => {
+  if (!e || !e.exec_department) return e;
+  return {
+    ...e,
+    exec_department: e.exec_department_label || DEPT_LABELS[e.exec_department] || e.exec_department,
+  };
+};
+
 const STANDARD_CATEGORIES = [
-  "Salary & Payrolls",
+  SALARY_LABEL,
   "Referrals & Deposits",
   "Products & Innovation",
   "General Operations",
@@ -76,12 +103,7 @@ const STANDARD_CATEGORIES = [
 const CORPUS_FUND_LABEL = "Corpus Fund";
 
 const normalizeCat = (s) =>
-  (s ?? "")
-    .toString()
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
+  (s ?? "").toString().toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
 
 const CATEGORY_ALIASES = {
   "Salary & Payrolls": ["salary", "salaries", "payroll", "payrolls", "wage", "wages", "staff cost", "stipend"],
@@ -118,7 +140,7 @@ const isSalaryEntry = (e) => {
 const getEntryCategory = (e) => {
   if (!e) return null;
   if (isCorpusEntry(e)) return CORPUS_FUND_LABEL;
-  if (isSalaryEntry(e)) return "Salary & Payrolls";
+  if (isSalaryEntry(e)) return SALARY_LABEL;
   const raw = normalizeCat(e.category ?? e.expense_category ?? e.expense_type ?? "");
   if (!raw) return null;
   for (const cat of STANDARD_CATEGORIES) {
@@ -170,7 +192,7 @@ const SALARY_KEYS = [
 const normalizeSalary = (s) => ({
   ...s,
   _isSalary: true,
-  category: "Salary & Payrolls",
+  category: SALARY_LABEL,
   amount: s.amount ?? s.net_salary ?? s.total_salary ?? s.salary ?? s.net_pay ?? s.total_amount_paid ?? 0,
   expense_date:
     s.expense_date || s.entry_date || s.payment_date || s.salary_date || s.paid_on || s.date || s.month || "",
@@ -217,30 +239,15 @@ const matchesDataView = (entry, view) => {
 };
 
 const categoryBtnStyle = {
-  padding: "10px 20px",
-  borderRadius: 22,
-  fontSize: 13,
-  fontWeight: 500,
-  minHeight: 42,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  textAlign: "center",
-  lineHeight: 1.2,
-  whiteSpace: "normal",
-  wordBreak: "break-word",
-  border: "1px solid #d1d5db",
-  background: "#ffffff",
-  transition: "all 0.15s ease",
-  cursor: "pointer",
+  padding: "10px 20px", borderRadius: 22, fontSize: 13, fontWeight: 500, minHeight: 42,
+  display: "inline-flex", alignItems: "center", justifyContent: "center",
+  textAlign: "center", lineHeight: 1.2, whiteSpace: "normal", wordBreak: "break-word",
+  border: "1px solid #d1d5db", background: "#ffffff", transition: "all 0.15s ease", cursor: "pointer",
 };
 
 const categoryBtnActiveStyle = {
   ...categoryBtnStyle,
-  background: "#2f5dd4",
-  border: "1px solid #2f5dd4",
-  color: "#ffffff",
-  fontWeight: 600,
+  background: "#2f5dd4", border: "1px solid #2f5dd4", color: "#ffffff", fontWeight: 600,
 };
 
 const KPI_DISPLAY_NAMES = {
@@ -258,7 +265,6 @@ const KPI_DISPLAY_NAMES = {
   forecast_accuracy: "Forecast Accuracy"
 };
 const KPI_KEYS = Object.keys(KPI_DISPLAY_NAMES);
-
 const PIE_COLORS = ["#2f5dd4", "#16a34a", "#d97706", "#8b5cf6", "#dc2626", "#0ea5e9", "#8b5cf6"];
 
 const formatCurrency = (value) =>
@@ -272,8 +278,7 @@ const fmtLocalDate = (d) => {
 };
 
 const firstOfMonth = () => {
-  const d = new Date();
-  d.setMonth(d.getMonth() - 3);
+  const d = new Date(); d.setMonth(d.getMonth() - 3);
   return fmtLocalDate(new Date(d.getFullYear(), d.getMonth(), 1));
 };
 const todayStr = () => fmtLocalDate(new Date());
@@ -319,11 +324,7 @@ const getPaymentBadgeStyle = (paymentType) => {
 };
 
 const paymentBadgeStyle = {
-  padding: "2px 8px",
-  borderRadius: "12px",
-  fontSize: "12px",
-  fontWeight: "600",
-  display: "inline-block",
+  padding: "2px 8px", borderRadius: "12px", fontSize: "12px", fontWeight: "600", display: "inline-block",
 };
 
 const renderPaymentBadge = (paymentType) => {
@@ -382,16 +383,15 @@ export default function SuperAdminDashboard() {
 
   const [viewEntry, setViewEntry] = useState(null);
   const [showCopperBook, setShowCopperBook] = useState(false);
+  const [showTodo, setShowTodo] = useState(false);
 
   useEffect(() => {
     if (activeDept !== "SalesEnterprise") return;
     if (!selectedYear) return;
-
     const year = parseInt(selectedYear, 10);
     let start, end;
-    if (selectedQuarter === "") {
-      start = new Date(year, 0, 1); end = new Date(year, 11, 31);
-    } else {
+    if (selectedQuarter === "") { start = new Date(year, 0, 1); end = new Date(year, 11, 31); }
+    else {
       const q = parseInt(selectedQuarter, 10);
       if (q === 1) { start = new Date(year, 0, 1); end = new Date(year, 2, 31); }
       else if (q === 2) { start = new Date(year, 3, 1); end = new Date(year, 5, 30); }
@@ -399,25 +399,17 @@ export default function SuperAdminDashboard() {
       else if (q === 4) { start = new Date(year, 9, 1); end = new Date(year, 11, 31); }
       else return;
     }
-    if (start && end) {
-      setStartDate(fmtLocalDate(start));
-      setEndDate(fmtLocalDate(end));
-    }
+    if (start && end) { setStartDate(fmtLocalDate(start)); setEndDate(fmtLocalDate(end)); }
   }, [selectedQuarter, selectedYear, activeDept]);
 
   useEffect(() => {
     if (activeDept !== "SalesEnterprise") return;
     if (!selectedYear) {
-      setSalesKpis([]);
-      setSalesAggregated({ averages: {}, monthlyData: [] });
-      setSalesSelectedDept(null);
-      setDeptSummary(null);
-      return;
+      setSalesKpis([]); setSalesAggregated({ averages: {}, monthlyData: [] });
+      setSalesSelectedDept(null); setDeptSummary(null); return;
     }
-
     const mainDept = SUB_DEPT_TO_MAIN[selectedSubDept];
-    if (mainDept) setSalesSelectedDept(mainDept);
-    else setSalesSelectedDept(null);
+    if (mainDept) setSalesSelectedDept(mainDept); else setSalesSelectedDept(null);
 
     const fetchKpis = async () => {
       setSalesKpisLoading(true);
@@ -425,18 +417,15 @@ export default function SuperAdminDashboard() {
         const params = { year: parseInt(selectedYear, 10) };
         if (selectedSubDept !== "All") params.department = selectedSubDept;
         if (selectedQuarter) params.quarter = `Q${selectedQuarter}`;
-        
         const res = await api.get("/salesenterprise/kpis", { params });
         const records = res.data.kpis || [];
         setSalesKpis(records);
-
         const monthMap = {};
         records.forEach(record => {
           const month = record.month || "January";
           if (!monthMap[month]) monthMap[month] = [];
           monthMap[month].push(record);
         });
-
         const monthlyData = Object.keys(monthMap).map(month => {
           const recordsForMonth = monthMap[month];
           const entry = { month };
@@ -447,21 +436,16 @@ export default function SuperAdminDashboard() {
           return entry;
         });
         monthlyData.sort((a, b) => getMonthNumber(a.month) - getMonthNumber(b.month));
-
         const overallAverages = {};
         KPI_KEYS.forEach(key => {
           const allValues = records.map(r => parseFloat(r[key])).filter(v => !isNaN(v));
           overallAverages[key] = allValues.length > 0 ? average(allValues) : null;
         });
-
         setSalesAggregated({ averages: overallAverages, monthlyData });
       } catch (err) {
         toast.error("Failed to load KPIs for the selected sub‑department.");
-        setSalesKpis([]);
-        setSalesAggregated({ averages: {}, monthlyData: [] });
-      } finally {
-        setSalesKpisLoading(false);
-      }
+        setSalesKpis([]); setSalesAggregated({ averages: {}, monthlyData: [] });
+      } finally { setSalesKpisLoading(false); }
     };
     fetchKpis();
   }, [activeDept, selectedSubDept, selectedYear, selectedQuarter]);
@@ -478,9 +462,7 @@ export default function SuperAdminDashboard() {
     try {
       const res = await api.get(`/admin/departments/${dept}/options`);
       setDepartmentOptions(res.data);
-    } catch {
-      toast.error("Failed to load department options.");
-    }
+    } catch { toast.error("Failed to load department options."); }
   }, []);
 
   const fetchOverview = useCallback(async (start, end) => {
@@ -488,11 +470,8 @@ export default function SuperAdminDashboard() {
     try {
       const res = await api.get("/admin/overview", { params: { start_date: start, end_date: end } });
       setOverview(res.data);
-    } catch {
-      toast.error("Failed to load admin overview.");
-    } finally {
-      setLoading(false);
-    }
+    } catch { toast.error("Failed to load admin overview."); }
+    finally { setLoading(false); }
   }, []);
 
   const fetchDeptSummaryOnly = useCallback(async (dept, start, end) => {
@@ -501,12 +480,8 @@ export default function SuperAdminDashboard() {
       const params = { start_date: start, end_date: end };
       const summaryRes = await api.get(`/admin/departments/${dept}/summary`, { params });
       setDeptSummary(summaryRes.data);
-    } catch (err) {
-      toast.error(`Failed to load ${dept} summary.`);
-      console.error(err);
-    } finally {
-      setDeptLoading(false);
-    }
+    } catch (err) { toast.error(`Failed to load ${dept} summary.`); console.error(err); }
+    finally { setDeptLoading(false); }
   }, []);
 
   const fetchDeptData = useCallback(async () => {
@@ -533,18 +508,15 @@ export default function SuperAdminDashboard() {
           api.get(`/admin/departments/${activeDept}/entries`, { params: { ...entriesParams, section: "expenses" } }).catch(() => null),
           api.get(`/admin/departments/${activeDept}/summary`, { params: summaryParams }),
         ]);
-
         const labPag = labRes.data.pagination || {};
         const expPag = expRes?.data?.pagination || {};
         const pagination = (expPag.total || 0) > (labPag.total || 0) ? expPag : labPag;
-
         if (categoryActive) { setTotalEntries(0); setTotalPages(0); }
         else {
           setTotalEntries(pagination.total || 0);
           setTotalPages(pagination.pages || 0);
           setPage(pagination.page || 1);
         }
-
         setCaredxLabEntries(labRes.data.lab_entries || expRes?.data?.lab_entries || []);
         setCaredxExpenses(
           mergeCaredxExpenses(
@@ -561,7 +533,6 @@ export default function SuperAdminDashboard() {
           api.get(`/admin/departments/${activeDept}/entries`, { params: entriesParams }),
           api.get(`/admin/departments/${activeDept}/summary`, { params: summaryParams }),
         ]);
-
         const pagination = entriesRes.data.pagination || {};
         if (categoryActive) { setTotalEntries(0); setTotalPages(0); }
         else {
@@ -569,16 +540,13 @@ export default function SuperAdminDashboard() {
           setTotalPages(pagination.pages || 0);
           setPage(pagination.page || 1);
         }
-
         setDeptEntries(entriesRes.data.entries || []);
         setDeptSummary(summaryRes.data);
       }
     } catch (err) {
       toast.error(`Failed to load ${activeDept} data.`);
       console.error(err);
-    } finally {
-      setDeptLoading(false);
-    }
+    } finally { setDeptLoading(false); }
   }, [activeDept, activeExtra, startDate, endDate, searchTerm, selectedCategory, page, perPage]);
 
   useEffect(() => { setPage(1); }, [startDate, endDate, searchTerm, selectedCategory]);
@@ -594,55 +562,33 @@ export default function SuperAdminDashboard() {
   const handleSelectDept = (value) => {
     const config = DEPARTMENTS_CONFIG.find((d) => d.value === value);
     if (!config) return;
-
-    setActiveDept(value);
-    setActiveExtra(config.extra || null);
-
-    setDraftSearchTerm("");
-    setSearchTerm("");
-    setSelectedCategory(null);
-    setSalesSelectedDept(null);
-    setSelectedSubDept("All");
+    setActiveDept(value); setActiveExtra(config.extra || null);
+    setDraftSearchTerm(""); setSearchTerm(""); setSelectedCategory(null);
+    setSalesSelectedDept(null); setSelectedSubDept("All");
     setSelectedYear(String(new Date().getFullYear()));
-
-    setDataView("all");
-    setDraftTransactionType("all");
-
-    setDeptEntries([]);
-    setCaredxLabEntries([]);
-    setCaredxExpenses([]);
-    setDeptSummary(null);
-
-    setPage(1);
-    setTotalEntries(0);
-    setTotalPages(0);
+    setDataView("all"); setDraftTransactionType("all");
+    setDeptEntries([]); setCaredxLabEntries([]); setCaredxExpenses([]); setDeptSummary(null);
+    setPage(1); setTotalEntries(0); setTotalPages(0);
   };
 
   const handleResetFilters = () => {
-    const defaultStart = firstOfMonth();
-    const defaultEnd = todayStr();
+    const defaultStart = firstOfMonth(); const defaultEnd = todayStr();
     const defaultYear = String(new Date().getFullYear());
-
     setStartDate(defaultStart); setEndDate(defaultEnd);
     setSearchTerm(""); setSelectedCategory(null);
     setSelectedQuarter(""); setSelectedYear(defaultYear); setSelectedSubDept("All");
     setSalesSelectedDept(null);
     setQuarterFilter(""); setYearFilter(defaultYear);
     setDataView("all"); setPage(1);
-
     setDraftTransactionType("all"); setDraftQuarter(""); setDraftYear(defaultYear);
     setDraftStartDate(defaultStart); setDraftEndDate(defaultEnd); setDraftSearchTerm("");
   };
 
   const handleApplyFilters = () => {
-    setDataView(draftTransactionType);
-    setSelectedCategory(null);
-    setQuarterFilter(draftQuarter);
-    setYearFilter(draftYear);
-    setStartDate(draftStartDate);
-    setEndDate(draftEndDate);
-    setSearchTerm(draftSearchTerm);
-    setPage(1);
+    setDataView(draftTransactionType); setSelectedCategory(null);
+    setQuarterFilter(draftQuarter); setYearFilter(draftYear);
+    setStartDate(draftStartDate); setEndDate(draftEndDate);
+    setSearchTerm(draftSearchTerm); setPage(1);
   };
 
   const handleDraftQuarterChange = (q) => {
@@ -660,11 +606,7 @@ export default function SuperAdminDashboard() {
   const handleDraftStartDateChange = (v) => { setDraftStartDate(v); setDraftQuarter(""); };
   const handleDraftEndDateChange = (v) => { setDraftEndDate(v); setDraftQuarter(""); };
 
-  const handleAllCategories = () => {
-    setSelectedCategory(null);
-    setDataView("all");
-    setPage(1);
-  };
+  const handleAllCategories = () => { setSelectedCategory(null); setDataView("all"); setPage(1); };
 
   const handleCategorySelect = (cat) => {
     setSelectedCategory(cat);
@@ -672,13 +614,8 @@ export default function SuperAdminDashboard() {
     setPage(1);
   };
 
-  const handleCapitalFilterSelect = () => {
-    setDataView("capital"); setSelectedCategory(null); setPage(1);
-  };
-
-  const handleCorpusFundFilterSelect = () => {
-    setDataView("corpusfund"); setSelectedCategory(null); setPage(1);
-  };
+  const handleCapitalFilterSelect = () => { setDataView("capital"); setSelectedCategory(null); setPage(1); };
+  const handleCorpusFundFilterSelect = () => { setDataView("corpusfund"); setSelectedCategory(null); setPage(1); };
 
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) setPage(newPage);
@@ -695,23 +632,17 @@ export default function SuperAdminDashboard() {
       const blob = new Blob([res.data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = `${activeDept}_${startDate}_to_${endDate}.xlsx`;
-      a.click();
+      a.href = url; a.download = `${activeDept}_${startDate}_to_${endDate}.xlsx`; a.click();
       URL.revokeObjectURL(url);
-    } catch {
-      toast.error("Failed to export Excel file.");
-    }
+    } catch { toast.error("Failed to export Excel file."); }
   };
 
   const handleImportClick = () => fileInputRef.current?.click();
 
   const handleImportFileChange = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
+    const file = e.target.files?.[0]; e.target.value = "";
     if (!file) return;
-    const formData = new FormData();
-    formData.append("file", file);
+    const formData = new FormData(); formData.append("file", file);
     setImporting(true);
     try {
       const res = await api.post(`/admin/departments/${activeDept}/import`, formData, {
@@ -722,17 +653,15 @@ export default function SuperAdminDashboard() {
       if (errors && errors.length) toast.error(`${errors.length} row(s) skipped — check the sheet formatting.`);
       if (activeDept === "overview") fetchOverview(startDate, endDate);
       else fetchDeptData();
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to import the Excel file.");
-    } finally {
-      setImporting(false);
-    }
+    } catch (err) { toast.error(err.response?.data?.message || "Failed to import the Excel file."); }
+    finally { setImporting(false); }
   };
 
   const currentDeptLabel = DEPARTMENTS_CONFIG.find(d => d.value === activeDept)?.label || activeDept;
   const categoryPanelOptions = React.useMemo(() => STANDARD_CATEGORIES, []);
 
   const isCorporateView = activeDept === "Corporate";
+  const isSalaryCategory = selectedCategory === SALARY_LABEL;
   const showCapitalButton = isCorporateView;
   const showClearButton = isCorporateView;
   const showCorpusFundButton = activeDept !== "overview" && activeDept !== "SalesEnterprise";
@@ -779,15 +708,16 @@ export default function SuperAdminDashboard() {
   const displaySummary = React.useMemo(() => {
     if (!deptSummary) return null;
     if (!selectedCategory) return deptSummary;
-
     let income = 0, expenses = 0;
     if (activeDept === "Caredx") {
       income = visibleCaredxLabEntries.reduce((s, e) => s + entryAmount(e), 0);
-      expenses = visibleCaredxExpenses.reduce((s, e) => s + entryAmount(e), 0);
+      const includeReferral = !selectedCategory || selectedCategory === "Referrals & Deposits";
+      const referralTotal = includeReferral
+        ? caredxLabEntries.reduce((s, e) => s + Number(e.referral_amount || 0), 0)
+        : 0;
+      expenses = visibleCaredxExpenses.reduce((s, e) => s + entryAmount(e), 0) + referralTotal;
       return {
-        ...deptSummary,
-        total_income: income,
-        total_expenses: expenses,
+        ...deptSummary, total_income: income, total_expenses: expenses,
         profit: income - expenses,
         entry_count: visibleCaredxLabEntries.length + visibleCaredxExpenses.length,
       };
@@ -798,13 +728,10 @@ export default function SuperAdminDashboard() {
       else if (kind === "expenses") expenses += entryAmount(e);
     });
     return {
-      ...deptSummary,
-      total_income: income,
-      total_expenses: expenses,
-      profit: income - expenses,
-      entry_count: filteredDeptEntries.length,
+      ...deptSummary, total_income: income, total_expenses: expenses,
+      profit: income - expenses, entry_count: filteredDeptEntries.length,
     };
-  }, [deptSummary, selectedCategory, activeDept, visibleCaredxLabEntries, visibleCaredxExpenses, filteredDeptEntries]);
+  }, [deptSummary, selectedCategory, activeDept, visibleCaredxLabEntries, visibleCaredxExpenses, caredxLabEntries, filteredDeptEntries]);
 
   const renderCategoryPanel = () => {
     if (categoryPanelOptions.length === 0) return null;
@@ -815,12 +742,8 @@ export default function SuperAdminDashboard() {
     };
     const allActive = !selectedCategory && dataView !== "capital" && dataView !== "corpusfund";
     const corpusAsCategory = isCorporateView || activeDept === "Caredx";
-    const corpusFundActive = corpusAsCategory
-      ? selectedCategory === CORPUS_FUND_LABEL
-      : dataView === "corpusfund";
-    const onCorpusFundClick = corpusAsCategory
-      ? () => handleCategorySelect(CORPUS_FUND_LABEL)
-      : handleCorpusFundFilterSelect;
+    const corpusFundActive = corpusAsCategory ? selectedCategory === CORPUS_FUND_LABEL : dataView === "corpusfund";
+    const onCorpusFundClick = corpusAsCategory ? () => handleCategorySelect(CORPUS_FUND_LABEL) : handleCorpusFundFilterSelect;
 
     return (
       <div className="card" style={{ marginBottom: 16 }}>
@@ -829,34 +752,20 @@ export default function SuperAdminDashboard() {
             All Categories
           </button>
           {categoryPanelOptions.map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => handleCategorySelect(cat)}
-              style={selectedCategory === cat ? categoryBtnActiveStyle : categoryBtnStyle}
-            >
+            <button key={cat} type="button" onClick={() => handleCategorySelect(cat)}
+              style={selectedCategory === cat ? categoryBtnActiveStyle : categoryBtnStyle}>
               {cat}
             </button>
           ))}
           {showCorpusFundButton && (
-            <button
-              type="button"
-              onClick={onCorpusFundClick}
+            <button type="button" onClick={onCorpusFundClick}
               style={corpusFundActive ? categoryBtnActiveStyle : categoryBtnStyle}
-              title="Show Corpus Fund entries only"
-            >
-              Corpus Fund
-            </button>
+              title="Show Corpus Fund entries only">Corpus Fund</button>
           )}
           {showCapitalButton && (
-            <button
-              type="button"
-              onClick={handleCapitalFilterSelect}
+            <button type="button" onClick={handleCapitalFilterSelect}
               style={dataView === "capital" ? categoryBtnActiveStyle : categoryBtnStyle}
-              title="Show Capital entries only"
-            >
-              Capital
-            </button>
+              title="Show Capital entries only">Capital</button>
           )}
           {showClearButton && (
             <button type="button" onClick={handleAllCategories} style={categoryBtnStyle} title="Clear category filter">
@@ -944,16 +853,39 @@ export default function SuperAdminDashboard() {
     );
   };
 
-  if (showCopperBook) {
-    return <CopperBookPage onBack={() => setShowCopperBook(false)} />;
+  if (showCopperBook) return <CopperBookPage onBack={() => setShowCopperBook(false)} />;
+
+  if (showTodo) {
+    return (
+      <div className="page">
+        <Navbar
+          title="CEO Governance Dashboard"
+          roleColor="#7c3aed"
+          onCopperBook={() => { setShowTodo(false); setShowCopperBook(true); }}
+        />
+        <main className="page-main">
+          <div style={{ marginBottom: 12 }}>
+            <button type="button" className="btn btn-secondary" onClick={() => setShowTodo(false)}>
+              ← Back to Dashboard
+            </button>
+          </div>
+          <TodoListPage />
+        </main>
+      </div>
+    );
   }
 
   return (
     <div className="page">
-      <Navbar title="CEO Governance Dashboard" roleColor="#7c3aed" onCopperBook={() => setShowCopperBook(true)} />
+      <Navbar
+        title="CEO Governance Dashboard"
+        roleColor="#7c3aed"
+        onCopperBook={() => setShowCopperBook(true)}
+        onTodoList={() => setShowTodo(true)}
+      />
 
       <main className="page-main">
-        {/* ========== MAIN FILTER PANEL ========== */}
+        {/* MAIN FILTER PANEL */}
         <p className="section-title" style={{ marginBottom: 8 }}>Filter Panel</p>
         <div className="card" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
@@ -1063,7 +995,7 @@ export default function SuperAdminDashboard() {
           )}
         </div>
 
-        {/* ========== OVERVIEW VIEW ========== */}
+        {/* OVERVIEW */}
         {activeDept === "overview" && (
           <>
             <p className="section-title" style={{ marginBottom: 8 }}>Summary Panel</p>
@@ -1163,7 +1095,7 @@ export default function SuperAdminDashboard() {
           </>
         )}
 
-        {/* ========== SALES ENTERPRISE VIEW ========== */}
+        {/* SALES ENTERPRISE */}
         {activeDept === "SalesEnterprise" && (
           <>
             {loading || deptLoading ? (
@@ -1175,13 +1107,7 @@ export default function SuperAdminDashboard() {
                   {salesSelectedDept && ` (${DEPARTMENTS_CONFIG.find(d => d.value === salesSelectedDept)?.label || salesSelectedDept})`}
                 </p>
                 {deptSummary ? (
-                  <StatCards
-                    totalIncome={deptSummary.total_income}
-                    totalExpenses={deptSummary.total_expenses}
-                    profit={deptSummary.profit}
-                    entryCount={deptSummary.entry_count}
-                    showCapital={false}
-                  />
+                  <StatCards totalIncome={deptSummary.total_income} totalExpenses={deptSummary.total_expenses} profit={deptSummary.profit} entryCount={deptSummary.entry_count} showCapital={false} />
                 ) : (
                   <div className="stat-grid">
                     <div className="card stat-card">
@@ -1281,7 +1207,7 @@ export default function SuperAdminDashboard() {
           </>
         )}
 
-        {/* ========== OTHER DEPARTMENTS ========== */}
+        {/* OTHER DEPARTMENTS */}
         {activeDept !== "overview" && activeDept !== "SalesEnterprise" && (
           <>
             {displaySummary && (
@@ -1324,11 +1250,9 @@ export default function SuperAdminDashboard() {
               <div className="card empty-state">Loading...</div>
             ) : activeDept === "Caredx" ? (
               <>
-                {/* ---- Categories Panel ---- */}
                 <p className="section-title" style={{ marginBottom: 8 }}>Categories Panel</p>
                 {renderCategoryPanel()}
 
-                {/* ---- Transactional Panel ---- */}
                 <p className="section-title" style={{ marginBottom: 8 }}>Transactional Panel</p>
 
                 {visibleCaredxLabEntries.length > 0 && (
@@ -1343,14 +1267,9 @@ export default function SuperAdminDashboard() {
                       <table className="data-table">
                         <thead>
                           <tr>
-                            <th>Date</th>
-                            <th>Patient</th>
-                            <th>Test</th>
-                            <th>Employee</th>
-                            <th className="text-right">Total Paid</th>
-                            <th>Payment Type</th>
-                            <th>Referral By</th>
-                            <th className="text-right">Referral Amount</th>
+                            <th>Date</th><th>Patient</th><th>Test</th><th>Employee</th>
+                            <th className="text-right">Total Paid</th><th>Payment Type</th>
+                            <th>Referral By</th><th className="text-right">Referral Amount</th>
                             <th>Referral Payment Type</th>
                             <th style={{ minWidth: remarkCellStyle.minWidth }}>Remarks</th>
                             <th>Actions</th>
@@ -1383,16 +1302,8 @@ export default function SuperAdminDashboard() {
                   </div>
                 )}
 
-                {/* ---- CareDx Expenses ----
-                     Salary & Payrolls is an EXPENSE, so in "All Categories" (and every
-                     other category) it is shown inside the SAME Expenses table, mixed in
-                     date order with the other expenses.
-                     Only when the "Salary & Payrolls" category button is selected do we
-                     show the detailed salary table (employee / salary / allowance columns). */}
                 {(() => {
-                  const showSalaryOnly = selectedCategory === "Salary & Payrolls";
-
-                  /* ── Detailed salary table (category button = Salary & Payrolls) ── */
+                  const showSalaryOnly = selectedCategory === SALARY_LABEL;
                   if (showSalaryOnly) {
                     const salaryRows = visibleCaredxExpenses.filter((e) => isSalaryEntry(e));
                     return (
@@ -1408,15 +1319,9 @@ export default function SuperAdminDashboard() {
                             <table className="data-table">
                               <thead>
                                 <tr>
-                                  <th>Date</th>
-                                  <th>Type</th>
-                                  <th>Category</th>
-                                  <th>Employee</th>
-                                  <th className="text-right">Amount</th>
-                                  <th>Payment Type</th>
-                                  <th>Purpose</th>
-                                  <th className="text-right">Salary</th>
-                                  <th className="text-right">Allowance</th>
+                                  <th>Date</th><th>Type</th><th>Category</th><th>Employee</th>
+                                  <th className="text-right">Amount</th><th>Payment Type</th><th>Purpose</th>
+                                  <th className="text-right">Salary</th><th className="text-right">Allowance</th>
                                   <th style={{ minWidth: remarkCellStyle.minWidth }}>Remarks</th>
                                   <th className="text-right">Actions</th>
                                 </tr>
@@ -1426,7 +1331,7 @@ export default function SuperAdminDashboard() {
                                   <tr key={e.id ?? `sal-${i}`}>
                                     <td style={{ whiteSpace: "nowrap" }}>{e.expense_date || e.entry_date}</td>
                                     <td>{e.entry_type || "Expenses"}</td>
-                                    <td>{e.category || "Salary & Payrolls"}</td>
+                                    <td>{e.category || SALARY_LABEL}</td>
                                     <td>{e.employee_name || "—"}</td>
                                     <td className="text-right" style={{ fontWeight: 600 }}>{formatCurrency(entryAmount(e))}</td>
                                     <td>{renderPaymentBadge(e.payment_type)}</td>
@@ -1449,11 +1354,10 @@ export default function SuperAdminDashboard() {
                     );
                   }
 
-                  /* ── ONE combined Expenses table (salary + all other expenses) ── */
                   const expenseRows = [...visibleCaredxExpenses].sort((a, b) => {
                     const dateA = String(a.expense_date || a.entry_date || "");
                     const dateB = String(b.expense_date || b.entry_date || "");
-                    return dateB.localeCompare(dateA); // newest first
+                    return dateB.localeCompare(dateA);
                   });
 
                   return (
@@ -1473,11 +1377,8 @@ export default function SuperAdminDashboard() {
                           <table className="data-table">
                             <thead>
                               <tr>
-                                <th>Date</th>
-                                <th>Category</th>
-                                <th>Employee</th>
-                                <th className="text-right">Amount</th>
-                                <th>Payment Type</th>
+                                <th>Date</th><th>Category</th><th>Employee</th>
+                                <th className="text-right">Amount</th><th>Payment Type</th>
                                 <th style={{ minWidth: remarkCellStyle.minWidth }}>Remarks</th>
                                 <th className="text-right">Actions</th>
                               </tr>
@@ -1486,11 +1387,7 @@ export default function SuperAdminDashboard() {
                               {expenseRows.map((e, i) => {
                                 const corpus = isCorpusEntry(e);
                                 const salary = isSalaryEntry(e);
-                                const categoryLabel = corpus
-                                  ? CORPUS_FUND_LABEL
-                                  : salary
-                                    ? "Salary & Payrolls"
-                                    : e.category;
+                                const categoryLabel = corpus ? CORPUS_FUND_LABEL : salary ? SALARY_LABEL : e.category;
                                 return (
                                   <tr key={`${corpus ? "c" : salary ? "s" : "e"}-${e.id ?? e._key ?? i}-${i}`}>
                                     <td style={{ whiteSpace: "nowrap" }}>{e.expense_date || e.entry_date}</td>
@@ -1500,12 +1397,9 @@ export default function SuperAdminDashboard() {
                                     <td>{renderPaymentBadge(e.payment_type)}</td>
                                     <td style={remarkCellStyle}><RemarkCell text={e.remarks || ""} /></td>
                                     <td className="text-right">
-                                      <button
-                                        type="button"
-                                        className="btn-icon"
+                                      <button type="button" className="btn-icon"
                                         onClick={() => setViewEntry({ type: corpus || salary ? "finance" : "expense", data: e })}
-                                        title="View"
-                                      >
+                                        title="View">
                                         <Eye size={15} />
                                       </button>
                                     </td>
@@ -1523,11 +1417,9 @@ export default function SuperAdminDashboard() {
               </>
             ) : (
               <div>
-                {/* ---- Categories Panel ---- */}
                 <p className="section-title" style={{ marginBottom: 8 }}>Categories Panel</p>
                 {renderCategoryPanel()}
 
-                {/* ---- Transactional Panel ---- */}
                 <p className="section-title" style={{ marginBottom: 12 }}>
                   Transactional Panel — {currentDeptLabel}
                   {dataView === "income" && " — Income"}
@@ -1546,9 +1438,12 @@ export default function SuperAdminDashboard() {
                   </div>
                 ) : (
                   <FinanceTable
-                    entries={filteredDeptEntries}
+                    entries={filteredDeptEntries.map(withExecLabel)}
                     currentDepartment={activeDept}
-                    showEmployeeName={false}
+                    // ✅ Salary & Payrolls: hide Client Name, show Employee Name
+                    showEmployeeName={isSalaryCategory}
+                    showClientName={!isSalaryCategory}
+                    hideClientName={isSalaryCategory}
                     onView={(entry) => setViewEntry({ type: "finance", data: entry })}
                   />
                 )}

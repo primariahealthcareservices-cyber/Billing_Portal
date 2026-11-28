@@ -48,6 +48,31 @@ CORPUS_FUND_CATEGORY = "Corpus Fund"
 CORPUS_FUND_TYPE = "Corpus Fund"
 
 
+# ---------- DEPARTMENT DISPLAY LABELS ----------
+# Internal department keys (stored in the DB / used in URLs) -> friendly names
+# shown in the UI (e.g. the "Exec Dept" column). Edit this dict to rename.
+DEPARTMENT_LABELS = {
+    "Corporate": "Corporate Management",
+    "Adminstrationfunctionalunit": "Office Administration",
+    "Caredx": "CareDx",
+    "Dental": "Dental",
+    "Everglades": "Everglades",
+    "IT": "IT Development",
+    "IT Sales": "IT Sales",
+    "MedTech": "MedTech",
+    "PCM": "PCM",
+    "ResearchDevelopment": "Research Development",
+    "SalesEnterprise": "Sales Enterprise",
+}
+
+
+def dept_label(key):
+    """Friendly display name for a department key (falls back to the key)."""
+    if not key:
+        return key
+    return DEPARTMENT_LABELS.get(key, key)
+
+
 def _build_categories():
     """Return a fresh dict of {Income, Expenses, Capital} lists."""
     return {
@@ -327,6 +352,7 @@ class FinanceEntry(db.Model):
         return {
             "id": self.id,
             "department": self.department,
+            "department_label": dept_label(self.department),
             "entry_type": self.entry_type,
             "category": self.category,
             "sub_category": self.sub_category,
@@ -344,6 +370,7 @@ class FinanceEntry(db.Model):
             "tax_invoice_number": self.tax_invoice_number,
             "payment_type": self.payment_type,
             "exec_department": self.exec_department,
+            "exec_department_label": dept_label(self.exec_department),
             "employee_name": self.employee_name,
             "salary_amount": float(self.salary_amount) if self.salary_amount is not None else None,
             "allowance_amount": float(self.allowance_amount) if self.allowance_amount is not None else None,
@@ -939,3 +966,137 @@ def migrate_all_categories():
     except Exception as exc:
         db.session.rollback()
         print(f"⚠️  migrate_all_categories failed: {exc}")
+
+
+class TodoTask(db.Model):
+    __tablename__ = "todo_tasks"
+    id = db.Column(db.Integer, primary_key=True)
+    task_number = db.Column(db.String(30), unique=True, nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text)
+    assigned_to_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    assigned_department = db.Column(db.String(100))
+    assigned_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    assigned_date = db.Column(db.Date)
+    due_date = db.Column(db.Date)
+    priority = db.Column(db.String(20), default="medium")
+    status = db.Column(db.String(20), default="pending")
+    remarks = db.Column(db.Text)
+    attachment_data = db.Column(db.LargeBinary)
+    attachment_filename = db.Column(db.String(255))
+    attachment_mimetype = db.Column(db.String(120))
+    completed_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    assigned_to = db.relationship("User", foreign_keys=[assigned_to_id])
+    assigned_by = db.relationship("User", foreign_keys=[assigned_by_id])
+    history = db.relationship("TodoTaskHistory", backref="task",
+                              cascade="all, delete-orphan")
+
+
+class TodoTaskHistory(db.Model):
+    __tablename__ = "todo_task_history"
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.Integer, db.ForeignKey("todo_tasks.id"), nullable=False)
+    action = db.Column(db.String(50))
+    old_value = db.Column(db.Text)
+    new_value = db.Column(db.Text)
+    changed_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    note = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    changed_by = db.relationship("User", foreign_keys=[changed_by_id])
+
+
+# ============================================================================
+# CROSS-DB MODELS — every class here has __bind_key__ = "staff"
+# so all its SQL goes to  staff_management.*  (NOT billing_portal.*)
+#
+# Requires  SQLALCHEMY_BINDS["staff"]  in config.py  (see Fix B).
+# ============================================================================
+
+class StaffUser(db.Model):
+    """Read-only view of staff_management.users — for dropdowns & emails."""
+    __bind_key__ = "staff"
+    __tablename__ = "users"
+
+    id          = db.Column(db.Integer, primary_key=True)
+    name        = db.Column(db.String(100), nullable=False)
+    email       = db.Column(db.String(120), nullable=False)
+    role        = db.Column(db.String(20))
+    department  = db.Column(db.String(100))
+    designation = db.Column(db.String(100))
+    is_active   = db.Column(db.Boolean, default=True)
+
+
+class TodoTask(db.Model):
+    """A To-Do task — physical table is in staff_management.todo_tasks."""
+    __bind_key__ = "staff"
+    __tablename__ = "todo_tasks"
+
+    id          = db.Column(db.Integer, primary_key=True)
+    task_number = db.Column(db.String(30), unique=True, nullable=False)
+    title       = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+
+    # Assignee — plain integer, NO FK (avoids cross-bind FK issues)
+    assigned_to_id      = db.Column(db.Integer, nullable=True)
+    assigned_to_name    = db.Column(db.String(150), nullable=True)
+    assigned_department = db.Column(db.String(100), nullable=True)
+
+    # Assigner — the CEO from billing_portal.users (denormalized)
+    assigned_by_id    = db.Column(db.Integer, nullable=True)
+    assigned_by_name  = db.Column(db.String(150), nullable=True)
+    assigned_by_email = db.Column(db.String(150), nullable=True)
+
+    assigned_date = db.Column(db.Date, nullable=False)
+    due_date      = db.Column(db.Date, nullable=False)
+
+    priority = db.Column(
+        db.Enum("low", "medium", "high", "urgent", name="todo_priority"),
+        nullable=False, default="medium",
+    )
+    status = db.Column(
+        db.Enum("pending", "in_progress", "completed", "cancelled", name="todo_status"),
+        nullable=False, default="pending",
+    )
+
+    remarks = db.Column(db.Text)
+
+    attachment_data     = db.Column(db.LargeBinary(length=(2**32) - 1), nullable=True)
+    attachment_filename = db.Column(db.String(255), nullable=True)
+    attachment_mimetype = db.Column(db.String(100), nullable=True)
+
+    completed_at = db.Column(db.DateTime, nullable=True)
+    created_at   = db.Column(db.DateTime, server_default=db.func.now())
+    updated_at   = db.Column(db.DateTime, server_default=db.func.now(), onupdate=db.func.now())
+
+
+class TodoTaskHistory(db.Model):
+    __bind_key__ = "staff"
+    __tablename__ = "todo_task_history"
+
+    id              = db.Column(db.Integer, primary_key=True)
+    task_id         = db.Column(db.Integer, nullable=False)
+    action          = db.Column(db.String(50), nullable=False)
+    old_value       = db.Column(db.Text)
+    new_value       = db.Column(db.Text)
+    changed_by_id   = db.Column(db.Integer, nullable=True)
+    changed_by_name = db.Column(db.String(150), nullable=True)
+    note            = db.Column(db.Text)
+    created_at      = db.Column(db.DateTime, server_default=db.func.now())
+
+
+class StaffNotification(db.Model):
+    """Notification for a staff_management user — lives in staff_management."""
+    __bind_key__ = "staff"
+    __tablename__ = "notifications"
+
+    id           = db.Column(db.Integer, primary_key=True)
+    user_id      = db.Column(db.Integer, nullable=False)
+    message      = db.Column(db.Text, nullable=False)
+    is_read      = db.Column(db.Boolean, default=False)
+    related_type = db.Column(db.String(30), nullable=True)
+    related_id   = db.Column(db.Integer, nullable=True)
+    created_at   = db.Column(db.DateTime, server_default=db.func.now())

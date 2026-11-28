@@ -2,11 +2,6 @@
 import React, { useEffect } from "react";
 import { Filter, Download, Plus, RefreshCw } from "lucide-react";
 
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
 const pad2 = (n) => String(n).padStart(2, "0");
 
 /** Return {start, end} ISO YYYY-MM-DD for a quarter of a year. */
@@ -20,10 +15,9 @@ const quarterRange = (year, quarter) => {
   const q = Number(quarter);
   const startMonth = (q - 1) * 3;       // 0, 3, 6, 9
   const endMonth = startMonth + 2;      // 2, 5, 8, 11
-  const startDay = 1;
   const endDay = new Date(y, endMonth + 1, 0).getDate(); // last day of endMonth
   return {
-    start: `${y}-${pad2(startMonth + 1)}-${pad2(startDay)}`,
+    start: `${y}-${pad2(startMonth + 1)}-01`,
     end: `${y}-${pad2(endMonth + 1)}-${pad2(endDay)}`,
   };
 };
@@ -36,15 +30,21 @@ export default function FilterBar({
   onApply,
   onReset,
   onExport,
+  exportLabel = "Export CSV",
   onAddNew,
   searchTerm,
   onSearchChange,
 
-  // ✅ NEW — quarter / year controls
+  // quarter / year controls
   quarter,
   year,
   onQuarterChange,
   onYearChange,
+
+  // ✅ Transaction type filter (used by Corporate)
+  typeFilter,
+  onTypeFilterChange,
+  showTypeFilter = false,
 }) {
   // When quarter or year changes, recompute start/end dates
   useEffect(() => {
@@ -54,6 +54,7 @@ export default function FilterBar({
     const { start, end } = quarterRange(year, quarter);
     if (start) onStartDateChange(start);
     if (end) onEndDateChange(end);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quarter, year]); // deliberately not including the change callbacks
 
   const yearOptions = [];
@@ -61,9 +62,27 @@ export default function FilterBar({
   for (let i = 0; i < 10; i++) yearOptions.push(currentYear - i);
 
   const showQuarterControls = onQuarterChange && onYearChange;
+  const showType = showTypeFilter && typeof onTypeFilterChange === "function";
 
   return (
     <div className="card filter-bar">
+      {showType && (
+        <div className="form-group">
+          <label className="form-label">Transaction Type</label>
+          <select
+            className="form-control"
+            value={typeFilter ?? ""}
+            onChange={(e) => onTypeFilterChange(e.target.value)}
+            style={{ minWidth: 130 }}
+          >
+            <option value="">All</option>
+            <option value="Income">Income</option>
+            <option value="Expenses">Expenses</option>
+            <option value="Capital">Capital</option>
+          </select>
+        </div>
+      )}
+
       {showQuarterControls && (
         <>
           <div className="form-group">
@@ -122,6 +141,7 @@ export default function FilterBar({
             type="text"
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && onApply) onApply(); }}
             placeholder="Search by employee or remarks"
             className="form-control"
           />
@@ -137,7 +157,7 @@ export default function FilterBar({
         </button>
         {onExport && (
           <button onClick={onExport} className="btn btn-secondary">
-            <Download size={16} /> Export CSV
+            <Download size={16} /> {exportLabel}
           </button>
         )}
       </div>

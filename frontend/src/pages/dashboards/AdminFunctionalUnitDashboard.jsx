@@ -5,7 +5,7 @@ export default function AdminFunctionalUnitDashboard() {
   return (
     <FinanceDashboard
       department="Adminstrationfunctionalunit"
-      title="Administration Functional Unit"
+      title="Office Administration"
       roleColor="#0ea5e9"
     />
   );

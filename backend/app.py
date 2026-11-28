@@ -1,4 +1,4 @@
-# backend/app.py
+# billingportal/backend/app.py
 import sys
 import traceback
 from flask import Flask, jsonify
@@ -17,13 +17,13 @@ from models import (
 
 def create_app():
     app = Flask(__name__)
-    app.config.from_object(Config)
+    app.config.from_object(Config)          # ← SQLALCHEMY_BINDS applied here
 
     app.config["REDIS_CLIENT"] = Config.get_redis()
 
-    db.init_app(app)
+    db.init_app(app)                        # ← MUST be after from_object()
 
-    # ── Data migrations (must run inside app context) ───────────────────
+    # ── Data migrations (inside app context) ────────────────────────
     with app.app_context():
         ensure_schema_columns()
         ensure_entry_type_is_varchar()
@@ -32,7 +32,7 @@ def create_app():
 
     JWTManager(app)
 
-    # ── CORS ────────────────────────────────────────────────────────────
+    # ── CORS ────────────────────────────────────────────────────────
     CORS(app, resources={
         r"/api/*": {
             "origins": [
@@ -48,23 +48,24 @@ def create_app():
         automatic_options=True,
     )
 
-    # ── Import blueprints ───────────────────────────────────────────────
-    from routes.auth import auth_bp
-    from routes.it import it_bp
-    from routes.pcm import pcm_bp
-    from routes.medtech import medtech_bp
-    from routes.caredx import caredx_bp
-    from routes.superadmin import superadmin_bp
-    from routes.files import files_bp
-    from routes.corporate import corporate_bp
+    # ── Blueprints ──────────────────────────────────────────────────
+    from routes.auth           import auth_bp
+    from routes.it             import it_bp
+    from routes.pcm            import pcm_bp
+    from routes.medtech        import medtech_bp
+    from routes.caredx         import caredx_bp
+    from routes.superadmin     import superadmin_bp
+    from routes.files          import files_bp
+    from routes.corporate      import corporate_bp
     from routes.adminfunctionalunit import adminfunctionalunit_bp
     from routes.researchdevelopment import researchdevelopment_bp
-    from routes.itsales import itsales_bp
+    from routes.itsales        import itsales_bp
     from routes.salesenterprise import salesenterprise_bp
-    from routes.dental import dental_bp
-    from routes.everglades import everglades_bp
-    from routes.copperbook import cb_bp
-    from routes.notifications import notifications_bp
+    from routes.dental         import dental_bp
+    from routes.everglades     import everglades_bp
+    from routes.copperbook     import cb_bp
+    from routes.notifications  import notifications_bp
+    from routes.todo           import todo_admin_bp      # ← NEW
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(it_bp)
@@ -82,16 +83,20 @@ def create_app():
     app.register_blueprint(everglades_bp)
     app.register_blueprint(cb_bp)
     app.register_blueprint(notifications_bp)
+    app.register_blueprint(todo_admin_bp, url_prefix="/api/admin/todo")   # ← NEW
 
-    # ── Create any missing tables (safe, non-destructive) ───────────────
+    # ── Ensure billing-side tables exist (default bind only) ────────
     with app.app_context():
-        from models import Notification  # noqa: F401
-        from models_copperbook import (  # noqa: F401
+        from models import Notification          # noqa: F401
+        from models_copperbook import (          # noqa: F401
             CopperBookRequest, CopperBookAssignee, CopperBookAttachment,
         )
+        # NOTE: do NOT import TodoTask / TodoTaskHistory here —
+        # they live in the staff_management bind and are created
+        # by the staff portal (or by the SQL migration).
         db.create_all()
 
-    # ── Health check + global error handler ─────────────────────────────
+    # ── Health + global error handler ───────────────────────────────
     @app.route("/api/health", methods=["GET"])
     def health():
         return jsonify({"status": "ok"}), 200
